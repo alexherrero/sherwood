@@ -13,6 +13,7 @@ function App() {
           <Route path="/" element={<Layout />}>
             <Route index element={<Dashboard />} />
             <Route path="config" element={<div className="p-6">Configuration Page (Coming Soon)</div>} />
+            <Route path="*" element={<div className="p-6">404: Page Not Found</div>} />
           </Route>
         </Routes>
       </BrowserRouter>
