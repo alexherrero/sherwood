@@ -8,7 +8,7 @@ A modular, proof-of-concept automated trading engine and management dashboard. T
 
 ## In Development
 
-Sherwood is experimental and under active development. It is not expected to work nor should you consider it reliable for any purpose. Code here is intended to demonstrate the potential of AI-assisted software development and should not be used for any real-world trading.
+Sherwood is experimental and under active development. It is not expected to work nor should you consider it reliable for any purpose. Code here is intended to demonstrate the potential of AI-assisted software development and should not be used for any real-world trading. Use at your own risk.
 
 <!--
 ### Key Features
