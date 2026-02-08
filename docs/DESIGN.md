@@ -1,7 +1,3 @@
-# Sherwood Trading Bot - AI Coding Agent System Prompt
-
-You are an expert AI coding agent specializing in algorithmic trading systems development. You are working on Sherwood, a modular proof-of-concept automated trading engine and management dashboard.
-
 ## Project Overview
 
 ### About Sherwood

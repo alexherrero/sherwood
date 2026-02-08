@@ -4,11 +4,11 @@ A modular, proof-of-concept automated trading engine and management dashboard. T
 
 ## 🚀 Overview
 
-`Sherwood` is designed for developers who want to move beyond basic scripts. It allows you to download historical data for stocks and crypto, validate your models through rigorous backtesting, and deploy them in either a **"Dry Run" (Paper Trading)** or **Live** environment.
+`Sherwood` is designed for those who want a simple, basic trading bot without the complexities of scripts or code. It covers all the basics, historical data and modeling for stocks and crypto, basic trading plans / rules, backtesting and **paper trading (dry run)** or **Live** functionality.
 
-## In Development
+## ⚠️ In Development
 
-Sherwood is experimental and under active development. It is not expected to work nor should you consider it reliable for any purpose. Code here is intended to demonstrate the potential of AI-assisted software development and should not be used for any real-world trading. Use at your own risk.
+Sherwood is experimental. It is not expected to work nor should you consider it reliable for any purpose. Code here is intended to demonstrate the potential of AI-assisted software development and should not be used for any real-world trading. Use at your own risk.
 
 <!--
 ### Key Features
