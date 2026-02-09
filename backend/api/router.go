@@ -60,7 +60,7 @@ func NewRouter(
 	})
 
 	// CORS middleware for frontend
-	r.Use(corsMiddleware)
+	r.Use(newCORSMiddleware(cfg))
 
 	// Initialize handler with dependencies
 	h := NewHandler(registry, provider, cfg, orderManager, engine)
@@ -141,18 +141,41 @@ func zerologLogger(next http.Handler) http.Handler {
 	})
 }
 
-// corsMiddleware handles CORS headers for frontend requests.
-func corsMiddleware(next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Sherwood-API-Key")
+// newCORSMiddleware creates CORS middleware with origin whitelisting.
+func newCORSMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			origin := r.Header.Get("Origin")
 
-		if r.Method == "OPTIONS" {
-			w.WriteHeader(http.StatusOK)
-			return
-		}
+			// Check if origin is in allowed list
+			allowed := false
+			for _, allowedOrigin := range cfg.AllowedOrigins {
+				if origin == allowedOrigin {
+					allowed = true
+					break
+				}
+			}
 
-		next.ServeHTTP(w, r)
-	})
+			// Set CORS headers if origin is allowed
+			if allowed {
+				w.Header().Set("Access-Control-Allow-Origin", origin)
+				w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, PATCH, OPTIONS")
+				w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Sherwood-API-Key")
+				w.Header().Set("Access-Control-Allow-Credentials", "true")
+				w.Header().Set("Access-Control-Max-Age", "3600")
+			}
+
+			// Handle preflight request
+			if r.Method == "OPTIONS" {
+				if allowed {
+					w.WriteHeader(http.StatusOK)
+				} else {
+					w.WriteHeader(http.StatusForbidden)
+				}
+				return
+			}
+
+			next.ServeHTTP(w, r)
+		})
+	}
 }

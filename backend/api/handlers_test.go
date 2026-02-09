@@ -43,7 +43,10 @@ func (m *MockDataProvider) GetTicker(symbol string) (*models.Ticker, error) {
 }
 
 func setupTestHandler() (*Handler, *MockDataProvider, *strategies.Registry) {
-	cfg := &config.Config{TradingMode: "test"}
+	cfg := &config.Config{
+		TradingMode:    "test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
 	registry := strategies.NewRegistry()
 
 	// Register a mock strategy
@@ -95,7 +98,9 @@ func TestListStrategiesHandler(t *testing.T) {
 // TestGetStrategyHandler verifies strategy details endpoint.
 func TestGetStrategyHandler(t *testing.T) {
 	// Need router for URL params
-	cfg := &config.Config{}
+	cfg := &config.Config{
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
 	registry := strategies.NewRegistry()
 	_ = registry.Register(strategies.NewMACrossover())
 	mockProvider := new(MockDataProvider)
@@ -155,7 +160,9 @@ func TestGetBacktestResultHandler(t *testing.T) {
 	// Easier to test manually by pre-populating results cache
 
 	// Let's use router to property parse URL params
-	cfg := &config.Config{}
+	cfg := &config.Config{
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
 	router := NewRouter(cfg, registry, mockProvider, nil, nil)
@@ -205,7 +212,10 @@ func TestGetBacktestResultHandler(t *testing.T) {
 
 // TestRouterIntegration verifies router with dependencies.
 func TestRouterIntegration(t *testing.T) {
-	cfg := &config.Config{TradingMode: "dry_run"}
+	cfg := &config.Config{
+		TradingMode:    "dry_run",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
 
@@ -297,7 +307,10 @@ func (m *MockBroker) GetBalance() (*models.Balance, error) {
 
 // TestExecutionEndpoints verifies /execution routes
 func TestExecutionEndpoints(t *testing.T) {
-	cfg := &config.Config{TradingMode: "test"}
+	cfg := &config.Config{
+		TradingMode:    "test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
 	mockBroker := new(MockBroker)
@@ -368,7 +381,10 @@ func TestExecutionEndpoints(t *testing.T) {
 
 // TestPlaceOrderHandler verifies manual order placement.
 func TestPlaceOrderHandler(t *testing.T) {
-	cfg := &config.Config{TradingMode: "test"}
+	cfg := &config.Config{
+		TradingMode:    "test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
 	mockBroker := new(MockBroker)
