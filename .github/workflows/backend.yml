@@ -83,7 +83,7 @@ jobs:
         RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/execution/orders \
           -H "Content-Type: application/json" \
           -H "X-Sherwood-API-Key: test-key-12345" \
-          -d '{"symbol":"BTC-USD","side":"buy","type":"market","quantity":0.01}')
+          -d '{"symbol":"BTC-USD","side":"buy","type":"limit","quantity":0.01,"price":50000.00}')
         echo "Order response: $RESPONSE"
         ORDER_ID=$(echo $RESPONSE | jq -r '.id')
         echo "ORDER_ID=$ORDER_ID" >> $GITHUB_ENV
