@@ -25,6 +25,7 @@ Create a `.env` file in the project root:
 # Server settings
 PORT=8099
 HOST=0.0.0.0
+API_KEY=your-secret-key # Protects API access
 
 # Trading mode: 'dry_run' (paper) or 'live'
 TRADING_MODE=dry_run
@@ -68,16 +69,16 @@ Starting Sherwood Trading Engine...
 You can verify the backend is running by checking the API endpoints.
 
 ```powershell
-# Health check
+# Health check (Public)
 curl http://localhost:8099/health
 # Returns: {"status":"ok"}
 
-# Get engine status
-curl http://localhost:8099/api/v1/status
+# Get engine status (Requires API Key)
+curl -H "X-Sherwood-API-Key: your-secret-key" http://localhost:8099/api/v1/status
 # Returns: {"mode":"dry_run","status":"running"}
 
-# List available strategies
-curl http://localhost:8099/api/v1/strategies
+# List available strategies (Requires API Key)
+curl -H "X-Sherwood-API-Key: your-secret-key" http://localhost:8099/api/v1/strategies
 ```
 
 ## Running Tests

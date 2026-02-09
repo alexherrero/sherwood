@@ -35,11 +35,11 @@ jobs:
       shell: bash
       working-directory: ./
       run: |
-        # Start the backend in the background
+        # Start the backend in the background with API Key
         if [ "$RUNNER_OS" == "Windows" ]; then
-          ./sherwood.exe &
+          API_KEY=test-ci-key ./sherwood.exe &
         else
-          ./sherwood &
+          API_KEY=test-ci-key ./sherwood &
         fi
         SERVER_PID=$!
         
@@ -56,20 +56,64 @@ jobs:
           exit 1
         fi
         
-        # Verify Status Endpoint
-        echo "Verifying Status Endpoint..."
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8099/api/v1/status)
+        # Verify Status Endpoint (Should match 200 with key)
+        echo "Verifying Status Endpoint with Key..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Sherwood-API-Key: test-ci-key" http://localhost:8099/api/v1/status)
         if [ "$HTTP_CODE" != "200" ]; then
           echo "Status check failed with status $HTTP_CODE"
+          kill $SERVER_PID
+          exit 1
+        fi
+
+        # Verify Status Endpoint (Should match 401 without key)
+        echo "Verifying Status Endpoint without Key..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8099/api/v1/status)
+        if [ "$HTTP_CODE" != "401" ]; then
+          echo "Security check failed. Expected 401 but got $HTTP_CODE"
           kill $SERVER_PID
           exit 1
         fi
         
         # Verify Strategies Endpoint
         echo "Verifying Strategies Endpoint..."
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8099/api/v1/strategies)
         if [ "$HTTP_CODE" != "200" ]; then
           echo "Strategies check failed with status $HTTP_CODE"
+          kill $SERVER_PID
+          exit 1
+        fi
+
+        # Verify Execution Endpoints (Balance requires Key)
+        echo "Verifying Balance Endpoint..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Sherwood-API-Key: test-ci-key" http://localhost:8099/api/v1/execution/balance)
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Balance check failed with status $HTTP_CODE"
+          kill $SERVER_PID
+          exit 1
+        fi
+
+        # Verify Historical Data Endpoint (Requires Key)
+        echo "Verifying History Endpoint..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Sherwood-API-Key: test-ci-key" "http://localhost:8099/api/v1/data/history?symbol=SPY&interval=1d")
+        if [ "$HTTP_CODE" != "200" ]; then
+             echo "History check failed with status $HTTP_CODE. (Could be network issue, ignoring for now but logging)"
+             # Don't fail the build for external data dependency yet
+        fi
+
+        # Verify Engine Control (Start/Stop with Key)
+        echo "Verifying Engine Start..."
+        # Start
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Sherwood-API-Key: test-ci-key" -d '{"confirm": true}' http://localhost:8099/api/v1/engine/start)
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Engine valid start failed with status $HTTP_CODE"
+          kill $SERVER_PID
+          exit 1
+        fi
+        
+        # Stop
+        echo "Verifying Engine Stop..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Sherwood-API-Key: test-ci-key" -d '{"confirm": true}' http://localhost:8099/api/v1/engine/stop)
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Engine stop failed with status $HTTP_CODE"
           kill $SERVER_PID
           exit 1
         fi

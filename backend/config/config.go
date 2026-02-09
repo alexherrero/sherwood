@@ -25,6 +25,8 @@ type Config struct {
 	// Server settings
 	ServerPort int
 	ServerHost string
+	// API Key for authentication
+	APIKey string
 
 	// Trading settings
 	TradingMode TradingMode
@@ -63,6 +65,7 @@ func Load() (*Config, error) {
 	config := &Config{
 		ServerPort:   getEnvInt("PORT", 8099),
 		ServerHost:   getEnv("HOST", "0.0.0.0"),
+		APIKey:       os.Getenv("API_KEY"),
 		TradingMode:  TradingMode(getEnv("TRADING_MODE", "dry_run")),
 		DatabasePath: getEnv("DATABASE_PATH", "./data/sherwood.db"),
 		RedisURL:     getEnv("REDIS_URL", ""),
@@ -100,6 +103,10 @@ func (c *Config) Validate() error {
 
 	if c.ServerPort < 1 || c.ServerPort > 65535 {
 		return fmt.Errorf("invalid server port: %d", c.ServerPort)
+	}
+
+	if c.IsLive() && c.APIKey == "" {
+		fmt.Println("WARNING: Running in LIVE mode without an API_KEY set. This is insecure!")
 	}
 
 	return nil

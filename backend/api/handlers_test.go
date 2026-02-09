@@ -52,7 +52,7 @@ func setupTestHandler() (*Handler, *MockDataProvider, *strategies.Registry) {
 
 	mockProvider := new(MockDataProvider)
 
-	handler := NewHandler(registry, mockProvider, cfg, nil)
+	handler := NewHandler(registry, mockProvider, cfg, nil, nil)
 	return handler, mockProvider, registry
 }
 
@@ -100,7 +100,7 @@ func TestGetStrategyHandler(t *testing.T) {
 	_ = registry.Register(strategies.NewMACrossover())
 	mockProvider := new(MockDataProvider)
 
-	router := NewRouter(cfg, registry, mockProvider, nil)
+	router := NewRouter(cfg, registry, mockProvider, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/strategies/ma_crossover", nil)
 	rec := httptest.NewRecorder()
@@ -158,7 +158,7 @@ func TestGetBacktestResultHandler(t *testing.T) {
 	cfg := &config.Config{}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
-	router := NewRouter(cfg, registry, mockProvider, nil)
+	router := NewRouter(cfg, registry, mockProvider, nil, nil)
 
 	// We need to inject a result into the handler used by the router.
 	// Since NewRouter creates its own handler, we can't easily access it.
@@ -209,7 +209,7 @@ func TestRouterIntegration(t *testing.T) {
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
 
-	router := NewRouter(cfg, registry, mockProvider, nil)
+	router := NewRouter(cfg, registry, mockProvider, nil, nil)
 	assert.NotNil(t, router)
 
 	// Test health endpoint
@@ -305,7 +305,7 @@ func TestExecutionEndpoints(t *testing.T) {
 	// Create OrderManager with MockBroker
 	orderManager := execution.NewOrderManager(mockBroker, nil)
 
-	handler := NewHandler(registry, mockProvider, cfg, orderManager)
+	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil)
 
 	// Test GetBalance
 	t.Run("GetBalance", func(t *testing.T) {
@@ -376,7 +376,7 @@ func TestPlaceOrderHandler(t *testing.T) {
 	// Create OrderManager with MockBroker
 	orderManager := execution.NewOrderManager(mockBroker, nil)
 
-	handler := NewHandler(registry, mockProvider, cfg, orderManager)
+	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil)
 
 	t.Run("MarketBuy", func(t *testing.T) {
 		// Expectation: broker.PlaceOrder called
