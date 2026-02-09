@@ -1,0 +1,34 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build-and-test:
+    name: Build and Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23' # Matching the project's Go version requirement or latest stable
+
+    - name: Install dependencies
+      working-directory: ./
+      run: go mod download
+
+    - name: Run Tests
+      working-directory: ./
+      run: go test -v ./...
+
+    - name: Build
+      working-directory: ./
+      run: go build -v ./backend/...
