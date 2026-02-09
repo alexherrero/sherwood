@@ -13,6 +13,8 @@ import (
 
 	"github.com/alexherrero/sherwood/backend/api"
 	"github.com/alexherrero/sherwood/backend/config"
+	"github.com/alexherrero/sherwood/backend/data/providers"
+	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 )
@@ -44,8 +46,19 @@ func main() {
 		log.Info().Msg("📝 Paper trading mode (dry run)")
 	}
 
+	// Initialize Strategy Registry
+	registry := strategies.NewRegistry()
+	if err := registry.Register(strategies.NewMACrossover()); err != nil {
+		log.Error().Err(err).Msg("Failed to register MA Crossover strategy")
+	}
+
+	// Initialize Data Provider
+	// Default to Yahoo for now as it requires no configuration
+	// In the future, this could be configured via config.yaml
+	provider := providers.NewYahooProvider()
+
 	// Create API router
-	router := api.NewRouter(cfg)
+	router := api.NewRouter(cfg, registry, provider)
 
 	// Create HTTP server
 	server := &http.Server{
