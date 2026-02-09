@@ -33,7 +33,7 @@ func NewDB(databasePath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to create database directory: %w", err)
 	}
 
-	db, err := sqlx.Connect("sqlite3", databasePath)
+	db, err := sqlx.Connect("sqlite", databasePath)
 	if err != nil {
 		return nil, fmt.Errorf("failed to connect to database: %w", err)
 	}
