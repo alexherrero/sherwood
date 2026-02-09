@@ -60,6 +60,8 @@ jobs:
         DATABASE_PATH=./data/test_persistence.db
         LOG_LEVEL=info
         DATA_PROVIDER=yahoo
+        ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8099
+        ENABLED_STRATEGIES=ma_crossover
         EOF
 
     - name: Start server (first run)
@@ -78,7 +80,7 @@ jobs:
     - name: Submit test order
       id: submit_order
       run: |
-        RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/orders \
+        RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/execution/orders \
           -H "Content-Type: application/json" \
           -H "X-Sherwood-API-Key: test-key-12345" \
           -d '{"symbol":"BTC-USD","side":"buy","type":"market","quantity":0.01}')
@@ -127,12 +129,12 @@ jobs:
     - name: Verify order persisted
       run: |
         echo "Checking for order: $ORDER_ID"
-        RESPONSE=$(curl -s http://127.0.0.1:8099/api/v1/orders/$ORDER_ID \
+        RESPONSE=$(curl -s http://127.0.0.1:8099/api/v1/execution/orders \
           -H "X-Sherwood-API-Key: test-key-12345")
         echo "Order retrieval response: $RESPONSE"
         
-        # Verify the order exists
-        RETRIEVED_ID=$(echo $RESPONSE | jq -r '.id')
+        # Verify the order exists (find it in the list)
+        RETRIEVED_ID=$(echo $RESPONSE | jq -r ".[] | select(.id==\"$ORDER_ID\") | .id")
         if [ "$RETRIEVED_ID" != "$ORDER_ID" ]; then
           echo "Order not found after restart! Expected: $ORDER_ID, Got: $RETRIEVED_ID"
           exit 1
