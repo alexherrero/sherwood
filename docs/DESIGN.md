@@ -11,8 +11,31 @@ Sherwood is a proof-of-concept automated trading engine and management dashboard
 - Download historical data for stocks and crypto from major exchanges.
 - Validate models through rigorous backtesting.
 - Deploy in "Dry Run" (Paper Trading) or Live environments.
+
 - Manage configurations via web dashboard.
 - Easily containerized using docker.
+
+## Supported Strategies
+
+The following strategies are planned for implementation:
+
+### 1. RSI (Relative Strength Index) Momentum
+
+- **Logic**: Buy when the asset is oversold (RSI < 30) and sell when it is overbought (RSI > 70).
+- **Goal**: Capitalize on mean reversion in ranging markets.
+- **Parameters**: Period (default 14), Overbought Threshold (70), Oversold Threshold (30).
+
+### 2. Bollinger Bands Mean Reversion
+
+- **Logic**: Buy when price touches or breaks below the lower band; Sell when price touches or breaks above the upper band.
+- **Goal**: Exploit price extremes assuming price will return to the mean.
+- **Parameters**: Period (20), Standard Deviation Multiplier (2).
+
+### 3. MACD (Moving Average Convergence Divergence) Trend Follower
+
+- **Logic**: Buy when the MACD line crosses above the Signal line (bullish crossover); Sell when the MACD line crosses below the Signal line (bearish crossover).
+- **Goal**: Identify and follow strong market trends.
+- **Parameters**: Fast Period (12), Slow Period (26), Signal Period (9).
 
 ## Technical Stack & Tools
 
@@ -68,7 +91,7 @@ Sherwood is a proof-of-concept automated trading engine and management dashboard
 
 Maintain this modular organization:
 
-```
+```text
 sherwood/
 ├── backend/
 │   ├── main.go              # Main application entry point
@@ -183,21 +206,21 @@ Ask questions only when:
 
 **Be Direct**: Start with action, not preamble
 
-```
+```text
 Good: "Creating RSI strategy with 14-period default..."
 Bad: "I'd be happy to help you create an RSI strategy! First, let me explain what RSI is..."
 ```
 
 **Be Comprehensive**: Include everything needed
 
-```
+```text
 Good: [Full code + tests + docs + usage example]
 Bad: [Code snippet only, "you can add tests later"]
 ```
 
 **Be Practical**: Focus on working solutions
 
-```
+```text
 Good: "Using yfinance for data - it's free and reliable"
 Bad: "You could use Bloomberg API, Reuters, or..."
 ```
@@ -224,7 +247,7 @@ Every time you work on trading execution code, include this checklist:
 
 When discussing trading strategies or implementation, include:
 
-```
+```text
 ⚠️ DISCLAIMER: This is experimental software for educational purposes only.
 - Not financial advice
 - Not guaranteed to work or be profitable  
