@@ -8,7 +8,7 @@ However, several critical components are missing for a "production-ready" automa
 
 ## Critical Gaps (Must Fix for functionality)
 
-### 1. Missing Trading Loop / Core Engine
+### 1. Missing Trading Loop / Core Engine ✅ IMPLEMENTED
 
 **Severity: Critical**
 
@@ -18,14 +18,16 @@ However, several critical components are missing for a "production-ready" automa
   - Generate signals and execute orders via the `OrderManager`.
 - **Impact:** The application cannot trade. It can only serve API requests.
 - **Recommendation:** Implement a `Engine` struct (or `TradingLoop`) that runs in a separate goroutine, ticking at a configurable interval, fetching data, updating strategies, and executing orders.
+- **Status:** Implemented in Phase 1. `TradingEngine` now runs in background, processes market data, and executes strategy signals.
 
-### 2. Execution Wiring
+### 2. Execution Wiring ✅ IMPLEMENTED
 
 **Severity: Critical**
 
 - **Issue:** The `OrderManager` and `Broker` components exist in the `execution` package but are **not wired up** in `main.go` or the `api` package.
 - **Impact:** The API cannot query order status, place manual orders, or monitor positions. The strategies have no way to send orders to a broker.
 - **Recommendation:** Initialize `OrderManager` (with a `PaperBroker` or real implementation) in `main.go` and inject it into both the `Strategy` runtime and the `API Handler`.
+- **Status:** Implemented in Phase 1. `OrderManager` is wired in `main.go` and injected into both engine and API handlers.
 
 ### 3. Missing Frontend
 
@@ -34,6 +36,7 @@ However, several critical components are missing for a "production-ready" automa
 - **Issue:** The `frontend` directory is completely missing. `DESIGN.md` specifies a React-based dashboard.
 - **Impact:** No user interface for monitoring or configuration.
 - **Recommendation:** Initialize the React project (Vite + TypeScript) as per design.
+- **Status:** PENDING (See docs/PENDING.md)
 
 ### 4. Deployment Configuration
 
@@ -42,14 +45,16 @@ However, several critical components are missing for a "production-ready" automa
 - **Issue:** `Dockerfile`, `docker-compose.yml`, and the `deployments/` directory are missing.
 - **Impact:** Cannot be containerized or easily deployed.
 - **Recommendation:** Create `backend/Dockerfile`, `frontend/Dockerfile`, and a root `docker-compose.yml` to orchestrate services (Backend, Frontend, Database).
+- **Status:** PENDING (See docs/PENDING.md)
 
-### 5. Hardcoded Data Provider
+### 5. Hardcoded Data Provider ✅ IMPLEMENTED
 
 **Severity: Medium**
 
 - **Issue:** `main.go` explicitly initializes `providers.NewYahooProvider()`.
 - **Impact:** Users cannot switch to Tiingo or Binance via configuration without code changes.
 - **Recommendation:** Implement a factory pattern in `main.go` to initialize the correct provider based on `config.yaml` or `.env` `DATA_SOURCE` setting.
+- **Status:** Implemented in Phase 2. `DATA_PROVIDER` environment variable with factory pattern supports yahoo, tiingo, and binance.
 
 ## Productionizing Improvements (Tweaks & Adjustments)
 
@@ -75,16 +80,16 @@ However, several critical components are missing for a "production-ready" automa
 
 ## Proposed Roadmap
 
-1. **Phase 1: Wiring the Backend (The Loop)**
+1. **Phase 1: Wiring the Backend (The Loop)** ✅ COMPLETE
     - Implement the implementation of `execution.Engine` (Trading Loop).
     - Wire `OrderManager` and `Strategies` together.
     - Make `main.go` start the loop.
-2. **Phase 2: Dynamic Configuration**
+2. **Phase 2: Dynamic Configuration** ✅ COMPLETE
     - Support switching providers via config.
     - Support enabling/disabling strategies via config.
-3. **Phase 3: Deployment & Docker**
+3. **Phase 3: Deployment & Docker** ⏳ PENDING
     - Create Dockerfiles and Compose setup.
-4. **Phase 4: Frontend Implementation**
+4. **Phase 4: Frontend Implementation** ⏳ PENDING
     - Scaffolding the React app.
     - Integrating with the Backend API.
 

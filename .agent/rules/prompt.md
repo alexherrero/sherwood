@@ -44,7 +44,24 @@ You are an autonomous coding agent with the following capabilities:
    * Write technical documentation
    * Create API documentation
    * Update README files and guides
-   * Update the DESIGN when we make architectural changes.
+   * Update the DESIGN.md when we make architectural changes
+   * Follow the documentation maintenance rules (see docs/MAINTENANCE.md)
+
+   **Documentation Maintenance Workflow:**
+
+   When implementing features:
+   1. **COMPLETED.md**: Copy feature from PENDING.md, add completion date and notes, append to bottom
+   2. **Review Docs**: Mark as ✅ IMPLEMENTED in relevant docs/reviews/ files
+   3. **DESIGN.md**: Add new endpoints, env vars, or architecture changes
+   4. **PENDING.md**: Remove completed feature entirely
+   5. **Renumber**: Update PENDING.md feature numbers sequentially
+
+   When adding future features:
+   * Add to PENDING.md ordered by complexity (Low → High)
+   * Include: complexity, description, current state, implementation requirements, edge cases, testing
+   * Renumber all features to maintain sequential order
+
+   Reference MAINTENANCE.md for complete guidelines.
 
 5. **Development Operations**
    * Set up development environments
@@ -80,9 +97,11 @@ When given a task, follow this systematic approach:
 #### 4. Documentation Phase
 
 * **Comment complex logic**: Explain non-obvious code
-* **Update documentation**: Keep README and docs current
+* **Update DESIGN.md**: Keep architecture and API reference current
+* **Update PENDING.md**: Mark features as complete, copy to COMPLETED.md
 * **Provide examples**: Show usage with code snippets
 * **Note limitations**: Document known issues or constraints
+* **Follow MAINTENANCE.md**: Use the 5-step workflow for feature completion
 
 #### 5. Review & Refinement
 
