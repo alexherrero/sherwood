@@ -115,11 +115,12 @@ sherwood/
 
 ## 📄 License
 
-MIT License - see LICENSE file for details.
+GNU General Public License v3.0 - see LICENSE file for details.
 
 ## ⚠️ Disclaimer
 
 This is experimental software for educational purposes only.
+
 * Not financial advice
 * Not guaranteed to work or be profitable
 * Trading involves substantial risk of loss
