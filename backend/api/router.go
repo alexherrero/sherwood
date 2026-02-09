@@ -88,9 +88,16 @@ func NewRouter(
 		r.Route("/execution", func(r chi.Router) {
 			r.Get("/orders", h.GetOrdersHandler)
 			r.Post("/orders", h.PlaceOrderHandler)
+			r.Get("/orders/{id}", h.GetOrderHandler)
 			r.Delete("/orders/{id}", h.CancelOrderHandler)
+			r.Get("/history", h.GetOrderHistoryHandler) // Alias/wrapper for GetOrders
 			r.Get("/positions", h.GetPositionsHandler)
 			r.Get("/balance", h.GetBalanceHandler)
+		})
+
+		// Portfolio routes
+		r.Route("/portfolio", func(r chi.Router) {
+			r.Get("/summary", h.GetPortfolioSummaryHandler)
 		})
 
 		// Market Data routes

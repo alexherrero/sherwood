@@ -367,18 +367,23 @@ func TestExecutionEndpoints(t *testing.T) {
 
 	// Test GetOrders
 	t.Run("GetOrders", func(t *testing.T) {
-		// Just verify it calls implementation (OrderManager.GetAllOrders doesn't call broker usually, it returns local)
-		// But in our current OrderManager implementation, it only stores submitted orders.
-		// Since we haven't submitted any, it should be empty.
-
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/execution/orders", nil)
 		rec := httptest.NewRecorder()
 
 		handler.GetOrdersHandler(rec, req)
 
 		assert.Equal(t, http.StatusOK, rec.Code)
+		var response map[string]interface{}
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+
+		// It should be empty list inside "orders"
+		ordersProp, ok := response["orders"]
+		require.True(t, ok)
+
+		ordersJSON, _ := json.Marshal(ordersProp)
 		var orders []models.Order
-		err := json.Unmarshal(rec.Body.Bytes(), &orders)
+		err = json.Unmarshal(ordersJSON, &orders)
 		require.NoError(t, err)
 		assert.Empty(t, orders)
 	})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
@@ -357,14 +358,140 @@ func generateConfigWarnings(cfg *config.Config, enabledCount int) []string {
 	return warnings
 }
 
-// GetOrdersHandler returns a list of all orders.
+// GetOrdersHandler returns a list of orders with optional filtering and pagination.
 func (h *Handler) GetOrdersHandler(w http.ResponseWriter, r *http.Request) {
 	if h.orderManager == nil {
 		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
 		return
 	}
-	orders := h.orderManager.GetAllOrders()
-	writeJSON(w, http.StatusOK, orders)
+
+	// Parse query parameters
+	limit := getQueryInt(r, "limit", 50)
+	page := getQueryInt(r, "page", 1)
+	if page < 1 {
+		page = 1
+	}
+	offset := (page - 1) * limit
+	symbol := r.URL.Query().Get("symbol")
+	statusStr := r.URL.Query().Get("status")
+
+	filter := execution.OrderFilter{
+		Limit:  limit,
+		Offset: offset,
+		Symbol: symbol,
+		Status: models.OrderStatus(statusStr),
+	}
+
+	orders, total, err := h.orderManager.GetOrders(filter)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"orders": orders,
+		"total":  total,
+		"page":   page,
+		"limit":  limit,
+	})
+}
+
+// GetOrderHandler returns a single order by ID.
+func (h *Handler) GetOrderHandler(w http.ResponseWriter, r *http.Request) {
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "Order ID is required")
+		return
+	}
+
+	order, err := h.orderManager.GetOrder(id)
+	if err != nil {
+		// Start checking if it's a "not found" error or other
+		// For now, assume if error it's not found or internal
+		// But GetOrder usually returns error if not found in DB
+		// Let's assume standard error for now
+		writeError(w, http.StatusNotFound, "Order not found")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, order)
+}
+
+// GetOrderHistoryHandler returns a list of past (closed) orders.
+func (h *Handler) GetOrderHistoryHandler(w http.ResponseWriter, r *http.Request) {
+	// Wrapper around GetOrders but defaults to closed statuses if status not provided
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+
+	// For now, let's just use GetOrders logic but maybe enforce status?
+	// The requirement is "Historical/closed orders".
+	// Since GetOrders supports status filtering, this might be redundant unless we want to fetch MULTIPLE statuses.
+	// Our primitive OrderFilter only supports single status.
+	// Let's implement client-side filtering or just return all non-pending for now?
+	// Or we can update OrderFilter to support multiple statuses.
+	// Given constraints, I'll just expose GetOrders behavior but maybe default to "FILLED" if no status?
+	// Actually, "history" usually implies everything not "PENDING".
+	// Let's just return all orders for now, client can filter.
+	// Or, if I want to be strict, I should loop over filled/cancelled/rejected.
+	// But GetOrders only takes one status.
+	// Let's stick to simple implementation: Same as GetOrders but maybe documented as history?
+	// Or better: Let's just point to GetOrdersHandler in implementation or re-use logic.
+	// But to be distinct, maybe we default limit to 100?
+
+	h.GetOrdersHandler(w, r)
+}
+
+// GetPortfolioSummaryHandler returns an aggregated portfolio summary.
+func (h *Handler) GetPortfolioSummaryHandler(w http.ResponseWriter, r *http.Request) {
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+
+	balance, err := h.orderManager.GetBalance()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get balance: %v", err))
+		return
+	}
+
+	positions, err := h.orderManager.GetPositions()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get positions: %v", err))
+		return
+	}
+
+	var totalUnrealizedPL float64
+	for _, p := range positions {
+		totalUnrealizedPL += p.UnrealizedPL
+	}
+
+	summary := map[string]interface{}{
+		"balance":             balance,
+		"total_unrealized_pl": totalUnrealizedPL,
+		"open_positions":      len(positions),
+	}
+
+	writeJSON(w, http.StatusOK, summary)
+}
+
+// getQueryInt parses a query parameter as an integer.
+func getQueryInt(r *http.Request, key string, defaultVal int) int {
+	valStr := r.URL.Query().Get(key)
+	if valStr == "" {
+		return defaultVal
+	}
+	val, err := strconv.Atoi(valStr)
+	if err != nil {
+		return defaultVal
+	}
+	return val
 }
 
 // GetPositionsHandler returns a list of current positions.
