@@ -148,7 +148,190 @@ Create Dockerfiles and docker-compose configuration to containerize the applicat
 
 ---
 
-## 7. Frontend Implementation
+## 6. Benchmark Tests for Performance Monitoring
+
+**Complexity:** Medium
+
+**Description:**
+Add benchmark tests to detect performance regressions in critical paths (backtesting, order placement, data fetching).
+
+**Current State:**
+No benchmark tests exist. Manual performance testing only.
+
+**Implementation Requirements:**
+
+1. **Backtest Engine Benchmarks:** Test with various data set sizes (1 month, 1 year, 5 years)
+2. **Order Placement Throughput:** Measure orders/second capacity
+3. **Data Provider Latency:** Benchmark historical data fetching
+4. **API Response Times:** Benchmark common endpoints
+5. **CI Integration:** Track benchmark results over time
+
+**Files to Create:**
+
+- `backend/backtesting/engine_bench_test.go`
+- `backend/execution/order_manager_bench_test.go`
+- `backend/data/providers/yahoo_bench_test.go`
+- `backend/api/handlers_bench_test.go`
+
+**Example:**
+
+```go
+func BenchmarkBacktest_LargeDataset(b *testing.B) {
+    // Generate 1 year of daily data
+    data := generateMockData(365)
+    strategy := strategies.NewMACrossover()
+    
+    b.ResetTimer()
+    for i := 0; i < b.N; i++ {
+        engine.Run(strategy, data, config)
+    }
+}
+```
+
+---
+
+## 7. Concurrent Operation Tests
+
+**Complexity:** Medium-High
+
+**Description:**
+Add tests to verify thread safety and race condition protection in concurrent scenarios (multiple simultaneous orders, parallel backtests).
+
+**Current State:**
+No explicit concurrent operation tests. Thread safety assumed but not verified.
+
+**Implementation Requirements:**
+
+1. **Concurrent Order Placement:** 10+ goroutines placing orders simultaneously
+2. **Parallel Backtests:** Multiple backtests running concurrently
+3. **Strategy Hot-Swap During Trading:** Enable/disable strategies while engine running
+4. **Data Provider Concurrent Requests:** Multiple threads fetching data
+5. **Race Detector:** Run tests with `-race` flag in CI
+
+**Test Strategy:**
+
+```go
+func TestConcurrentOrderPlacement(t *testing.T) {
+    var wg sync.WaitGroup
+    orderManager := setupOrderManager()
+    
+    // Launch 10 goroutines placing orders
+    for i := 0; i < 10; i++ {
+        wg.Add(1)
+        go func(id int) {
+            defer wg.Done()
+            order, err := orderManager.CreateMarketOrder(
+                "AAPL", models.OrderSideBuy, 10)
+            assert.NoError(t, err)
+        }(i)
+    }
+    
+    wg.Wait()
+    // Verify all orders processed correctly
+}
+```
+
+---
+
+## 8. Edge Case Test Coverage
+
+**Complexity:** Low-Medium
+
+**Description:**
+Expand test coverage for boundary conditions and edge cases in validation, data handling, and error scenarios.
+
+**Missing Edge Cases:**
+
+1. **Input Validation:**
+   - Order with quantity = 0
+   - Negative prices
+   - Symbol with special characters (Unicode, emojis)
+   - Extremely long symbol names (>100 chars)
+   - Future dates in historical data requests
+
+2. **Resource Limits:**
+   - Backtest with 10+ year date range
+   - Order list with 10,000+ orders
+   - Concurrent backtest limit testing
+
+3. **Error Recovery:**
+   - Database connection loss during operation
+   - Broker connection timeout
+   - Data provider rate limit hit
+   - Disk full during database write
+
+4. **State Management:**
+   - Server restart with pending orders
+   - Partial fill handling
+   - Balance reconciliation after failed trades
+
+**Implementation:**
+Add table-driven tests for validation edge cases, integration tests for error recovery scenarios.
+
+---
+
+## 9. Property-Based Testing
+
+**Complexity:** High
+
+**Description:**
+Implement property-based testing for complex logic using testing frameworks like `gopter` to generate random test cases and verify invariants.
+
+**Use Cases:**
+
+1. **Backtest Engine:** Verify account balance never goes negative, equity curve properties
+2. **Order Manager:** Verify order state transitions valid, balance always matches positions
+3. **Risk Manager:** Verify limits always enforced regardless of input
+4. **Technical Indicators:** Verify mathematical properties (SMA always within data range, etc.)
+
+**Example:**
+
+```go
+import "github.com/leanovate/gopter"
+
+func TestBacktest_BalanceNeverNegative(t *testing.T) {
+    properties := gopter.NewProperties(nil)
+    
+    properties.Property("balance never negative", prop.ForAll(
+        func(trades []Trade) bool {
+            result := runBacktest(trades)
+            return result.FinalBalance >= 0
+        },
+        genTrades(),
+    ))
+    
+    properties.TestingRun(t)
+}
+```
+
+---
+
+## 10. Deployment Configuration (Docker)
+
+**Complexity:** High
+
+**Description:**
+Create Dockerfiles and docker-compose configuration to containerize the application.
+
+**Implementation Requirements:**
+
+1. **Backend Dockerfile:** Multi-stage build (golang builder + alpine runtime)
+2. **Frontend Dockerfile:** Build React app with Vite, serve with nginx
+3. **docker-compose.yml:** Services for backend, frontend, database with health checks
+4. **Deployment Directory:** `deployments/docker/` and `deployments/k8s/` (optional)
+5. **Documentation:** Update README with Docker usage instructions
+
+**Files to Create:**
+
+- `backend/Dockerfile`
+- `frontend/Dockerfile`
+- `docker-compose.yml`
+- `docker-compose.dev.yml`
+- `.dockerignore`
+
+---
+
+## 11. Frontend Implementation
 
 **Complexity:** High
 
@@ -166,7 +349,7 @@ Build the React-based web dashboard for Sherwood as specified in DESIGN.md.
 
 **Directory Structure:**
 
-```
+```plaintext
 frontend/
 ├── src/
 │   ├── components/
