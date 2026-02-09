@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/alexherrero/sherwood/backend/config"
+	"github.com/alexherrero/sherwood/backend/data"
+	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/rs/zerolog/log"
@@ -16,10 +18,12 @@ import (
 //
 // Args:
 //   - cfg: Application configuration
+//   - registry: Strategy registry
+//   - provider: Data provider for backtesting
 //
 // Returns:
 //   - http.Handler: The configured router
-func NewRouter(cfg *config.Config) http.Handler {
+func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.DataProvider) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware stack
@@ -32,41 +36,41 @@ func NewRouter(cfg *config.Config) http.Handler {
 	// CORS middleware for frontend
 	r.Use(corsMiddleware)
 
+	// Initialize handler with dependencies
+	h := NewHandler(registry, provider, cfg)
+
 	// Health check endpoint
-	r.Get("/health", healthHandler)
+	r.Get("/health", h.HealthHandler)
 
 	// API v1 routes
 	r.Route("/api/v1", func(r chi.Router) {
 		// Strategies routes
 		r.Route("/strategies", func(r chi.Router) {
-			r.Get("/", listStrategiesHandler)
-			r.Get("/{name}", getStrategyHandler)
+			r.Get("/", h.ListStrategiesHandler)
+			r.Get("/{name}", h.GetStrategyHandler)
 		})
 
 		// Backtest routes
 		r.Route("/backtests", func(r chi.Router) {
-			r.Post("/", runBacktestHandler)
-			r.Get("/{id}", getBacktestResultHandler)
+			r.Post("/", h.RunBacktestHandler)
+			r.Get("/{id}", h.GetBacktestResultHandler)
 		})
 
 		// Config routes
 		r.Route("/config", func(r chi.Router) {
-			r.Get("/", getConfigHandler)
+			r.Get("/", h.GetConfigHandler)
 		})
 
 		// Status endpoint
 		r.Get("/status", func(w http.ResponseWriter, r *http.Request) {
+			status := "running"
 			if cfg.IsDryRun() {
-				writeJSON(w, http.StatusOK, map[string]string{
-					"mode":   "dry_run",
-					"status": "running",
-				})
-			} else {
-				writeJSON(w, http.StatusOK, map[string]string{
-					"mode":   "live",
-					"status": "running",
-				})
+				status = "dry_run"
 			}
+			writeJSON(w, http.StatusOK, map[string]string{
+				"mode":   status,
+				"status": "active",
+			})
 		})
 	})
 
