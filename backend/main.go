@@ -13,6 +13,7 @@ import (
 
 	"github.com/alexherrero/sherwood/backend/api"
 	"github.com/alexherrero/sherwood/backend/config"
+	"github.com/alexherrero/sherwood/backend/data"
 	"github.com/alexherrero/sherwood/backend/data/providers"
 	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
@@ -75,6 +76,16 @@ func main() {
 		log.Fatal().Err(err).Msgf("Failed to create data provider: %s", cfg.DataProvider)
 	}
 
+	// Initialize Database
+	db, err := data.NewDB(cfg.DatabasePath)
+	if err != nil {
+		log.Fatal().Err(err).Msg("Failed to initialize database")
+	}
+	defer db.Close()
+
+	// Initialize Order Store
+	orderStore := data.NewOrderStore(db)
+
 	// Initialize Execution Layer (Paper Trading for now)
 	initialCash := 100000.0
 	broker := execution.NewPaperBroker(initialCash)
@@ -82,8 +93,13 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to connect to paper broker")
 	}
 
-	// Risk Manager is nil for now
-	orderManager := execution.NewOrderManager(broker, nil)
+	// Initialize Order Manager with persistence
+	orderManager := execution.NewOrderManager(broker, nil, orderStore)
+
+	// Restore orders from database
+	if err := orderManager.LoadOrders(); err != nil {
+		log.Warn().Err(err).Msg("Failed to load orders from database")
+	}
 
 	// Initialize Trading Engine
 	// Hardcoded symbols for now
