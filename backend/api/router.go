@@ -13,6 +13,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/httprate"
 	"github.com/rs/zerolog/log"
 )
 
@@ -42,6 +43,12 @@ func NewRouter(
 	r.Use(zerologLogger)
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(60 * time.Second))
+
+	// Rate limiting - prevent abuse
+	// Global: 100 requests per minute per IP (protects against basic DoS)
+	r.Use(httprate.LimitByIP(100, 1*time.Minute))
+	// Burst protection: 20 requests per second per IP
+	r.Use(httprate.LimitByIP(20, 1*time.Second))
 
 	// CORS middleware for frontend
 	r.Use(corsMiddleware)
