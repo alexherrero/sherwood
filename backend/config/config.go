@@ -61,7 +61,7 @@ func Load() (*Config, error) {
 	_ = godotenv.Load()
 
 	config := &Config{
-		ServerPort:   getEnvInt("PORT", 8080),
+		ServerPort:   getEnvInt("PORT", 8099),
 		ServerHost:   getEnv("HOST", "0.0.0.0"),
 		TradingMode:  TradingMode(getEnv("TRADING_MODE", "dry_run")),
 		DatabasePath: getEnv("DATABASE_PATH", "./data/sherwood.db"),

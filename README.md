@@ -55,7 +55,7 @@ Edit `.env` with your settings:
 
 ```env
 # General Configuration
-PORT=8080
+PORT=8099
 TRADING_MODE=dry_run  # Options: 'dry_run' or 'live'
 DATABASE_PATH=./data/sherwood.db
 

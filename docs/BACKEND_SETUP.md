@@ -1,11 +1,10 @@
 # Backend Setup Guide
 
-This guide covers setting up and running the Sherwood trading engine backend.
+This guide covers setting up, running, and verifying the Sherwood trading engine backend and API.
 
 ## Prerequisites
 
-- **Go 1.21+**: [Download Go](https://go.dev/dl/)
-- **GCC** (for SQLite): Required for CGO-enabled sqlite3 driver
+- **Go 1.25+**: [Download Go](https://go.dev/dl/)
 
 ## Installation
 
@@ -24,7 +23,7 @@ Create a `.env` file in the project root:
 
 ```env
 # Server settings
-PORT=8080
+PORT=8099
 HOST=0.0.0.0
 
 # Trading mode: 'dry_run' (paper) or 'live'
@@ -40,6 +39,11 @@ LOG_LEVEL=info
 RH_USERNAME=your_email@example.com
 RH_PASSWORD=your_password
 RH_MFA_CODE=your_mfa_secret
+
+# Data Provider API Keys (optional, tests will use mocks if missing)
+BINANCE_API_KEY=your_binance_key
+BINANCE_API_SECRET=your_binance_secret
+TIINGO_API_KEY=your_tiingo_key
 ```
 
 > ⚠️ **Never commit `.env` to version control!**
@@ -53,32 +57,27 @@ go run ./backend/main.go
 
 Expected output:
 
-```
+```text
 Starting Sherwood Trading Engine...
 📝 Paper trading mode (dry run)
-🚀 API server listening on 0.0.0.0:8080
+🚀 API server listening on 0.0.0.0:8099
 ```
 
 ## Verifying the Installation
 
+You can verify the backend is running by checking the API endpoints.
+
 ```powershell
 # Health check
-curl http://localhost:8080/health
+curl http://localhost:8099/health
 # Returns: {"status":"ok"}
 
 # Get engine status
-curl http://localhost:8080/api/v1/status
+curl http://localhost:8099/api/v1/status
 # Returns: {"mode":"dry_run","status":"running"}
-```
 
-## Building for Production
-
-```powershell
-# Build the binary
-go build -o sherwood.exe ./backend/main.go
-
-# Run the binary
-./sherwood.exe
+# List available strategies
+curl http://localhost:8099/api/v1/strategies
 ```
 
 ## Running Tests
@@ -91,19 +90,21 @@ go test ./backend/... -v
 go test ./backend/... -cover
 ```
 
+## Building for Production
+
+```powershell
+# Build the binary
+go build -o sherwood.exe ./backend/main.go
+
+# Run the binary
+./sherwood.exe
+```
+
 ## Troubleshooting
-
-### CGO/SQLite Issues
-
-If you see errors about CGO or sqlite3:
-
-1. Install GCC via [MSYS2](https://www.msys2.org/) or [TDM-GCC](https://jmeubank.github.io/tdm-gcc/)
-2. Ensure GCC is in your PATH
-3. Set `CGO_ENABLED=1` if needed
 
 ### Port Already in Use
 
-Change the port in `.env`:
+Change the port in `.env` to an other unused port (example below):
 
 ```env
 PORT=9000

@@ -36,7 +36,7 @@ func TestLoadDefaults(t *testing.T) {
 
 	config, err := Load()
 	require.NoError(t, err)
-	assert.Equal(t, 8080, config.ServerPort)
+	assert.Equal(t, 8099, config.ServerPort)
 	assert.Equal(t, ModeDryRun, config.TradingMode)
 	assert.Equal(t, "./data/sherwood.db", config.DatabasePath)
 }
@@ -44,7 +44,7 @@ func TestLoadDefaults(t *testing.T) {
 // TestValidateInvalidTradingMode checks that invalid trading modes are rejected.
 func TestValidateInvalidTradingMode(t *testing.T) {
 	config := &Config{
-		ServerPort:  8080,
+		ServerPort:  8099,
 		TradingMode: "invalid",
 	}
 	err := config.Validate()
