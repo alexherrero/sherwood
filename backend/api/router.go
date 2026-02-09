@@ -50,6 +50,15 @@ func NewRouter(
 	// Burst protection: 20 requests per second per IP
 	r.Use(httprate.LimitByIP(20, 1*time.Second))
 
+	// Request body size limit - prevent memory exhaustion attacks
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Limit request body to 1MB
+			r.Body = http.MaxBytesReader(w, r.Body, 1048576)
+			next.ServeHTTP(w, r)
+		})
+	})
+
 	// CORS middleware for frontend
 	r.Use(corsMiddleware)
 
