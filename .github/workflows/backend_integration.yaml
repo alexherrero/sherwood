@@ -76,6 +76,7 @@ jobs:
         
         # Verify Strategies Endpoint
         echo "Verifying Strategies Endpoint..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Sherwood-API-Key: test-ci-key" http://localhost:8099/api/v1/strategies)
         if [ "$HTTP_CODE" != "200" ]; then
           echo "Strategies check failed with status $HTTP_CODE"
           kill $SERVER_PID
