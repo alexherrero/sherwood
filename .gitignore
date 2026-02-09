@@ -62,6 +62,7 @@ frontend/build/
 tmp/
 temp/
 *.tmp
+test_output.txt
 
 # Debug files
 debug
