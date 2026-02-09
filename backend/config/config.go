@@ -42,6 +42,12 @@ type Config struct {
 
 	// Logging
 	LogLevel string
+
+	// Data Provider settings
+	BinanceAPIKey    string
+	BinanceAPISecret string
+	UseBinanceUS     bool   // Set to true for US users (geo-restricted from binance.com)
+	TiingoAPIKey     string // Tiingo API key (get free at tiingo.com)
 }
 
 // Load reads configuration from environment variables and .env files.
@@ -66,6 +72,14 @@ func Load() (*Config, error) {
 		RobinhoodUsername: os.Getenv("RH_USERNAME"),
 		RobinhoodPassword: os.Getenv("RH_PASSWORD"),
 		RobinhoodMFACode:  os.Getenv("RH_MFA_CODE"),
+
+		// Binance credentials
+		BinanceAPIKey:    os.Getenv("BINANCE_API_KEY"),
+		BinanceAPISecret: os.Getenv("BINANCE_API_SECRET"),
+		UseBinanceUS:     getEnv("BINANCE_USE_US", "true") == "true", // Default to US for safety
+
+		// Tiingo credentials
+		TiingoAPIKey: os.Getenv("TIINGO_API_KEY"),
 	}
 
 	if err := config.Validate(); err != nil {

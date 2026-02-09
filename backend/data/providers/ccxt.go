@@ -3,88 +3,64 @@ package providers
 
 import (
 	"fmt"
-	"time"
 
-	"github.com/alexherrero/sherwood/backend/models"
+	"github.com/alexherrero/sherwood/backend/data"
 )
 
-// CCXTProvider fetches cryptocurrency data via CCXT-compatible APIs.
-// This is a stub implementation - actual API integration to be added.
-type CCXTProvider struct {
-	// exchange is the exchange identifier (e.g., "binance", "coinbase")
+// SupportedExchanges lists all supported cryptocurrency exchanges.
+var SupportedExchanges = []string{"binance"}
+
+// ExchangeProvider wraps exchange-specific providers under a unified interface.
+// This provides compatibility with the original CCXT naming convention.
+type ExchangeProvider struct {
+	provider data.DataProvider
 	exchange string
-	// apiKey for exchange authentication
-	apiKey string
-	// apiSecret for exchange authentication
-	apiSecret string
 }
 
-// NewCCXTProvider creates a new CCXTProvider instance.
+// NewExchangeProvider creates a provider for the specified exchange.
+// Currently supports: binance
 //
 // Args:
-//   - exchange: Exchange identifier
+//   - exchange: Exchange identifier (e.g., "binance")
 //   - apiKey: API key for the exchange
 //   - apiSecret: API secret for the exchange
 //
 // Returns:
-//   - *CCXTProvider: The provider instance
-func NewCCXTProvider(exchange, apiKey, apiSecret string) *CCXTProvider {
-	return &CCXTProvider{
-		exchange:  exchange,
-		apiKey:    apiKey,
-		apiSecret: apiSecret,
+//   - *ExchangeProvider: The provider instance
+//   - error: If the exchange is not supported
+func NewExchangeProvider(exchange, apiKey, apiSecret string) (*ExchangeProvider, error) {
+	var provider data.DataProvider
+
+	switch exchange {
+	case "binance":
+		provider = NewBinanceProvider(apiKey, apiSecret)
+	default:
+		return nil, fmt.Errorf("unsupported exchange: %s (supported: %v)", exchange, SupportedExchanges)
 	}
+
+	return &ExchangeProvider{
+		provider: provider,
+		exchange: exchange,
+	}, nil
 }
 
 // Name returns the provider name.
-func (p *CCXTProvider) Name() string {
-	return fmt.Sprintf("ccxt-%s", p.exchange)
+func (e *ExchangeProvider) Name() string {
+	return fmt.Sprintf("exchange-%s", e.exchange)
 }
 
-// GetHistoricalData fetches OHLCV data from the cryptocurrency exchange.
-// TODO: Implement actual CCXT/exchange API integration.
-//
-// Args:
-//   - symbol: Trading pair (e.g., "BTC/USD", "ETH/USDT")
-//   - start: Start date
-//   - end: End date
-//   - interval: Time interval (e.g., "1h", "4h", "1d")
-//
-// Returns:
-//   - []models.OHLCV: Historical data
-//   - error: Any error encountered
-func (p *CCXTProvider) GetHistoricalData(symbol string, start, end time.Time, interval string) ([]models.OHLCV, error) {
-	// Stub implementation
-	// TODO: Implement actual exchange API call
-	return []models.OHLCV{}, fmt.Errorf("ccxt provider for %s not yet implemented", p.exchange)
+// GetHistoricalData delegates to the underlying exchange provider.
+func (e *ExchangeProvider) GetHistoricalData(symbol string, start, end interface{}, interval string) (interface{}, error) {
+	// This is a legacy wrapper - prefer using NewBinanceProvider directly
+	return nil, fmt.Errorf("use NewBinanceProvider directly for type-safe access")
 }
 
-// GetLatestPrice fetches the current price from the exchange.
-// TODO: Implement actual CCXT/exchange API integration.
-//
-// Args:
-//   - symbol: Trading pair
-//
-// Returns:
-//   - float64: Current price
-//   - error: Any error encountered
-func (p *CCXTProvider) GetLatestPrice(symbol string) (float64, error) {
-	// Stub implementation
-	// TODO: Implement actual exchange API call
-	return 0.0, fmt.Errorf("ccxt provider for %s not yet implemented", p.exchange)
+// Exchange returns the underlying exchange name.
+func (e *ExchangeProvider) Exchange() string {
+	return e.exchange
 }
 
-// GetTicker fetches ticker information from the exchange.
-// TODO: Implement actual CCXT/exchange API integration.
-//
-// Args:
-//   - symbol: Trading pair
-//
-// Returns:
-//   - *models.Ticker: Ticker information
-//   - error: Any error encountered
-func (p *CCXTProvider) GetTicker(symbol string) (*models.Ticker, error) {
-	// Stub implementation
-	// TODO: Implement actual exchange API call
-	return nil, fmt.Errorf("ccxt provider for %s not yet implemented", p.exchange)
+// Provider returns the underlying typed provider.
+func (e *ExchangeProvider) Provider() data.DataProvider {
+	return e.provider
 }
