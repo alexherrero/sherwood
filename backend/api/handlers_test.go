@@ -182,7 +182,7 @@ func TestGetBacktestResultHandler(t *testing.T) {
 	payload := RunBacktestRequest{
 		Strategy:       "ma_crossover",
 		Symbol:         "AAPL",
-		Start:          time.Now(),
+		Start:          time.Now().Add(-24 * time.Hour),
 		End:            time.Now(),
 		InitialCapital: 10000,
 	}
@@ -195,8 +195,11 @@ func TestGetBacktestResultHandler(t *testing.T) {
 
 	router.ServeHTTP(runRec, runReq)
 
+	require.Equal(t, http.StatusAccepted, runRec.Code, "Backtest run failed: %s", runRec.Body.String())
+
 	var runResp map[string]interface{}
-	_ = json.Unmarshal(runRec.Body.Bytes(), &runResp)
+	err := json.Unmarshal(runRec.Body.Bytes(), &runResp)
+	require.NoError(t, err)
 	id := runResp["id"].(string)
 
 	// 2. Get result
@@ -207,7 +210,7 @@ func TestGetBacktestResultHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, getRec.Code)
 	var getResp map[string]interface{}
-	err := json.Unmarshal(getRec.Body.Bytes(), &getResp)
+	err = json.Unmarshal(getRec.Body.Bytes(), &getResp)
 	require.NoError(t, err)
 	assert.Equal(t, id, getResp["id"])
 }
