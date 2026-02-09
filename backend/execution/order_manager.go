@@ -10,11 +10,21 @@ import (
 	"github.com/rs/zerolog/log"
 )
 
+// OrderStore defines persistence operations for orders and positions.
+type OrderStore interface {
+	SaveOrder(order models.Order) error
+	GetOrder(orderID string) (*models.Order, error)
+	GetAllOrders() ([]models.Order, error)
+	SavePosition(position models.Position) error
+	GetAllPositions() ([]models.Position, error)
+}
+
 // OrderManager handles order lifecycle and execution.
 type OrderManager struct {
 	broker      Broker
 	riskManager *RiskManager
-	orders      map[string]models.Order
+	orders      map[string]models.Order // In-memory cache
+	store       OrderStore              // Database persistence
 	mu          sync.RWMutex
 }
 
@@ -23,14 +33,16 @@ type OrderManager struct {
 // Args:
 //   - broker: The broker for order execution
 //   - riskManager: Risk manager for position limits
+//   - store: Optional persistent storage for orders (can be nil)
 //
 // Returns:
 //   - *OrderManager: The order manager instance
-func NewOrderManager(broker Broker, riskManager *RiskManager) *OrderManager {
+func NewOrderManager(broker Broker, riskManager *RiskManager, store OrderStore) *OrderManager {
 	return &OrderManager{
 		broker:      broker,
 		riskManager: riskManager,
 		orders:      make(map[string]models.Order),
+		store:       store,
 	}
 }
 
@@ -61,10 +73,17 @@ func (om *OrderManager) SubmitOrder(order models.Order) (*models.Order, error) {
 		return nil, fmt.Errorf("broker rejected order: %w", err)
 	}
 
-	// Store order
+	// Store order in memory
 	om.mu.Lock()
 	om.orders[result.ID] = *result
 	om.mu.Unlock()
+
+	// Persist to database
+	if om.store != nil {
+		if err := om.store.SaveOrder(*result); err != nil {
+			log.Error().Err(err).Str("order_id", result.ID).Msg("Failed to persist order")
+		}
+	}
 
 	log.Info().
 		Str("order_id", result.ID).
@@ -87,6 +106,35 @@ func (om *OrderManager) validateOrder(order models.Order) error {
 	if order.Type == models.OrderTypeLimit && order.Price <= 0 {
 		return fmt.Errorf("limit orders require a positive price")
 	}
+	return nil
+}
+
+// LoadOrders restores orders from persistent storage on startup.
+//
+// This method should be called after creating the OrderManager to restore
+// state from previous sessions. It loads all orders from the database
+// into the in-memory cache.
+//
+// Returns:
+//   - error: Any error encountered during load
+func (om *OrderManager) LoadOrders() error {
+	if om.store == nil {
+		return nil // No persistence configured
+	}
+
+	orders, err := om.store.GetAllOrders()
+	if err != nil {
+		return fmt.Errorf("failed to load orders: %w", err)
+	}
+
+	om.mu.Lock()
+	defer om.mu.Unlock()
+
+	for _, order := range orders {
+		om.orders[order.ID] = order
+	}
+
+	log.Info().Int("count", len(orders)).Msg("Loaded orders from database")
 	return nil
 }
 

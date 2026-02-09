@@ -303,7 +303,7 @@ func TestExecutionEndpoints(t *testing.T) {
 	mockBroker := new(MockBroker)
 
 	// Create OrderManager with MockBroker
-	orderManager := execution.NewOrderManager(mockBroker, nil)
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil)
 
 	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil)
 
@@ -374,7 +374,7 @@ func TestPlaceOrderHandler(t *testing.T) {
 	mockBroker := new(MockBroker)
 
 	// Create OrderManager with MockBroker
-	orderManager := execution.NewOrderManager(mockBroker, nil)
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil)
 
 	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil)
 

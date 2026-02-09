@@ -92,7 +92,7 @@ func TestTradingEngine_RunLoop(t *testing.T) {
 	registry.Register(mockStrategy)
 
 	// Setup Order Manager
-	orderManager := execution.NewOrderManager(mockBroker, nil)
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil)
 
 	// Setup Engine
 	engine := NewTradingEngine(

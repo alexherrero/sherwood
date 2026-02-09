@@ -1,8 +1,10 @@
 package execution
 
 import (
+	"path/filepath"
 	"testing"
 
+	"github.com/alexherrero/sherwood/backend/data"
 	"github.com/alexherrero/sherwood/backend/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -13,7 +15,7 @@ func TestNewOrderManager(t *testing.T) {
 	broker := NewPaperBroker(10000)
 	rm := NewRiskManager(nil, broker)
 
-	om := NewOrderManager(broker, rm)
+	om := NewOrderManager(broker, rm, nil)
 
 	assert.NotNil(t, om)
 }
@@ -25,7 +27,7 @@ func TestOrderManager_SubmitOrder_Success(t *testing.T) {
 	broker.SetPrice("AAPL", 150.0)
 
 	rm := NewRiskManager(nil, broker)
-	om := NewOrderManager(broker, rm)
+	om := NewOrderManager(broker, rm, nil)
 
 	order := models.Order{
 		Symbol:   "AAPL",
@@ -45,7 +47,7 @@ func TestOrderManager_SubmitOrder_ValidationFails(t *testing.T) {
 	broker := NewPaperBroker(10000)
 	require.NoError(t, broker.Connect())
 
-	om := NewOrderManager(broker, nil)
+	om := NewOrderManager(broker, nil, nil)
 
 	tests := []struct {
 		name        string
@@ -105,7 +107,7 @@ func TestOrderManager_SubmitOrder_RiskCheckFails(t *testing.T) {
 	rm := NewRiskManager(nil, broker)
 	rm.UpdateDailyPnL(-600) // Exceed daily loss limit
 
-	om := NewOrderManager(broker, rm)
+	om := NewOrderManager(broker, rm, nil)
 
 	order := models.Order{
 		Symbol:   "AAPL",
@@ -126,7 +128,7 @@ func TestOrderManager_CancelOrder(t *testing.T) {
 	require.NoError(t, broker.Connect())
 	broker.SetPrice("AAPL", 100.0)
 
-	om := NewOrderManager(broker, nil)
+	om := NewOrderManager(broker, nil, nil)
 
 	// Place an order first
 	order := models.Order{
@@ -148,7 +150,7 @@ func TestOrderManager_GetOrder(t *testing.T) {
 	require.NoError(t, broker.Connect())
 	broker.SetPrice("AAPL", 100.0)
 
-	om := NewOrderManager(broker, nil)
+	om := NewOrderManager(broker, nil, nil)
 
 	order := models.Order{
 		Symbol:   "AAPL",
@@ -170,7 +172,7 @@ func TestOrderManager_GetAllOrders(t *testing.T) {
 	broker.SetPrice("AAPL", 100.0)
 	broker.SetPrice("GOOGL", 150.0)
 
-	om := NewOrderManager(broker, nil)
+	om := NewOrderManager(broker, nil, nil)
 
 	_, _ = om.SubmitOrder(models.Order{Symbol: "AAPL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
 	_, _ = om.SubmitOrder(models.Order{Symbol: "GOOGL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
@@ -185,7 +187,7 @@ func TestOrderManager_CreateMarketOrder(t *testing.T) {
 	require.NoError(t, broker.Connect())
 	broker.SetPrice("AAPL", 100.0)
 
-	om := NewOrderManager(broker, nil)
+	om := NewOrderManager(broker, nil, nil)
 
 	result, err := om.CreateMarketOrder("AAPL", models.OrderSideBuy, 5)
 	require.NoError(t, err)
@@ -199,7 +201,7 @@ func TestOrderManager_CreateLimitOrder(t *testing.T) {
 	broker := NewPaperBroker(10000)
 	require.NoError(t, broker.Connect())
 
-	om := NewOrderManager(broker, nil)
+	om := NewOrderManager(broker, nil, nil)
 
 	result, err := om.CreateLimitOrder("AAPL", models.OrderSideBuy, 5, 145.0)
 	require.NoError(t, err)
@@ -215,7 +217,7 @@ func TestOrderManager_SubmitOrder_NoRiskManager(t *testing.T) {
 	require.NoError(t, broker.Connect())
 	broker.SetPrice("AAPL", 100.0)
 
-	om := NewOrderManager(broker, nil) // No risk manager
+	om := NewOrderManager(broker, nil, nil) // No risk manager
 
 	order := models.Order{
 		Symbol:   "AAPL",
@@ -227,4 +229,54 @@ func TestOrderManager_SubmitOrder_NoRiskManager(t *testing.T) {
 	result, err := om.SubmitOrder(order)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
+}
+
+// TestOrderManager_Persistence verifies order persistence across restarts.
+func TestOrderManager_Persistence(t *testing.T) {
+	// Setup test database
+	tmpDir := t.TempDir()
+	dbPath := filepath.Join(tmpDir, "test.db")
+
+	db, err := data.NewDB(dbPath)
+	require.NoError(t, err)
+	defer db.Close()
+
+	store := data.NewOrderStore(db)
+	broker := NewPaperBroker(10000)
+	require.NoError(t, broker.Connect())
+	broker.SetPrice("AAPL", 100.0)
+
+	// Create first OrderManager and submit order
+	om1 := NewOrderManager(broker, nil, store)
+	order, err := om1.CreateMarketOrder("AAPL", models.OrderSideBuy, 10)
+	require.NoError(t, err)
+	orderID := order.ID
+
+	// Verify order exists in first instance
+	retrieved1, err := om1.GetOrder(orderID)
+	require.NoError(t, err)
+	assert.Equal(t, orderID, retrieved1.ID)
+
+	// Create new OrderManager (simulating restart)
+	om2 := NewOrderManager(broker, nil, store)
+
+	// Before loading, order shouldn't be in memory cache
+	allOrders := om2.GetAllOrders()
+	assert.Len(t, allOrders, 0)
+
+	// Load orders from database
+	err = om2.LoadOrders()
+	require.NoError(t, err)
+
+	// Verify order is restored
+	restored, err := om2.GetOrder(orderID)
+	require.NoError(t, err)
+	assert.Equal(t, orderID, restored.ID)
+	assert.Equal(t, "AAPL", restored.Symbol)
+	assert.Equal(t, models.OrderSideBuy, restored.Side)
+	assert.Equal(t, 10.0, restored.Quantity)
+
+	// Verify in-memory cache is populated
+	allOrders = om2.GetAllOrders()
+	assert.Len(t, allOrders, 1)
 }

@@ -32,3 +32,119 @@ jobs:
     - name: Build
       working-directory: ./
       run: go build -v ./backend/...
+
+  integration-test:
+    name: Integration Test - Order Persistence
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v5
+      with:
+        go-version: '1.23'
+
+    - name: Install dependencies
+      run: go mod download
+
+    - name: Build backend
+      run: go build -o sherwood ./backend/main.go
+
+    - name: Create test config
+      run: |
+        cat > .env << EOF
+        PORT=8099
+        HOST=127.0.0.1
+        API_KEY=test-key-12345
+        TRADING_MODE=dry_run
+        DATABASE_PATH=./data/test_persistence.db
+        LOG_LEVEL=info
+        DATA_PROVIDER=yahoo
+        EOF
+
+    - name: Start server (first run)
+      run: |
+        ./sherwood &
+        SERVER_PID=$!
+        echo $SERVER_PID > server.pid
+        echo "Server started with PID: $SERVER_PID"
+        sleep 5  # Wait for server to be ready
+
+    - name: Verify server is running
+      run: |
+        curl --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8099/health
+        echo "Health check passed"
+
+    - name: Submit test order
+      id: submit_order
+      run: |
+        RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/orders \
+          -H "Content-Type: application/json" \
+          -H "X-Sherwood-API-Key: test-key-12345" \
+          -d '{"symbol":"BTC-USD","side":"buy","type":"market","quantity":0.01}')
+        echo "Order response: $RESPONSE"
+        ORDER_ID=$(echo $RESPONSE | jq -r '.id')
+        echo "ORDER_ID=$ORDER_ID" >> $GITHUB_ENV
+        echo "Submitted order: $ORDER_ID"
+        
+        # Verify order was created
+        if [ -z "$ORDER_ID" ] || [ "$ORDER_ID" = "null" ]; then
+          echo "Failed to submit order"
+          exit 1
+        fi
+
+    - name: Stop server
+      run: |
+        SERVER_PID=$(cat server.pid)
+        echo "Stopping server with PID: $SERVER_PID"
+        kill $SERVER_PID || true
+        sleep 2  # Wait for graceful shutdown
+
+    - name: Verify database file exists
+      run: |
+        if [ ! -f ./data/test_persistence.db ]; then
+          echo "Database file not found!"
+          exit 1
+        fi
+        echo "Database file exists"
+        
+        # Show database contents for debugging
+        echo "Database size: $(stat -c%s ./data/test_persistence.db) bytes"
+
+    - name: Restart server (second run)
+      run: |
+        ./sherwood &
+        SERVER_PID=$!
+        echo $SERVER_PID > server2.pid
+        echo "Server restarted with PID: $SERVER_PID"
+        sleep 5  # Wait for server to be ready
+
+    - name: Verify server restarted
+      run: |
+        curl --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8099/health
+        echo "Health check passed after restart"
+
+    - name: Verify order persisted
+      run: |
+        echo "Checking for order: $ORDER_ID"
+        RESPONSE=$(curl -s http://127.0.0.1:8099/api/v1/orders/$ORDER_ID \
+          -H "X-Sherwood-API-Key: test-key-12345")
+        echo "Order retrieval response: $RESPONSE"
+        
+        # Verify the order exists
+        RETRIEVED_ID=$(echo $RESPONSE | jq -r '.id')
+        if [ "$RETRIEVED_ID" != "$ORDER_ID" ]; then
+          echo "Order not found after restart! Expected: $ORDER_ID, Got: $RETRIEVED_ID"
+          exit 1
+        fi
+        
+        echo "✅ Order successfully persisted across restart!"
+
+    - name: Cleanup
+      if: always()
+      run: |
+        # Kill any remaining server processes
+        pkill -f sherwood || true
+        # Clean up test database
+        rm -f ./data/test_persistence.db
+
