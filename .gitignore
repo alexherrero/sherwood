@@ -39,7 +39,7 @@ Thumbs.db
 *.db
 *.sqlite
 *.sqlite3
-data/
+/data/
 
 # Log files
 *.log
