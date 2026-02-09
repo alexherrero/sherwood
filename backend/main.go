@@ -87,7 +87,7 @@ func main() {
 	}
 
 	// Create API router
-	router := api.NewRouter(cfg, registry, provider, orderManager)
+	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine)
 
 	// Create HTTP server
 	server := &http.Server{

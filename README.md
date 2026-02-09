@@ -58,6 +58,7 @@ Edit `.env` with your settings:
 PORT=8099
 TRADING_MODE=dry_run  # Options: 'dry_run' or 'live'
 DATABASE_PATH=./data/sherwood.db
+API_KEY=your-secret-key-here # Protects API access
 
 # Robinhood Credentials (required for live trading)
 RH_USERNAME=your_email@example.com

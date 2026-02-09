@@ -8,6 +8,7 @@ import (
 
 	"github.com/alexherrero/sherwood/backend/config"
 	"github.com/alexherrero/sherwood/backend/data"
+	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
@@ -22,10 +23,17 @@ import (
 //   - registry: Strategy registry
 //   - provider: Data provider for backtesting
 //   - orderManager: Order manager for execution data
+//   - engine: Trading engine instance (optional)
 //
 // Returns:
 //   - http.Handler: The configured router
-func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.DataProvider, orderManager *execution.OrderManager) http.Handler {
+func NewRouter(
+	cfg *config.Config,
+	registry *strategies.Registry,
+	provider data.DataProvider,
+	orderManager *execution.OrderManager,
+	engine *engine.TradingEngine,
+) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware stack
@@ -39,13 +47,15 @@ func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.
 	r.Use(corsMiddleware)
 
 	// Initialize handler with dependencies
-	h := NewHandler(registry, provider, cfg, orderManager)
+	h := NewHandler(registry, provider, cfg, orderManager, engine)
 
 	// Health check endpoint
 	r.Get("/health", h.HealthHandler)
 
-	// API v1 routes
+	// API v1 routes (protected)
 	r.Route("/api/v1", func(r chi.Router) {
+		r.Use(AuthMiddleware(cfg))
+
 		// Strategies routes
 		r.Route("/strategies", func(r chi.Router) {
 			r.Get("/", h.ListStrategiesHandler)
@@ -62,8 +72,20 @@ func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.
 		r.Route("/execution", func(r chi.Router) {
 			r.Get("/orders", h.GetOrdersHandler)
 			r.Post("/orders", h.PlaceOrderHandler)
+			r.Delete("/orders/{id}", h.CancelOrderHandler)
 			r.Get("/positions", h.GetPositionsHandler)
 			r.Get("/balance", h.GetBalanceHandler)
+		})
+
+		// Market Data routes
+		r.Route("/data", func(r chi.Router) {
+			r.Get("/history", h.GetHistoricalDataHandler)
+		})
+
+		// Engine routes
+		r.Route("/engine", func(r chi.Router) {
+			r.Post("/start", h.StartEngineHandler)
+			r.Post("/stop", h.StopEngineHandler)
 		})
 
 		// Config routes
@@ -107,7 +129,7 @@ func corsMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Sherwood-API-Key")
 
 		if r.Method == "OPTIONS" {
 			w.WriteHeader(http.StatusOK)
