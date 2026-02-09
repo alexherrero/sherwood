@@ -143,9 +143,42 @@ jobs:
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Sherwood-API-Key: test-ci-key" "http://localhost:8099/api/v1/execution/orders?limit=1&page=1")
         if [ "$HTTP_CODE" != "200" ]; then
              echo "Pagination check failed with status $HTTP_CODE"
-             # Ideally fail here, but currently just warning as endpoint might not be implemented yet
-             # kill $SERVER_PID
-             # exit 1
+        fi
+
+        # Verify Security Headers
+        echo "Verifying Security Headers..."
+        HEADERS=$(curl -s -I http://localhost:8099/health)
+        if echo "$HEADERS" | grep -q "X-Frame-Options: DENY"; then
+             echo "✓ X-Frame-Options header present"
+        else
+             echo "✗ Security headers missing"
+             # Warn but don't fail yet? Or fail? Review said "Critical"
+             # Let's fail as it is a requirement.
+             kill $SERVER_PID
+             exit 1
+        fi
+
+        # Verify Detailed Health Check
+        echo "Verifying Enhanced Health Check..."
+        HEALTH_RESP=$(curl -s http://localhost:8099/health)
+        if echo "$HEALTH_RESP" | grep -q "\"checks\""; then
+             echo "✓ Health check contains detailed checks"
+        else
+             echo "✗ Health check missing detailed checks: $HEALTH_RESP"
+             kill $SERVER_PID
+             exit 1
+        fi
+
+        # Verify Standardized Error Format
+        echo "Verifying Error Format..."
+        ERR_RESP=$(curl -s http://localhost:8099/api/v1/invalid-endpoint)
+        # Should return 404 with JSON containing "code"
+        if echo "$ERR_RESP" | grep -q "\"code\""; then
+             echo "✓ Error response contains code field"
+        else
+             echo "✗ Error response missing code field: $ERR_RESP"
+             kill $SERVER_PID
+             exit 1
         fi
 
         echo "All integration tests passed!"

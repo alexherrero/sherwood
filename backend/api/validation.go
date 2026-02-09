@@ -14,6 +14,13 @@ func init() {
 	validate = validator.New()
 }
 
+// APIError represents a standard API error response.
+type APIError struct {
+	Error   string      `json:"error"`
+	Code    string      `json:"code"`
+	Details interface{} `json:"details,omitempty"`
+}
+
 // ValidationError represents a validation error response.
 type ValidationError struct {
 	Error   string            `json:"error"`
@@ -60,6 +67,8 @@ func validateStruct(s interface{}) *ValidationError {
 				message = "Value must be less than or equal to " + fieldError.Param()
 			case "oneof":
 				message = "Value must be one of: " + fieldError.Param()
+			case "gtfield":
+				message = "Value must be greater than field " + fieldError.Param()
 			default:
 				message = "Validation failed for tag: " + tag
 			}
@@ -83,5 +92,11 @@ func validateStruct(s interface{}) *ValidationError {
 func writeValidationError(w http.ResponseWriter, err *ValidationError) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusBadRequest)
-	json.NewEncoder(w).Encode(err)
+	// APIError can wrap ValidationError content
+	resp := APIError{
+		Error:   err.Error,
+		Code:    err.Code,
+		Details: err.Details,
+	}
+	json.NewEncoder(w).Encode(resp)
 }

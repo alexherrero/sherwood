@@ -90,6 +90,9 @@ func (om *OrderManager) SubmitOrder(order models.Order) (*models.Order, error) {
 		Str("order_id", result.ID).
 		Str("symbol", result.Symbol).
 		Str("side", string(result.Side)).
+		Str("type", string(result.Type)).
+		Float64("quantity", result.Quantity).
+		Float64("price", result.Price).
 		Str("status", string(result.Status)).
 		Msg("Order submitted")
 

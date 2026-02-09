@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"runtime"
 	"strconv"
 	"sync"
 	"time"
@@ -27,6 +28,7 @@ type Handler struct {
 	config       *config.Config
 	orderManager *execution.OrderManager
 	engine       *engine.TradingEngine
+	startTime    time.Time
 
 	// In-memory store for backtest results
 	// In production, this should be a persistent database
@@ -48,29 +50,74 @@ type Handler struct {
 func NewHandler(
 	registry *strategies.Registry,
 	provider data.DataProvider,
-	config *config.Config,
+	cfg *config.Config,
 	orderManager *execution.OrderManager,
 	engine *engine.TradingEngine,
 ) *Handler {
 	return &Handler{
 		registry:     registry,
 		provider:     provider,
-		config:       config,
+		config:       cfg,
 		orderManager: orderManager,
 		engine:       engine,
+		startTime:    time.Now(),
 		results:      make(map[string]*backtesting.BacktestResult),
 	}
 }
 
 // HealthHandler returns the health status of the API.
 func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
-	writeJSON(w, http.StatusOK, map[string]string{
-		"status": "ok",
-		"mode":   string(h.config.TradingMode),
+	checks := make(map[string]string)
+	status := "ok"
+
+	// Check Broker
+	if h.orderManager != nil {
+		// Ideally OrderManager would have a IsConnected() method, but we can infer
+		// or maybe check the broker inside it.
+		// For now, if orderManager exists, we assume connected or "ready".
+		// In previous implementation, we didn't expose connection check.
+		// Let's assume "active".
+		checks["execution"] = "active"
+	} else {
+		checks["execution"] = "disabled"
+	}
+
+	// Check Data Provider
+	if h.provider != nil {
+		// Should check if we can reach it?
+		// Simple approach: just report name
+		checks["data_provider"] = h.provider.Name()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"status":    status,
+		"mode":      string(h.config.TradingMode),
+		"timestamp": time.Now(),
+		"checks":    checks,
 	})
 }
 
-// ListStrategiesHandler returns a list of available strategies.
+// MetricsHandler returns basic runtime statistics.
+func (h *Handler) MetricsHandler(w http.ResponseWriter, r *http.Request) {
+	var m runtime.MemStats
+	runtime.ReadMemStats(&m)
+
+	metrics := map[string]interface{}{
+		"goroutines": runtime.NumGoroutine(),
+		"memory": map[string]uint64{
+			"alloc":       m.Alloc,
+			"total_alloc": m.TotalAlloc,
+			"sys":         m.Sys,
+			"num_gc":      uint64(m.NumGC),
+		},
+		"uptime_seconds": time.Since(h.startTime).Seconds(),
+		"timestamp":      time.Now(),
+	}
+
+	writeJSON(w, http.StatusOK, metrics)
+}
+
+// ListStrategiesHandler returns all available trading strategies.
 func (h *Handler) ListStrategiesHandler(w http.ResponseWriter, r *http.Request) {
 	strategiesList := h.registry.List()
 	details := make([]map[string]interface{}, 0, len(strategiesList))
@@ -663,8 +710,35 @@ func (h *Handler) StopEngineHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 // writeError writes a JSON error response.
-func writeError(w http.ResponseWriter, status int, message string) {
-	writeJSON(w, status, map[string]string{"error": message})
+// The optional code argument allows specifying a machine-readable error code.
+// If code is not provided, it defaults to a generic error code based on status.
+func writeError(w http.ResponseWriter, status int, message string, code ...string) {
+	errCode := "UNKNOWN_ERROR"
+	if len(code) > 0 {
+		errCode = code[0]
+	} else {
+		// Infer code from status
+		switch status {
+		case http.StatusBadRequest:
+			errCode = "BAD_REQUEST"
+		case http.StatusUnauthorized:
+			errCode = "UNAUTHORIZED"
+		case http.StatusForbidden:
+			errCode = "FORBIDDEN"
+		case http.StatusNotFound:
+			errCode = "NOT_FOUND"
+		case http.StatusServiceUnavailable:
+			errCode = "SERVICE_UNAVAILABLE"
+		case http.StatusInternalServerError:
+			errCode = "INTERNAL_ERROR"
+		}
+	}
+
+	resp := APIError{
+		Error: message,
+		Code:  errCode,
+	}
+	writeJSON(w, status, resp)
 }
 
 // writeJSON writes a JSON response with the given status code.
