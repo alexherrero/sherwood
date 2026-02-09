@@ -122,3 +122,109 @@ jobs:
         
         # Cleanup
         kill $SERVER_PID
+
+    - name: Test Dynamic Configuration
+      shell: bash
+      working-directory: ./
+      run: |
+        echo "========================================"
+        echo "Testing Dynamic Configuration (Phase 2)"
+        echo "========================================"
+        
+        # Test 1: Multiple Strategies
+        echo ""
+        echo "Test 1: Multiple Strategies Enabled"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ENABLED_STRATEGIES="ma_crossover,rsi_momentum" API_KEY=test-ci-key ./sherwood.exe &
+        else
+          ENABLED_STRATEGIES="ma_crossover,rsi_momentum" API_KEY=test-ci-key ./sherwood &
+        fi
+        TEST_PID=$!
+        sleep 5
+        
+        # Verify strategies endpoint returns both strategies
+        echo "Checking strategies endpoint..."
+        RESPONSE=$(curl -s -H "X-Sherwood-API-Key: test-ci-key" http://localhost:8099/api/v1/strategies)
+        if echo "$RESPONSE" | grep -q "ma_crossover" && echo "$RESPONSE" | grep -q "rsi_momentum"; then
+          echo "✓ Multiple strategies test passed"
+        else
+          echo "✗ Multiple strategies test failed"
+          echo "Response: $RESPONSE"
+          kill $TEST_PID
+          exit 1
+        fi
+        kill $TEST_PID
+        sleep 2
+        
+        # Test 2: Invalid Strategy (Should Fail)
+        echo ""
+        echo "Test 2: Invalid Strategy Name (Should Fail)"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ENABLED_STRATEGIES="invalid_strategy" API_KEY=test-ci-key timeout 5 ./sherwood.exe 2>&1 | tee test_output.txt &
+        else
+          ENABLED_STRATEGIES="invalid_strategy" API_KEY=test-ci-key timeout 5 ./sherwood 2>&1 | tee test_output.txt &
+        fi
+        TEST_PID=$!
+        sleep 3
+        
+        # Check if process exited (it should fail immediately)
+        if ps -p $TEST_PID > /dev/null 2>&1; then
+          echo "✗ Invalid strategy test failed - process should have exited"
+          kill $TEST_PID || true
+          exit 1
+        else
+          echo "✓ Invalid strategy test passed - process failed as expected"
+        fi
+        
+        # Test 3: Different Data Provider (Yahoo - default)
+        echo ""
+        echo "Test 3: Yahoo Data Provider (Default)"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          DATA_PROVIDER="yahoo" API_KEY=test-ci-key ./sherwood.exe &
+        else
+          DATA_PROVIDER="yahoo" API_KEY=test-ci-key ./sherwood &
+        fi
+        TEST_PID=$!
+        sleep 5
+        
+        # Verify server started successfully
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8099/health)
+        if [ "$HTTP_CODE" == "200" ]; then
+          echo "✓ Yahoo provider test passed"
+        else
+          echo "✗ Yahoo provider test failed"
+          kill $TEST_PID
+          exit 1
+        fi
+        kill $TEST_PID
+        sleep 2
+        
+        # Test 4: All Strategies Enabled
+        echo ""
+        echo "Test 4: All Strategies Enabled"
+        if [ "$RUNNER_OS" == "Windows" ]; then
+          ENABLED_STRATEGIES="ma_crossover,rsi_momentum,bb_mean_reversion,macd_trend_follower,nyc_close_open" API_KEY=test-ci-key ./sherwood.exe &
+        else
+          ENABLED_STRATEGIES="ma_crossover,rsi_momentum,bb_mean_reversion,macd_trend_follower,nyc_close_open" API_KEY=test-ci-key ./sherwood &
+        fi
+        TEST_PID=$!
+        sleep 5
+        
+        # Verify all strategies are registered
+        RESPONSE=$(curl -s -H "X-Sherwood-API-Key: test-ci-key" http://localhost:8099/api/v1/strategies)
+        STRATEGY_COUNT=$(echo "$RESPONSE" | grep -o '"name":' | wc -l)
+        if [ "$STRATEGY_COUNT" -ge 5 ]; then
+          echo "✓ All strategies test passed (found $STRATEGY_COUNT strategies)"
+        else
+          echo "✗ All strategies test failed (expected 5, found $STRATEGY_COUNT)"
+          echo "Response: $RESPONSE"
+          kill $TEST_PID
+          exit 1
+        fi
+        kill $TEST_PID
+        sleep 2
+        
+        echo ""
+        echo "========================================"
+        echo "All Dynamic Configuration Tests Passed!"
+        echo "========================================"

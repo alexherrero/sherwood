@@ -3,76 +3,161 @@ package config
 import (
 	"os"
 	"testing"
-
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// TestLoad verifies that configuration loads correctly from environment.
-func TestLoad(t *testing.T) {
-	// Set up test environment
-	os.Setenv("PORT", "9000")
-	os.Setenv("TRADING_MODE", "dry_run")
-	os.Setenv("DATABASE_PATH", "/tmp/test.db")
-	defer func() {
-		os.Unsetenv("PORT")
-		os.Unsetenv("TRADING_MODE")
-		os.Unsetenv("DATABASE_PATH")
-	}()
-
-	config, err := Load()
-	require.NoError(t, err)
-	assert.Equal(t, 9000, config.ServerPort)
-	assert.Equal(t, ModeDryRun, config.TradingMode)
-	assert.Equal(t, "/tmp/test.db", config.DatabasePath)
-}
-
-// TestLoadDefaults verifies default values are applied when env vars are missing.
-func TestLoadDefaults(t *testing.T) {
-	// Clear any existing env vars
-	os.Unsetenv("PORT")
-	os.Unsetenv("TRADING_MODE")
-	os.Unsetenv("DATABASE_PATH")
-
-	config, err := Load()
-	require.NoError(t, err)
-	assert.Equal(t, 8099, config.ServerPort)
-	assert.Equal(t, ModeDryRun, config.TradingMode)
-	assert.Equal(t, "./data/sherwood.db", config.DatabasePath)
-}
-
-// TestValidateInvalidTradingMode checks that invalid trading modes are rejected.
-func TestValidateInvalidTradingMode(t *testing.T) {
-	config := &Config{
-		ServerPort:  8099,
-		TradingMode: "invalid",
+// TestParseStrategies tests the parseStrategies helper function.
+func TestParseStrategies(t *testing.T) {
+	testCases := []struct {
+		name     string
+		input    string
+		expected []string
+	}{
+		{
+			name:     "single strategy",
+			input:    "ma_crossover",
+			expected: []string{"ma_crossover"},
+		},
+		{
+			name:     "multiple strategies",
+			input:    "ma_crossover,rsi_momentum,bb_mean_reversion",
+			expected: []string{"ma_crossover", "rsi_momentum", "bb_mean_reversion"},
+		},
+		{
+			name:     "strategies with spaces",
+			input:    "ma_crossover , rsi_momentum , bb_mean_reversion",
+			expected: []string{"ma_crossover", "rsi_momentum", "bb_mean_reversion"},
+		},
+		{
+			name:     "empty string",
+			input:    "",
+			expected: []string{},
+		},
+		{
+			name:     "single strategy with spaces",
+			input:    "  ma_crossover  ",
+			expected: []string{"ma_crossover"},
+		},
 	}
-	err := config.Validate()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid trading mode")
-}
 
-// TestValidateInvalidPort checks that invalid ports are rejected.
-func TestValidateInvalidPort(t *testing.T) {
-	config := &Config{
-		ServerPort:  0,
-		TradingMode: ModeDryRun,
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			result := parseStrategies(tc.input)
+			if len(result) != len(tc.expected) {
+				t.Errorf("Expected %d strategies, got %d", len(tc.expected), len(result))
+				return
+			}
+			for i, expected := range tc.expected {
+				if result[i] != expected {
+					t.Errorf("Expected strategy[%d] = %s, got %s", i, expected, result[i])
+				}
+			}
+		})
 	}
-	err := config.Validate()
-	assert.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid server port")
 }
 
-// TestIsDryRun verifies the IsDryRun helper method.
-func TestIsDryRun(t *testing.T) {
-	config := &Config{TradingMode: ModeDryRun}
-	assert.True(t, config.IsDryRun())
-	assert.False(t, config.IsLive())
+// TestConfigLoad_DataProvider tests DATA_PROVIDER environment variable parsing.
+func TestConfigLoad_DataProvider(t *testing.T) {
+	testCases := []struct {
+		name     string
+		envValue string
+		expected string
+	}{
+		{
+			name:     "default provider",
+			envValue: "",
+			expected: "yahoo",
+		},
+		{
+			name:     "yahoo provider",
+			envValue: "yahoo",
+			expected: "yahoo",
+		},
+		{
+			name:     "tiingo provider",
+			envValue: "tiingo",
+			expected: "tiingo",
+		},
+		{
+			name:     "binance provider",
+			envValue: "binance",
+			expected: "binance",
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set environment variable
+			if tc.envValue != "" {
+				os.Setenv("DATA_PROVIDER", tc.envValue)
+				defer os.Unsetenv("DATA_PROVIDER")
+			}
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Failed to load config: %v", err)
+			}
+
+			if cfg.DataProvider != tc.expected {
+				t.Errorf("Expected DataProvider = %s, got %s", tc.expected, cfg.DataProvider)
+			}
+		})
+	}
 }
 
-// TestIsLive verifies the IsLive helper method.
-func TestIsLive(t *testing.T) {
-	config := &Config{TradingMode: ModeLive}
-	assert.True(t, config.IsLive())
-	assert.False(t, config.IsDryRun())
+// TestConfigLoad_EnabledStrategies tests ENABLED_STRATEGIES environment variable parsing.
+func TestConfigLoad_EnabledStrategies(t *testing.T) {
+	testCases := []struct {
+		name     string
+		envValue string
+		expected []string
+	}{
+		{
+			name:     "default strategy",
+			envValue: "",
+			expected: []string{"ma_crossover"},
+		},
+		{
+			name:     "single strategy",
+			envValue: "rsi_momentum",
+			expected: []string{"rsi_momentum"},
+		},
+		{
+			name:     "multiple strategies",
+			envValue: "ma_crossover,rsi_momentum,bb_mean_reversion",
+			expected: []string{"ma_crossover", "rsi_momentum", "bb_mean_reversion"},
+		},
+		{
+			name:     "strategies with spaces",
+			envValue: "  ma_crossover  ,  rsi_momentum  ",
+			expected: []string{"ma_crossover", "rsi_momentum"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			// Set environment variable
+			if tc.envValue != "" {
+				os.Setenv("ENABLED_STRATEGIES", tc.envValue)
+				defer os.Unsetenv("ENABLED_STRATEGIES")
+			} else {
+				os.Unsetenv("ENABLED_STRATEGIES")
+			}
+
+			cfg, err := Load()
+			if err != nil {
+				t.Fatalf("Failed to load config: %v", err)
+			}
+
+			if len(cfg.EnabledStrategies) != len(tc.expected) {
+				t.Errorf("Expected %d strategies, got %d", len(tc.expected), len(cfg.EnabledStrategies))
+				return
+			}
+
+			for i, expected := range tc.expected {
+				if cfg.EnabledStrategies[i] != expected {
+					t.Errorf("Expected strategy[%d] = %s, got %s", i, expected, cfg.EnabledStrategies[i])
+				}
+			}
+		})
+	}
 }

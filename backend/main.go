@@ -50,14 +50,30 @@ func main() {
 
 	// Initialize Strategy Registry
 	registry := strategies.NewRegistry()
-	if err := registry.Register(strategies.NewMACrossover()); err != nil {
-		log.Error().Err(err).Msg("Failed to register MA Crossover strategy")
+
+	// Register strategies based on configuration
+	log.Info().Msgf("Enabled strategies: %v", cfg.EnabledStrategies)
+	if len(cfg.EnabledStrategies) == 0 {
+		log.Warn().Msg("No strategies enabled - engine will run but not execute trades")
 	}
 
-	// Initialize Data Provider
-	// Default to Yahoo for now as it requires no configuration
-	// In the future, this could be configured via config.yaml
-	provider := providers.NewYahooProvider()
+	for _, strategyName := range cfg.EnabledStrategies {
+		strategy, err := strategies.NewStrategyByName(strategyName)
+		if err != nil {
+			log.Fatal().Err(err).Msgf("Failed to create strategy: %s", strategyName)
+		}
+		if err := registry.Register(strategy); err != nil {
+			log.Fatal().Err(err).Msgf("Failed to register strategy: %s", strategyName)
+		}
+		log.Info().Msgf("✓ Registered strategy: %s", strategyName)
+	}
+
+	// Initialize Data Provider based on configuration
+	log.Info().Msgf("Using data provider: %s", cfg.DataProvider)
+	provider, err := providers.NewProviderFromString(cfg.DataProvider, cfg)
+	if err != nil {
+		log.Fatal().Err(err).Msgf("Failed to create data provider: %s", cfg.DataProvider)
+	}
 
 	// Initialize Execution Layer (Paper Trading for now)
 	initialCash := 100000.0

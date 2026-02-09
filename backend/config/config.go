@@ -50,6 +50,10 @@ type Config struct {
 	BinanceAPISecret string
 	UseBinanceUS     bool   // Set to true for US users (geo-restricted from binance.com)
 	TiingoAPIKey     string // Tiingo API key (get free at tiingo.com)
+
+	// Dynamic Configuration (Phase 2)
+	DataProvider      string   // Selected data provider (yahoo, tiingo, binance)
+	EnabledStrategies []string // List of enabled strategy names
 }
 
 // Load reads configuration from environment variables and .env files.
@@ -83,6 +87,10 @@ func Load() (*Config, error) {
 
 		// Tiingo credentials
 		TiingoAPIKey: os.Getenv("TIINGO_API_KEY"),
+
+		// Dynamic Configuration (Phase 2)
+		DataProvider:      getEnv("DATA_PROVIDER", "yahoo"),
+		EnabledStrategies: parseStrategies(getEnv("ENABLED_STRATEGIES", "ma_crossover")),
 	}
 
 	if err := config.Validate(); err != nil {
@@ -138,4 +146,50 @@ func getEnvInt(key string, defaultValue int) int {
 		}
 	}
 	return defaultValue
+}
+
+// parseStrategies parses a comma-separated list of strategy names.
+func parseStrategies(strategiesStr string) []string {
+	if strategiesStr == "" {
+		return []string{}
+	}
+
+	// Split by comma and trim whitespace
+	parts := []string{}
+	for _, part := range splitAndTrim(strategiesStr, ",") {
+		if part != "" {
+			parts = append(parts, part)
+		}
+	}
+	return parts
+}
+
+// splitAndTrim splits a string by delimiter and trims whitespace.
+func splitAndTrim(s, delimiter string) []string {
+	var result []string
+	for i := 0; i < len(s); {
+		// Find next delimiter
+		idx := i
+		for idx < len(s) && string(s[idx]) != delimiter {
+			idx++
+		}
+		// Extract and trim the part
+		part := s[i:idx]
+		// Manual trim
+		for len(part) > 0 && (part[0] == ' ' || part[0] == '\t' || part[0] == '\n' || part[0] == '\r') {
+			part = part[1:]
+		}
+		for len(part) > 0 && (part[len(part)-1] == ' ' || part[len(part)-1] == '\t' || part[len(part)-1] == '\n' || part[len(part)-1] == '\r') {
+			part = part[:len(part)-1]
+		}
+		if part != "" {
+			result = append(result, part)
+		}
+		// Move past the delimiter
+		i = idx
+		if i < len(s) {
+			i++ // Skip delimiter
+		}
+	}
+	return result
 }
