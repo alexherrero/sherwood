@@ -147,42 +147,57 @@ if valErr := validateStruct(req); valErr != nil {
 
 ---
 
-### ⚠️ 5. CORS Wildcard in Production
+### ⚠️ 5. CORS Wildcard in Production ✅ **RESOLVED**
 
 **Issue:** CORS allows all origins (`Access-Control-Allow-Origin: *`)
 
-**Location:** `backend/api/router.go:131`  
-**Risk:** CSRF attacks, unauthorized frontend access  
-**Impact:** Medium-High - Security bypass
+**Status:** ✅ **IMPLEMENTED** - 2026-02-09
 
-**Current:**
+**Implementation:**
 
 ```go
-w.Header().Set("Access-Control-Allow-Origin", "*")  // ⚠️ Allows ANY origin
-```
+// config.go - Added ALLOWED_ORIGINS configuration
+AllowedOrigins: parseStrategies(getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")),
 
-**Recommendation:**
-
-```go
-// Use environment variable for allowed origins
-allowedOrigins := os.Getenv("ALLOWED_ORIGINS") // "http://localhost:3000,https://app.sherwood.io"
-
-func corsMiddleware(allowedOrigins string) func(http.Handler) http.Handler {
-    origins := strings.Split(allowedOrigins, ",")
+// router.go - Origin whitelist checking
+func newCORSMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
             origin := r.Header.Get("Origin")
-            for _, allowed := range origins {
-                if origin == strings.TrimSpace(allowed) {
-                    w.Header().Set("Access-Control-Allow-Origin", origin)
+            
+            // Check if origin is in allowed list
+            allowed := false
+            for _, allowedOrigin := range cfg.AllowedOrigins {
+                if origin == allowedOrigin {
+                    allowed = true
                     break
                 }
             }
-            // ... rest of CORS headers
+            
+            // Set CORS headers only if origin is allowed
+            if allowed {
+                w.Header().Set("Access-Control-Allow-Origin", origin)
+                w.Header().Set("Access-Control-Allow-Credentials", "true")
+                // ... other headers
+            }
         })
     }
 }
 ```
+
+**Configuration:**
+
+- Default: `http://localhost:3000,http://localhost:8080`
+- Production: Set via `ALLOWED_ORIGINS` environment variable
+- Comma-separated list of exact origin URLs
+
+**Files:**
+
+- `backend/config/config.go` - Added AllowedOrigins field
+- `backend/api/router.go` - Updated CORS middleware
+
+**Risk:** ~~CSRF attacks, unauthorized access~~ **MITIGATED**  
+**Impact:** ~~Medium-High~~ **PROTECTED**
 
 ---
 

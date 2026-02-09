@@ -28,6 +28,9 @@ type Config struct {
 	// API Key for authentication
 	APIKey string
 
+	// CORS settings
+	AllowedOrigins []string // Comma-separated list of allowed origins for CORS
+
 	// Trading settings
 	TradingMode TradingMode
 
@@ -74,6 +77,9 @@ func Load() (*Config, error) {
 		DatabasePath: getEnv("DATABASE_PATH", "./data/sherwood.db"),
 		RedisURL:     getEnv("REDIS_URL", ""),
 		LogLevel:     getEnv("LOG_LEVEL", "info"),
+
+		// CORS settings - default to allow localhost for development
+		AllowedOrigins: parseStrategies(getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")),
 
 		// Sensitive credentials from environment only
 		RobinhoodUsername: os.Getenv("RH_USERNAME"),

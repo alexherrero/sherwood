@@ -13,7 +13,8 @@ import (
 // TestRateLimiting verifies that rate limiting is enforced.
 func TestRateLimiting(t *testing.T) {
 	cfg := &config.Config{
-		APIKey: "test-api-key",
+		APIKey:         "test-api-key",
+		AllowedOrigins: []string{"http://localhost:3000"},
 	}
 
 	// Create a simple test router with rate limiting
