@@ -4,7 +4,9 @@ A modular, proof-of-concept automated trading engine and management dashboard. T
 
 ## Build and Test Status
 
-[![Backend](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml)
+[![Backend](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml/badge.svg)](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml)
+
+[![Backend Integration](https://github.com/alexherrero/sherwood/actions/workflows/backend_integration.yaml/badge.svg)](https://github.com/alexherrero/sherwood/actions/workflows/backend_integration.yaml)
 
 ## 🚀 Overview
 
