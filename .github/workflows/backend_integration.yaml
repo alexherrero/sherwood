@@ -101,20 +101,20 @@ jobs:
         fi
 
         # Verify Engine Control (Start/Stop with Key)
-        echo "Verifying Engine Start..."
-        # Start
-        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Sherwood-API-Key: test-ci-key" -d '{"confirm": true}' http://localhost:8099/api/v1/engine/start)
-        if [ "$HTTP_CODE" != "200" ]; then
-          echo "Engine valid start failed with status $HTTP_CODE"
-          kill $SERVER_PID
-          exit 1
-        fi
-        
-        # Stop
+        # Note: Engine auto-starts on application launch, so we first stop it
         echo "Verifying Engine Stop..."
         HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Sherwood-API-Key: test-ci-key" -d '{"confirm": true}' http://localhost:8099/api/v1/engine/stop)
         if [ "$HTTP_CODE" != "200" ]; then
           echo "Engine stop failed with status $HTTP_CODE"
+          kill $SERVER_PID
+          exit 1
+        fi
+        
+        # Now start it again
+        echo "Verifying Engine Start..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -X POST -H "X-Sherwood-API-Key: test-ci-key" -d '{"confirm": true}' http://localhost:8099/api/v1/engine/start)
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Engine start failed with status $HTTP_CODE"
           kill $SERVER_PID
           exit 1
         fi
