@@ -19,10 +19,12 @@ type DataProvider interface {
 
 #### Available Providers
 
-| Provider | Asset Type | Status |
-|----------|------------|--------|
-| Yahoo Finance | Stocks | Stub (planned) |
-| CCXT | Crypto | Stub (planned) |
+| Provider | Asset Type | Status | Notes |
+|----------|------------|--------|-------|
+| Yahoo Finance | Stocks, ETFs, Crypto | ✅ Implemented | Uses `piquette/finance-go` (unofficial API) |
+| Tiingo | Stocks, ETFs | ✅ Implemented | Free tier: 500 req/hr. Requires API key |
+| Binance | Crypto | ✅ Implemented | Uses `go-binance`. International users |
+| Binance.US | Crypto | ✅ Implemented | For US users (geo-restricted from binance.com) |
 
 ### Database (SQLite)
 
@@ -48,8 +50,17 @@ The caching layer reduces API calls and improves performance:
 ```go
 import "github.com/alexherrero/sherwood/backend/data/providers"
 
-provider := providers.NewYahooProvider("")
-data, err := provider.GetHistoricalData("AAPL", startDate, endDate, "1d")
+// Yahoo Finance (no API key required)
+yahoo := providers.NewYahooProvider()
+data, err := yahoo.GetHistoricalData("AAPL", startDate, endDate, "1d")
+
+// Tiingo (requires free API key from tiingo.com)
+tiingo := providers.NewTiingoProvider(os.Getenv("TIINGO_API_KEY"))
+data, err := tiingo.GetHistoricalData("AAPL", startDate, endDate, "1d")
+
+// Binance (for crypto)
+binance := providers.NewBinanceUSProvider("", "") // US users
+data, err := binance.GetHistoricalData("BTC/USD", startDate, endDate, "1h")
 ```
 
 ### Using the Database
