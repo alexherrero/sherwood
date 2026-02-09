@@ -3,6 +3,7 @@ package execution
 
 import (
 	"fmt"
+	"sort"
 	"sync"
 	"time"
 
@@ -171,18 +172,68 @@ func (om *OrderManager) GetOrder(orderID string) (*models.Order, error) {
 	return om.broker.GetOrder(orderID)
 }
 
+// OrderFilter defines criteria for filtering orders.
+type OrderFilter struct {
+	Symbol string
+	Status models.OrderStatus
+	Limit  int
+	Offset int
+}
+
+// GetOrders retrieves orders matching the filter criteria.
+//
+// Args:
+//   - filter: Filter criteria
+//
+// Returns:
+//   - []models.Order: Matching orders
+//   - int: Total count of matching orders (before pagination)
+//   - error: Any error encountered
+func (om *OrderManager) GetOrders(filter OrderFilter) ([]models.Order, int, error) {
+	om.mu.RLock()
+	defer om.mu.RUnlock()
+
+	// 1. Filter
+	var filtered []models.Order
+	for _, order := range om.orders {
+		if filter.Symbol != "" && order.Symbol != filter.Symbol {
+			continue
+		}
+		if filter.Status != "" && order.Status != filter.Status {
+			continue
+		}
+		filtered = append(filtered, order)
+	}
+
+	totalCount := len(filtered)
+
+	// 2. Sort (by CreatedAt descending)
+	sort.Slice(filtered, func(i, j int) bool {
+		return filtered[i].CreatedAt.After(filtered[j].CreatedAt)
+	})
+
+	// 3. Paginate
+	if filter.Offset >= totalCount {
+		return []models.Order{}, totalCount, nil
+	}
+
+	end := filter.Offset + filter.Limit
+	if filter.Limit == 0 {
+		end = totalCount // No limit
+	}
+	if end > totalCount {
+		end = totalCount
+	}
+
+	return filtered[filter.Offset:end], totalCount, nil
+}
+
 // GetAllOrders returns all tracked orders.
 //
 // Returns:
 //   - []models.Order: All orders
 func (om *OrderManager) GetAllOrders() []models.Order {
-	om.mu.RLock()
-	defer om.mu.RUnlock()
-
-	orders := make([]models.Order, 0, len(om.orders))
-	for _, order := range om.orders {
-		orders = append(orders, order)
-	}
+	orders, _, _ := om.GetOrders(OrderFilter{})
 	return orders
 }
 

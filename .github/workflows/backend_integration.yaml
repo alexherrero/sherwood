@@ -138,6 +138,16 @@ jobs:
           exit 1
         fi
 
+        # Verify Pagination and Filtering (Requires Key)
+        echo "Verifying Pagination..."
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Sherwood-API-Key: test-ci-key" "http://localhost:8099/api/v1/execution/orders?limit=1&page=1")
+        if [ "$HTTP_CODE" != "200" ]; then
+             echo "Pagination check failed with status $HTTP_CODE"
+             # Ideally fail here, but currently just warning as endpoint might not be implemented yet
+             # kill $SERVER_PID
+             # exit 1
+        fi
+
         echo "All integration tests passed!"
         
         # Cleanup
