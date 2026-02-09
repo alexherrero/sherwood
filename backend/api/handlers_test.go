@@ -3,12 +3,14 @@ package api
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/alexherrero/sherwood/backend/config"
+	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/models"
 	"github.com/alexherrero/sherwood/backend/strategies"
@@ -442,4 +444,208 @@ func TestPlaceOrderHandler(t *testing.T) {
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
 	})
+}
+
+// TestCancelOrderHandler verifies order cancellation endpoint.
+func TestCancelOrderHandler(t *testing.T) {
+	cfg := &config.Config{
+		TradingMode:    "test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
+	registry := strategies.NewRegistry()
+	mockProvider := new(MockDataProvider)
+	mockBroker := new(MockBroker)
+
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil)
+	router := NewRouter(cfg, registry, mockProvider, orderManager, nil)
+
+	t.Run("SuccessfulCancellation", func(t *testing.T) {
+		// Expectation: broker.CancelOrder succeeds
+		mockBroker.On("CancelOrder", "test-order-1").Return(nil).Once()
+
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/execution/orders/test-order-1", nil)
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var response map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Equal(t, "cancelled", response["status"])
+		assert.Equal(t, "test-order-1", response["id"])
+	})
+
+	t.Run("NonExistentOrder", func(t *testing.T) {
+		// Expectation: broker.CancelOrder returns error
+		mockBroker.On("CancelOrder", "nonexistent").Return(fmt.Errorf("order not found: nonexistent")).Once()
+
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/execution/orders/nonexistent", nil)
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+	})
+
+	t.Run("AlreadyFilledOrder", func(t *testing.T) {
+		// Expectation: broker.CancelOrder returns error for filled order
+		mockBroker.On("CancelOrder", "filled-order").Return(fmt.Errorf("cannot cancel filled order: filled-order")).Once()
+
+		req := httptest.NewRequest(http.MethodDelete, "/api/v1/execution/orders/filled-order", nil)
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusInternalServerError, rec.Code)
+		var response map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "cannot cancel filled order")
+	})
+}
+
+// TestStartEngineHandler verifies engine start endpoint.
+func TestStartEngineHandler(t *testing.T) {
+	cfg := &config.Config{
+		TradingMode:    "test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+		APIKey:         "test-key",
+	}
+	registry := strategies.NewRegistry()
+	mockProvider := new(MockDataProvider)
+
+	t.Run("EngineNotAvailable", func(t *testing.T) {
+		// Handler with nil engine
+		handler := NewHandler(registry, mockProvider, cfg, nil, nil)
+
+		payload := map[string]bool{"confirm": true}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/engine/start", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.StartEngineHandler(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		var response map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "Trading engine not available")
+	})
+
+	t.Run("WithoutConfirmation", func(t *testing.T) {
+		// Create a real engine for this test (won't actually start it)
+		mockBroker := new(MockBroker)
+		orderManager := execution.NewOrderManager(mockBroker, nil, nil)
+		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, []string{"AAPL"}, time.Minute)
+		handler := NewHandler(registry, mockProvider, cfg, nil, testEngine)
+
+		payload := map[string]bool{"confirm": false}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/engine/start", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.StartEngineHandler(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		var response map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "Confirmation required")
+	})
+}
+
+// TestStopEngineHandler verifies engine stop endpoint.
+func TestStopEngineHandler(t *testing.T) {
+	cfg := &config.Config{
+		TradingMode:    "test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+		APIKey:         "test-key",
+	}
+	registry := strategies.NewRegistry()
+	mockProvider := new(MockDataProvider)
+
+	t.Run("EngineNotAvailable", func(t *testing.T) {
+		handler := NewHandler(registry, mockProvider, cfg, nil, nil)
+
+		payload := map[string]bool{"confirm": true}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/engine/stop", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.StopEngineHandler(rec, req)
+
+		assert.Equal(t, http.StatusServiceUnavailable, rec.Code)
+		var response map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "Trading engine not available")
+	})
+
+	t.Run("WithoutConfirmation", func(t *testing.T) {
+		mockBroker := new(MockBroker)
+		orderManager := execution.NewOrderManager(mockBroker, nil, nil)
+		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, []string{"AAPL"}, time.Minute)
+		handler := NewHandler(registry, mockProvider, cfg, nil, testEngine)
+
+		payload := map[string]bool{"confirm": false}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/engine/stop", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.StopEngineHandler(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		var response map[string]string
+		err := json.Unmarshal(rec.Body.Bytes(), &response)
+		require.NoError(t, err)
+		assert.Contains(t, response["error"], "Confirmation required")
+	})
+}
+
+// TestGetConfigValidationHandler verifies config validation endpoint.
+func TestGetConfigValidationHandler(t *testing.T) {
+	cfg := &config.Config{
+		TradingMode:       "dry_run",
+		ServerPort:        8099,
+		LogLevel:          "info",
+		DataProvider:      "yahoo",
+		EnabledStrategies: []string{"ma_crossover"},
+		AllowedOrigins:    []string{"http://localhost:3000"},
+	}
+	registry := strategies.NewRegistry()
+	_ = registry.Register(strategies.NewMACrossover())
+	mockProvider := new(MockDataProvider)
+	mockProvider.On("Name").Return("yahoo")
+
+	handler := NewHandler(registry, mockProvider, cfg, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/validation", nil)
+	rec := httptest.NewRecorder()
+
+	handler.GetConfigValidationHandler(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	// Verify overall validation
+	assert.True(t, response["valid"].(bool))
+
+	// Verify configuration details
+	config := response["configuration"].(map[string]interface{})
+	assert.Equal(t, "dry_run", config["trading_mode"])
+	assert.Equal(t, "yahoo", config["data_provider"])
+
+	// Verify strategies
+	strategiesData := response["strategies"].(map[string]interface{})
+	enabledStrategies := strategiesData["enabled"].([]interface{})
+	assert.Len(t, enabledStrategies, 1)
+
+	// Verify provider status
+	provider := response["provider"].(map[string]interface{})
+	assert.Equal(t, "yahoo", provider["name"])
+	assert.Equal(t, "connected", provider["status"])
 }
