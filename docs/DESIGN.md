@@ -11,8 +11,7 @@ Sherwood is a proof-of-concept automated trading engine and management dashboard
 - Download historical data for stocks and crypto from major exchanges.
 - Validate models through rigorous backtesting.
 - Deploy in "Dry Run" (Paper Trading) or Live environments.
-
-- Manage configurations via web dashboard.
+- **Configuration** via environment variables for runtime flexibility and management via a web dashboard.
 - Easily containerized using docker.
 
 ## Supported Strategies
@@ -37,7 +36,93 @@ The following strategies are planned for implementation:
 - **Goal**: Identify and follow strong market trends.
 - **Parameters**: Fast Period (12), Slow Period (26), Signal Period (9).
 
-## Technical Stack & Tools
+### 4. NYC Market Close/Open Strategy
+
+- **Logic**: Buy Bitcoin at NYC market close (4 PM ET), sell one hour before market open (8:30 AM ET).
+- **Goal**: Capitalize on overnight cryptocurrency volatility patterns.
+- **Parameters**: Entry time, exit time, position size.
+
+## Configuration
+
+### Environment Variables
+
+Sherwood uses environment variables for runtime configuration, making it Docker-friendly:
+
+**Core Settings:**
+
+- `SERVER_HOST` - Server bind address (default: "0.0.0.0")
+- `SERVER_PORT` - Server port (default: 8099)
+- `TRADING_MODE` - Trading mode: "dry_run", "paper", or "live"
+- `LOG_LEVEL` - Logging level: "debug", "info", "warn", "error"
+- `API_KEY` - API authentication key (required for security)
+- `DATABASE_PATH` - SQLite database path
+
+#### Providers and Strategies
+
+- `DATA_PROVIDER` - Select data provider: "yahoo" (default), "tiingo", "binance"
+- `ENABLED_STRATEGIES` - Comma-separated list of strategies to enable (default: "ma_crossover")
+  - Available: `ma_crossover`, `rsi_momentum`, `bb_mean_reversion`, `macd_trend_follower`, `nyc_close_open`
+
+**Provider API Keys:**
+
+- `TIINGO_API_KEY` - Tiingo API key (required if using Tiingo provider)
+- `BINANCE_API_KEY` - Binance API key (required if using Binance provider)
+- `BINANCE_API_SECRET` - Binance API secret (required if using Binance provider)
+
+**Example:**
+
+```bash
+# Use Yahoo provider with multiple strategies
+DATA_PROVIDER=yahoo
+ENABLED_STRATEGIES=ma_crossover,rsi_momentum,bb_mean_reversion
+TRADING_MODE=dry_run
+```
+
+## API Endpoints
+
+The backend exposes a RESTful API for frontend integration. All `/api/v1/*` endpoints require authentication via `X-Sherwood-API-Key` header.
+
+### Health & Status
+
+- `GET /health` - Health check (no auth required)
+- `GET /api/v1/status` - Server status and mode
+
+### Configuration Endpoints
+
+- `GET /api/v1/config` - Current configuration (sanitized)
+- `GET /api/v1/config/validation` - Configuration validation and details
+  - Returns enabled strategies, provider status, warnings, and validation state
+  - Useful for frontend settings pages
+
+### Strategies
+
+- `GET /api/v1/strategies` - List all available strategies
+- `GET /api/v1/strategies/{name}` - Get strategy details
+
+### Backtesting
+
+- `POST /api/v1/backtests` - Run a backtest
+- `GET /api/v1/backtests/{id}` - Get backtest results
+
+### Execution
+
+- `GET /api/v1/execution/orders` - List all orders
+- `POST /api/v1/execution/orders` - Place a manual order
+- `DELETE /api/v1/execution/orders/{id}` - Cancel an order
+- `GET /api/v1/execution/positions` - Get current positions
+- `GET /api/v1/execution/balance` - Get account balance
+
+### Market Data
+
+- `GET /api/v1/data/history` - Get historical market data
+  - Query params: `symbol`, `start`, `end`, `interval`
+
+### Engine Control
+
+- `POST /api/v1/engine/start` - Start the trading engine
+- `POST /api/v1/engine/stop` - Stop the trading engine
+
+## Technology Stack
 
 ### Backend/Trading Engine
 

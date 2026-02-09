@@ -91,6 +91,7 @@ func NewRouter(
 		// Config routes
 		r.Route("/config", func(r chi.Router) {
 			r.Get("/", h.GetConfigHandler)
+			r.Get("/validation", h.GetConfigValidationHandler)
 		})
 
 		// Status endpoint

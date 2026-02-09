@@ -118,6 +118,25 @@ jobs:
           kill $SERVER_PID
           exit 1
         fi
+        
+        # Verify Config Validation Endpoint
+        echo "Verifying Config Validation Endpoint..."
+        RESPONSE=$(curl -s -H "X-Sherwood-API-Key: test-ci-key" http://localhost:8099/api/v1/config/validation)
+        HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Sherwood-API-Key: test-ci-key" http://localhost:8099/api/v1/config/validation)
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Config validation check failed with status $HTTP_CODE"
+          kill $SERVER_PID
+          exit 1
+        fi
+        # Verify response contains expected fields
+        if echo "$RESPONSE" | grep -q '"valid"' && echo "$RESPONSE" | grep -q '"provider"' && echo "$RESPONSE" | grep -q '"strategies"'; then
+          echo "✓ Config validation endpoint returned valid response"
+        else
+          echo "✗ Config validation response missing required fields"
+          echo "Response: $RESPONSE"
+          kill $SERVER_PID
+          exit 1
+        fi
 
         echo "All integration tests passed!"
         
@@ -129,7 +148,7 @@ jobs:
       working-directory: ./
       run: |
         echo "========================================"
-        echo "Testing Dynamic Configuration (Phase 2)"
+        echo "Testing Configuration           "
         echo "========================================"
         
         # Test 1: Multiple Strategies
@@ -227,5 +246,5 @@ jobs:
         
         echo ""
         echo "========================================"
-        echo "All Dynamic Configuration Tests Passed!"
+        echo "All Configuration Tests Passed!         "
         echo "========================================"
