@@ -2,6 +2,10 @@
 
 A modular, proof-of-concept automated trading engine and management dashboard. This project provides a foundation for executing algorithmic trades, performing regression testing against historical data, and managing bot configurations via a React-based web interface.
 
+## Build and Test Status
+
+[![Backend](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml/badge.svg?branch=main)](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml)
+
 ## 🚀 Overview
 
 `Sherwood` is designed for those who want a simple, basic trading bot without the complexities of scripts or code. It covers all the basics, historical data and modeling for stocks and crypto, basic trading plans / rules, backtesting and **paper trading (dry run)** or **Live** functionality.
