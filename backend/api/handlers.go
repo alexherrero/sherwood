@@ -10,16 +10,18 @@ import (
 	"github.com/alexherrero/sherwood/backend/backtesting"
 	"github.com/alexherrero/sherwood/backend/config"
 	"github.com/alexherrero/sherwood/backend/data"
+	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
 )
 
-// Handler holds dependencies for API handlers.
+// Handler holds the HTTP handlers for the API.
 type Handler struct {
-	registry *strategies.Registry
-	provider data.DataProvider
-	config   *config.Config // App config
+	registry     *strategies.Registry
+	provider     data.DataProvider
+	config       *config.Config
+	orderManager *execution.OrderManager
 
 	// In-memory store for backtest results
 	// In production, this should be a persistent database
@@ -27,13 +29,23 @@ type Handler struct {
 	mu      sync.RWMutex
 }
 
-// NewHandler creates a new API handler with dependencies.
-func NewHandler(registry *strategies.Registry, provider data.DataProvider, cfg *config.Config) *Handler {
+// NewHandler creates a new handler instance.
+//
+// Args:
+//   - registry: Strategy registry
+//   - provider: Data provider
+//   - config: Application configuration
+//   - orderManager: Order manager for execution data
+//
+// Returns:
+//   - *Handler: The handler instance
+func NewHandler(registry *strategies.Registry, provider data.DataProvider, config *config.Config, orderManager *execution.OrderManager) *Handler {
 	return &Handler{
-		registry: registry,
-		provider: provider,
-		config:   cfg,
-		results:  make(map[string]*backtesting.BacktestResult),
+		registry:     registry,
+		provider:     provider,
+		config:       config,
+		orderManager: orderManager,
+		results:      make(map[string]*backtesting.BacktestResult),
 	}
 }
 
@@ -185,14 +197,59 @@ func (h *Handler) GetBacktestResultHandler(w http.ResponseWriter, r *http.Reques
 	})
 }
 
-// GetConfigHandler returns the current configuration (non-sensitive).
+// GetConfigHandler returns the current configuration (sanitized).
 func (h *Handler) GetConfigHandler(w http.ResponseWriter, r *http.Request) {
-	// Only expose non-sensitive configuration
-	writeJSON(w, http.StatusOK, map[string]interface{}{
-		"version":      "0.1.0",
-		"api_version":  "v1",
+	// Don't return secrets!
+	safeConfig := map[string]interface{}{
+		"server_port":  h.config.ServerPort,
+		"server_host":  h.config.ServerHost,
 		"trading_mode": h.config.TradingMode,
-	})
+		"log_level":    h.config.LogLevel,
+	}
+	writeJSON(w, http.StatusOK, safeConfig)
+}
+
+// GetOrdersHandler returns a list of all orders.
+func (h *Handler) GetOrdersHandler(w http.ResponseWriter, r *http.Request) {
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+	orders := h.orderManager.GetAllOrders()
+	writeJSON(w, http.StatusOK, orders)
+}
+
+// GetPositionsHandler returns a list of current positions.
+func (h *Handler) GetPositionsHandler(w http.ResponseWriter, r *http.Request) {
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+	positions, err := h.orderManager.GetPositions()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, positions)
+}
+
+// GetBalanceHandler returns the current account balance.
+func (h *Handler) GetBalanceHandler(w http.ResponseWriter, r *http.Request) {
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+	balance, err := h.orderManager.GetBalance()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, balance)
+}
+
+// writeError writes a JSON error response.
+func writeError(w http.ResponseWriter, status int, message string) {
+	writeJSON(w, status, map[string]string{"error": message})
 }
 
 // writeJSON writes a JSON response with the given status code.

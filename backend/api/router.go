@@ -8,6 +8,7 @@ import (
 
 	"github.com/alexherrero/sherwood/backend/config"
 	"github.com/alexherrero/sherwood/backend/data"
+	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -20,10 +21,11 @@ import (
 //   - cfg: Application configuration
 //   - registry: Strategy registry
 //   - provider: Data provider for backtesting
+//   - orderManager: Order manager for execution data
 //
 // Returns:
 //   - http.Handler: The configured router
-func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.DataProvider) http.Handler {
+func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.DataProvider, orderManager *execution.OrderManager) http.Handler {
 	r := chi.NewRouter()
 
 	// Middleware stack
@@ -37,7 +39,7 @@ func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.
 	r.Use(corsMiddleware)
 
 	// Initialize handler with dependencies
-	h := NewHandler(registry, provider, cfg)
+	h := NewHandler(registry, provider, cfg, orderManager)
 
 	// Health check endpoint
 	r.Get("/health", h.HealthHandler)
@@ -54,6 +56,13 @@ func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.
 		r.Route("/backtests", func(r chi.Router) {
 			r.Post("/", h.RunBacktestHandler)
 			r.Get("/{id}", h.GetBacktestResultHandler)
+		})
+
+		// Execution routes
+		r.Route("/execution", func(r chi.Router) {
+			r.Get("/orders", h.GetOrdersHandler)
+			r.Get("/positions", h.GetPositionsHandler)
+			r.Get("/balance", h.GetBalanceHandler)
 		})
 
 		// Config routes

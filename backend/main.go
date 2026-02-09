@@ -87,8 +87,7 @@ func main() {
 	}
 
 	// Create API router
-	// TODO: Inject OrderManager into API
-	router := api.NewRouter(cfg, registry, provider)
+	router := api.NewRouter(cfg, registry, provider, orderManager)
 
 	// Create HTTP server
 	server := &http.Server{
