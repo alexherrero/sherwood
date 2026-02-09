@@ -63,7 +63,13 @@ func setupTestHandler() (*Handler, *MockDataProvider, *strategies.Registry) {
 
 // TestHealthHandler verifies health endpoint.
 func TestHealthHandler(t *testing.T) {
-	handler, _, _ := setupTestHandler()
+	cfg := &config.Config{TradingMode: "test"}
+	mockProvider := new(MockDataProvider)
+	// Add expectation for Name() call
+	mockProvider.On("Name").Return("mock_provider")
+
+	handler := NewHandler(nil, mockProvider, cfg, nil, nil)
+
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
 
@@ -71,11 +77,41 @@ func TestHealthHandler(t *testing.T) {
 
 	assert.Equal(t, http.StatusOK, rec.Code)
 
-	var response map[string]string
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]interface{}
 	err := json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "ok", response["status"])
 	assert.Equal(t, "test", response["mode"])
+	assert.Contains(t, response, "checks")
+	assert.Contains(t, response, "timestamp")
+}
+
+// TestMetricsHandler verifies metrics endpoint.
+func TestMetricsHandler(t *testing.T) {
+	cfg := &config.Config{TradingMode: "test"}
+	handler := NewHandler(nil, nil, cfg, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
+	rec := httptest.NewRecorder()
+
+	handler.MetricsHandler(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Contains(t, response, "goroutines")
+	assert.Contains(t, response, "memory")
+	assert.Contains(t, response, "uptime_seconds")
+
+	memory, ok := response["memory"].(map[string]interface{})
+	require.True(t, ok)
+	assert.Contains(t, memory, "alloc")
+	assert.Contains(t, memory, "num_gc")
 }
 
 // TestListStrategiesHandler verifies strategies list endpoint.
@@ -223,6 +259,7 @@ func TestRouterIntegration(t *testing.T) {
 	}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
+	mockProvider.On("Name").Return("mock_provider")
 
 	router := NewRouter(cfg, registry, mockProvider, nil, nil)
 	assert.NotNil(t, router)

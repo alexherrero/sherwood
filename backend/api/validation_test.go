@@ -142,16 +142,18 @@ func TestWriteValidationError(t *testing.T) {
 		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
 
 		// Parse response
-		var response ValidationError
+		var response APIError
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
 
 		// Verify response structure
 		assert.Equal(t, "Validation failed", response.Error)
 		assert.Equal(t, "VALIDATION_ERROR", response.Code)
-		assert.Len(t, response.Details, 2)
-		assert.Equal(t, "This field is required", response.Details["Symbol"])
-		assert.Equal(t, "Value must be greater than 0", response.Details["Quantity"])
+
+		details, ok := response.Details.(map[string]interface{})
+		require.True(t, ok)
+		assert.Equal(t, "This field is required", details["Symbol"])
+		assert.Equal(t, "Value must be greater than 0", details["Quantity"])
 	})
 
 	t.Run("NoDetails", func(t *testing.T) {
@@ -166,9 +168,12 @@ func TestWriteValidationError(t *testing.T) {
 
 		assert.Equal(t, 400, rec.Code)
 
-		var response ValidationError
+		var response APIError
 		err := json.Unmarshal(rec.Body.Bytes(), &response)
 		require.NoError(t, err)
-		assert.Empty(t, response.Details)
+
+		details, ok := response.Details.(map[string]interface{})
+		require.True(t, ok)
+		assert.Empty(t, details)
 	})
 }
