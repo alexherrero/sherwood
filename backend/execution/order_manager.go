@@ -1,0 +1,187 @@
+// Package execution provides order management functionality.
+package execution
+
+import (
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/alexherrero/sherwood/backend/models"
+	"github.com/rs/zerolog/log"
+)
+
+// OrderManager handles order lifecycle and execution.
+type OrderManager struct {
+	broker      Broker
+	riskManager *RiskManager
+	orders      map[string]models.Order
+	mu          sync.RWMutex
+}
+
+// NewOrderManager creates a new order manager.
+//
+// Args:
+//   - broker: The broker for order execution
+//   - riskManager: Risk manager for position limits
+//
+// Returns:
+//   - *OrderManager: The order manager instance
+func NewOrderManager(broker Broker, riskManager *RiskManager) *OrderManager {
+	return &OrderManager{
+		broker:      broker,
+		riskManager: riskManager,
+		orders:      make(map[string]models.Order),
+	}
+}
+
+// SubmitOrder validates and submits an order for execution.
+//
+// Args:
+//   - order: The order to submit
+//
+// Returns:
+//   - *models.Order: The submitted order
+//   - error: Any error encountered
+func (om *OrderManager) SubmitOrder(order models.Order) (*models.Order, error) {
+	// Validate order
+	if err := om.validateOrder(order); err != nil {
+		return nil, fmt.Errorf("order validation failed: %w", err)
+	}
+
+	// Check risk limits
+	if om.riskManager != nil {
+		if err := om.riskManager.CheckOrder(order); err != nil {
+			return nil, fmt.Errorf("risk check failed: %w", err)
+		}
+	}
+
+	// Submit to broker
+	result, err := om.broker.PlaceOrder(order)
+	if err != nil {
+		return nil, fmt.Errorf("broker rejected order: %w", err)
+	}
+
+	// Store order
+	om.mu.Lock()
+	om.orders[result.ID] = *result
+	om.mu.Unlock()
+
+	log.Info().
+		Str("order_id", result.ID).
+		Str("symbol", result.Symbol).
+		Str("side", string(result.Side)).
+		Str("status", string(result.Status)).
+		Msg("Order submitted")
+
+	return result, nil
+}
+
+// validateOrder checks basic order validity.
+func (om *OrderManager) validateOrder(order models.Order) error {
+	if order.Symbol == "" {
+		return fmt.Errorf("symbol is required")
+	}
+	if order.Quantity <= 0 {
+		return fmt.Errorf("quantity must be positive")
+	}
+	if order.Type == models.OrderTypeLimit && order.Price <= 0 {
+		return fmt.Errorf("limit orders require a positive price")
+	}
+	return nil
+}
+
+// CancelOrder cancels an order.
+//
+// Args:
+//   - orderID: ID of the order to cancel
+//
+// Returns:
+//   - error: Any error encountered
+func (om *OrderManager) CancelOrder(orderID string) error {
+	return om.broker.CancelOrder(orderID)
+}
+
+// GetOrder retrieves an order by ID.
+//
+// Args:
+//   - orderID: ID of the order
+//
+// Returns:
+//   - *models.Order: The order
+//   - error: Any error encountered
+func (om *OrderManager) GetOrder(orderID string) (*models.Order, error) {
+	// Check local cache first
+	om.mu.RLock()
+	order, exists := om.orders[orderID]
+	om.mu.RUnlock()
+
+	if exists {
+		return &order, nil
+	}
+
+	// Fetch from broker
+	return om.broker.GetOrder(orderID)
+}
+
+// GetAllOrders returns all tracked orders.
+//
+// Returns:
+//   - []models.Order: All orders
+func (om *OrderManager) GetAllOrders() []models.Order {
+	om.mu.RLock()
+	defer om.mu.RUnlock()
+
+	orders := make([]models.Order, 0, len(om.orders))
+	for _, order := range om.orders {
+		orders = append(orders, order)
+	}
+	return orders
+}
+
+// CreateMarketOrder creates a market order.
+//
+// Args:
+//   - symbol: Ticker symbol
+//   - side: Buy or sell
+//   - quantity: Amount to trade
+//
+// Returns:
+//   - *models.Order: The submitted order
+//   - error: Any error encountered
+func (om *OrderManager) CreateMarketOrder(symbol string, side models.OrderSide, quantity float64) (*models.Order, error) {
+	order := models.Order{
+		Symbol:    symbol,
+		Side:      side,
+		Type:      models.OrderTypeMarket,
+		Quantity:  quantity,
+		Status:    models.OrderStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	return om.SubmitOrder(order)
+}
+
+// CreateLimitOrder creates a limit order.
+//
+// Args:
+//   - symbol: Ticker symbol
+//   - side: Buy or sell
+//   - quantity: Amount to trade
+//   - price: Limit price
+//
+// Returns:
+//   - *models.Order: The submitted order
+//   - error: Any error encountered
+func (om *OrderManager) CreateLimitOrder(symbol string, side models.OrderSide, quantity, price float64) (*models.Order, error) {
+	order := models.Order{
+		Symbol:    symbol,
+		Side:      side,
+		Type:      models.OrderTypeLimit,
+		Quantity:  quantity,
+		Price:     price,
+		Status:    models.OrderStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+	return om.SubmitOrder(order)
+}
