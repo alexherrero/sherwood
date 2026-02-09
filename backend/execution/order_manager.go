@@ -185,3 +185,21 @@ func (om *OrderManager) CreateLimitOrder(symbol string, side models.OrderSide, q
 	}
 	return om.SubmitOrder(order)
 }
+
+// GetPositions retrieves all current positions from the broker.
+//
+// Returns:
+//   - []models.Position: Current positions
+//   - error: Any error encountered
+func (om *OrderManager) GetPositions() ([]models.Position, error) {
+	return om.broker.GetPositions()
+}
+
+// GetBalance retrieves the current account balance from the broker.
+//
+// Returns:
+//   - *models.Balance: Account balance
+//   - error: Any error encountered
+func (om *OrderManager) GetBalance() (*models.Balance, error) {
+	return om.broker.GetBalance()
+}

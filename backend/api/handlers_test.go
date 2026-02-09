@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/alexherrero/sherwood/backend/config"
+	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/models"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/stretchr/testify/assert"
@@ -51,7 +52,7 @@ func setupTestHandler() (*Handler, *MockDataProvider, *strategies.Registry) {
 
 	mockProvider := new(MockDataProvider)
 
-	handler := NewHandler(registry, mockProvider, cfg)
+	handler := NewHandler(registry, mockProvider, cfg, nil)
 	return handler, mockProvider, registry
 }
 
@@ -99,7 +100,7 @@ func TestGetStrategyHandler(t *testing.T) {
 	_ = registry.Register(strategies.NewMACrossover())
 	mockProvider := new(MockDataProvider)
 
-	router := NewRouter(cfg, registry, mockProvider)
+	router := NewRouter(cfg, registry, mockProvider, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/strategies/ma_crossover", nil)
 	rec := httptest.NewRecorder()
@@ -157,7 +158,7 @@ func TestGetBacktestResultHandler(t *testing.T) {
 	cfg := &config.Config{}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
-	router := NewRouter(cfg, registry, mockProvider)
+	router := NewRouter(cfg, registry, mockProvider, nil)
 
 	// We need to inject a result into the handler used by the router.
 	// Since NewRouter creates its own handler, we can't easily access it.
@@ -208,7 +209,7 @@ func TestRouterIntegration(t *testing.T) {
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
 
-	router := NewRouter(cfg, registry, mockProvider)
+	router := NewRouter(cfg, registry, mockProvider, nil)
 	assert.NotNil(t, router)
 
 	// Test health endpoint
@@ -225,4 +226,142 @@ func TestWriteJSON(t *testing.T) {
 	writeJSON(rec, 200, map[string]string{"foo": "bar"})
 	assert.Equal(t, 200, rec.Code)
 	assert.JSONEq(t, `{"foo":"bar"}`, rec.Body.String())
+}
+
+// MockBroker for testing execution endpoints
+type MockBroker struct {
+	mock.Mock
+}
+
+func (m *MockBroker) Name() string {
+	args := m.Called()
+	return args.String(0)
+}
+
+func (m *MockBroker) Connect() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockBroker) Disconnect() error {
+	args := m.Called()
+	return args.Error(0)
+}
+
+func (m *MockBroker) IsConnected() bool {
+	args := m.Called()
+	return args.Bool(0)
+}
+
+func (m *MockBroker) PlaceOrder(order models.Order) (*models.Order, error) {
+	args := m.Called(order)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Order), args.Error(1)
+}
+
+func (m *MockBroker) CancelOrder(orderID string) error {
+	args := m.Called(orderID)
+	return args.Error(0)
+}
+
+func (m *MockBroker) GetOrder(orderID string) (*models.Order, error) {
+	args := m.Called(orderID)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Order), args.Error(1)
+}
+
+func (m *MockBroker) GetPositions() ([]models.Position, error) {
+	args := m.Called()
+	return args.Get(0).([]models.Position), args.Error(1)
+}
+
+func (m *MockBroker) GetPosition(symbol string) (*models.Position, error) {
+	args := m.Called(symbol)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Position), args.Error(1)
+}
+
+func (m *MockBroker) GetBalance() (*models.Balance, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Balance), args.Error(1)
+}
+
+// TestExecutionEndpoints verifies /execution routes
+func TestExecutionEndpoints(t *testing.T) {
+	cfg := &config.Config{TradingMode: "test"}
+	registry := strategies.NewRegistry()
+	mockProvider := new(MockDataProvider)
+	mockBroker := new(MockBroker)
+
+	// Create OrderManager with MockBroker
+	orderManager := execution.NewOrderManager(mockBroker, nil)
+
+	handler := NewHandler(registry, mockProvider, cfg, orderManager)
+
+	// Test GetBalance
+	t.Run("GetBalance", func(t *testing.T) {
+		expectedBalance := &models.Balance{
+			Cash:   100000,
+			Equity: 100000,
+		}
+		mockBroker.On("GetBalance").Return(expectedBalance, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/execution/balance", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetBalanceHandler(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var balance models.Balance
+		err := json.Unmarshal(rec.Body.Bytes(), &balance)
+		require.NoError(t, err)
+		assert.Equal(t, 100000.0, balance.Cash)
+	})
+
+	// Test GetPositions
+	t.Run("GetPositions", func(t *testing.T) {
+		expectedPositions := []models.Position{
+			{Symbol: "AAPL", Quantity: 10, AverageCost: 150},
+		}
+		mockBroker.On("GetPositions").Return(expectedPositions, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/execution/positions", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetPositionsHandler(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var positions []models.Position
+		err := json.Unmarshal(rec.Body.Bytes(), &positions)
+		require.NoError(t, err)
+		assert.Len(t, positions, 1)
+		assert.Equal(t, "AAPL", positions[0].Symbol)
+	})
+
+	// Test GetOrders
+	t.Run("GetOrders", func(t *testing.T) {
+		// Just verify it calls implementation (OrderManager.GetAllOrders doesn't call broker usually, it returns local)
+		// But in our current OrderManager implementation, it only stores submitted orders.
+		// Since we haven't submitted any, it should be empty.
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/execution/orders", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetOrdersHandler(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var orders []models.Order
+		err := json.Unmarshal(rec.Body.Bytes(), &orders)
+		require.NoError(t, err)
+		assert.Empty(t, orders)
+	})
 }
