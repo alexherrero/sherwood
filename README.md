@@ -10,44 +10,117 @@ A modular, proof-of-concept automated trading engine and management dashboard. T
 
 Sherwood is experimental. It is not expected to work nor should you consider it reliable for any purpose. Code here is intended to demonstrate the potential of AI-assisted software development and should not be used for any real-world trading. Use at your own risk.
 
-<!--
-### Key Features
-* **Paper Trading (Dry Run):** Test your strategies in real-time using live market data without any financial risk.
-* **Regression Testing:** Run your trading models against historical price action to analyze performance and refine logic.
-* **Historical Reporting:** Integrated tools to download and visualize historical data for stocks and cryptocurrency from supported providers.
-* **Web UI (TypeScript/React):** A clean dashboard for real-time tracking, reporting, and updating bot parameters on the fly.
-* **Modular Provider System:** Native support for **Robinhood**, with a flexible plugin architecture to integrate other exchanges (Binance, Alpaca, etc.).
-* **Dockerized Setup:** Simple deployment using Docker containers, ensuring your environment is consistent across local and cloud setups.
-
 ---
 
 ## 🛠 Tech Stack
 
-* **Core Engine:** Node.js & TypeScript
-* **Dashboard:** React & Tailwind CSS
+* **Core Engine:** Go (Golang)
+* **API Framework:** go-chi
+* **Database:** SQLite (sqlx)
+* **Dashboard:** React & TypeScript (planned)
 * **Deployment:** Docker & Docker Compose
-* **API Connectivity:** Robinhood (extensible via custom plugins)
+
+### Data Providers
+
+| Provider | Asset Type | API Key Required |
+|----------|------------|------------------|
+| Yahoo Finance | Stocks, ETFs, Crypto | No |
+| Tiingo | Stocks, ETFs | Yes (free at tiingo.com) |
+| Binance | Crypto | Optional |
+| Binance.US | Crypto (US users) | Optional |
 
 ---
 
 ## 📦 Getting Started
 
 ### 1. Prerequisites
-* [Docker](https://www.docker.com/get-started) and Docker Compose installed.
-* API credentials for your exchange provider.
+
+* [Go 1.21+](https://go.dev/dl/) installed
+* [Docker](https://www.docker.com/get-started) (optional, for containerized deployment)
+* API credentials for your exchange provider
 
 ### 2. Configuration
-Access tokens and sensitive credentials are provided through environment variables. Create a `.env` file in the project root:
+
+Copy the example environment file and add your credentials:
+
+```bash
+cp .env.example .env
+```
+
+Edit `.env` with your settings:
 
 ```env
 # General Configuration
-PORT=3000
-TRADING_MODE=dry_run # Options: 'dry_run' or 'live'
+PORT=8080
+TRADING_MODE=dry_run  # Options: 'dry_run' or 'live'
+DATABASE_PATH=./data/sherwood.db
 
-# Robinhood Credentials
+# Robinhood Credentials (required for live trading)
 RH_USERNAME=your_email@example.com
 RH_PASSWORD=your_password
 RH_MFA_CODE=your_device_mfa_secret
 
-# Historical Data API Key (if applicable)
-HISTORICAL_DATA_TOKEN=your_token_here
+# Binance Configuration (for crypto)
+BINANCE_USE_US=true  # Set to true for US users
+BINANCE_API_KEY=your_binance_api_key
+BINANCE_API_SECRET=your_binance_api_secret
+
+# Tiingo API Key (get free at tiingo.com)
+TIINGO_API_KEY=your_tiingo_api_key
+```
+
+### 3. Run the Application
+
+```bash
+# Build and run
+go build -o sherwood ./backend/...
+./sherwood
+
+# Or run directly
+go run ./backend/...
+```
+
+### 4. Run Tests
+
+```bash
+# Unit tests only
+go test ./...
+
+# Include integration tests (requires API keys)
+go test ./... -tags=integration
+```
+
+---
+
+## 📁 Project Structure
+
+```
+sherwood/
+├── backend/
+│   ├── main.go              # Application entry point
+│   ├── api/                 # REST API handlers
+│   ├── config/              # Configuration management
+│   ├── data/                # Data layer
+│   │   └── providers/       # Market data providers
+│   ├── models/              # Domain models
+│   ├── strategies/          # Trading strategies
+│   └── execution/           # Trade execution (planned)
+├── frontend/                # React dashboard (planned)
+├── docs/                    # Documentation
+├── .env.example             # Environment template
+└── go.mod                   # Go module definition
+```
+
+---
+
+## 📄 License
+
+MIT License - see LICENSE file for details.
+
+## ⚠️ Disclaimer
+
+This is experimental software for educational purposes only.
+* Not financial advice
+* Not guaranteed to work or be profitable
+* Trading involves substantial risk of loss
+* Paper trade extensively before considering live trading

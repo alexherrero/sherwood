@@ -22,11 +22,11 @@ Sherwood is a proof-of-concept automated trading engine and management dashboard
 
 **Data & APIs**:
 
-- `yfinance` - Yahoo Finance data
-- `ccxt` - Cryptocurrency exchange API
-- `alpaca-trade-api` - Stock trading API
-- `websockets` - Real-time data streams
-- `requests` - HTTP client
+- `piquette/finance-go` - Yahoo Finance data
+- `adshao/go-binance/v2` - Binance exchange API
+- Tiingo REST API - Stock/ETF data (more reliable than Yahoo)
+- `net/http` - HTTP client for REST APIs
+- `gorilla/websocket` - Real-time data streams (planned)
 
 **Data Storage**:
 
