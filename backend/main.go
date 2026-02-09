@@ -14,6 +14,8 @@ import (
 	"github.com/alexherrero/sherwood/backend/api"
 	"github.com/alexherrero/sherwood/backend/config"
 	"github.com/alexherrero/sherwood/backend/data/providers"
+	"github.com/alexherrero/sherwood/backend/engine"
+	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -57,7 +59,35 @@ func main() {
 	// In the future, this could be configured via config.yaml
 	provider := providers.NewYahooProvider()
 
+	// Initialize Execution Layer (Paper Trading for now)
+	initialCash := 100000.0
+	broker := execution.NewPaperBroker(initialCash)
+	if err := broker.Connect(); err != nil {
+		log.Fatal().Err(err).Msg("Failed to connect to paper broker")
+	}
+
+	// Risk Manager is nil for now
+	orderManager := execution.NewOrderManager(broker, nil)
+
+	// Initialize Trading Engine
+	// Hardcoded symbols for now
+	symbols := []string{"SPY", "BTC-USD", "ETH-USD", "AAPL", "MSFT"}
+	tradingEngine := engine.NewTradingEngine(
+		provider,
+		registry,
+		orderManager,
+		symbols,
+		1*time.Minute, // Tick every minute
+	)
+
+	// Start Trading Engine
+	ctx, cancelEngine := context.WithCancel(context.Background())
+	if err := tradingEngine.Start(ctx); err != nil {
+		log.Fatal().Err(err).Msg("Failed to start trading engine")
+	}
+
 	// Create API router
+	// TODO: Inject OrderManager into API
 	router := api.NewRouter(cfg, registry, provider)
 
 	// Create HTTP server
@@ -84,11 +114,15 @@ func main() {
 
 	log.Info().Msg("Shutting down server...")
 
-	// Give outstanding requests 30 seconds to complete
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
+	// Stop Trading Engine
+	cancelEngine()
+	tradingEngine.Stop()
 
-	if err := server.Shutdown(ctx); err != nil {
+	// Given outstanding requests 30 seconds to complete
+	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancelShutdown()
+
+	if err := server.Shutdown(ctxShutdown); err != nil {
 		log.Fatal().Err(err).Msg("Server forced to shutdown")
 	}
 
