@@ -107,11 +107,11 @@ func (h *Handler) GetStrategyHandler(w http.ResponseWriter, r *http.Request) {
 
 // RunBacktestRequest defines the payload for starting a backtest.
 type RunBacktestRequest struct {
-	Strategy       string                 `json:"strategy"`
-	Symbol         string                 `json:"symbol"`
-	Start          time.Time              `json:"start"`
-	End            time.Time              `json:"end"`
-	InitialCapital float64                `json:"initial_capital"`
+	Strategy       string                 `json:"strategy" validate:"required,min=1,max=50"`
+	Symbol         string                 `json:"symbol" validate:"required,min=1,max=20"`
+	Start          time.Time              `json:"start" validate:"required"`
+	End            time.Time              `json:"end" validate:"required,gtfield=Start"`
+	InitialCapital float64                `json:"initial_capital" validate:"required,gt=0,lte=10000000"`
 	StrategyConfig map[string]interface{} `json:"strategy_config"`
 }
 
@@ -119,13 +119,13 @@ type RunBacktestRequest struct {
 func (h *Handler) RunBacktestHandler(w http.ResponseWriter, r *http.Request) {
 	var req RunBacktestRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		writeError(w, http.StatusBadRequest, "Invalid request body")
 		return
 	}
 
 	// Validate request
-	if req.Strategy == "" || req.Symbol == "" {
-		http.Error(w, "Strategy and symbol are required", http.StatusBadRequest)
+	if valErr := validateStruct(req); valErr != nil {
+		writeValidationError(w, valErr)
 		return
 	}
 
@@ -397,11 +397,11 @@ func (h *Handler) GetBalanceHandler(w http.ResponseWriter, r *http.Request) {
 
 // PlaceOrderRequest defines the payload for placing an order.
 type PlaceOrderRequest struct {
-	Symbol   string  `json:"symbol"`
-	Side     string  `json:"side"` // "buy" or "sell"
-	Type     string  `json:"type"` // "market" or "limit"
-	Quantity float64 `json:"quantity"`
-	Price    float64 `json:"price"` // Optional, required for limit orders
+	Symbol   string  `json:"symbol" validate:"required,min=1,max=20"`
+	Side     string  `json:"side" validate:"required,oneof=buy sell"`
+	Type     string  `json:"type" validate:"required,oneof=market limit"`
+	Quantity float64 `json:"quantity" validate:"required,gt=0,lte=1000000"`
+	Price    float64 `json:"price" validate:"omitempty,gt=0"`
 }
 
 // PlaceOrderHandler handles manual order placement.
@@ -417,13 +417,9 @@ func (h *Handler) PlaceOrderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate inputs
-	if req.Symbol == "" {
-		writeError(w, http.StatusBadRequest, "Symbol is required")
-		return
-	}
-	if req.Quantity <= 0 {
-		writeError(w, http.StatusBadRequest, "Quantity must be positive")
+	// Validate request
+	if valErr := validateStruct(req); valErr != nil {
+		writeValidationError(w, valErr)
 		return
 	}
 

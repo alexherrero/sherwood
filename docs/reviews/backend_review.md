@@ -105,54 +105,45 @@ r.Patch("/orders/{id}", h.UpdateOrderHandler) // Update order (optional)
 
 ## High Priority Findings (P1 - Required for Production)
 
-### ⚠️ 4. Insufficient Input Validation
+### ⚠️ 4. Insufficient Input Validation ✅ **RESOLVED**
 
 **Issue:** User input not validated before database/broker operations
 
-**Locations:**
+**Status:** ✅ **IMPLEMENTED** - 2026-02-09
 
-- `backend/api/handlers.go:407` - PlaceOrderHandler
-- `backend/api/handlers.go:118` - RunBacktestHandler
-
-**Examples:**
+**Implementation:**
 
 ```go
-// PlaceOrderHandler - Missing validation
-var req PlaceOrderRequest
-json.NewDecoder(r.Body).Decode(&req) // ⚠️ No error check
-// ⚠️ No validation for req.Symbol, req.Quantity, req.Price
-
-// RunBacktestHandler - Missing date validation
-var req RunBacktestRequest
-json.NewDecoder(r.Body).Decode(&req)
-// ⚠️ req.Start could be after req.End
-// ⚠️ req.InitialCapital could be negative
-```
-
-**Recommendation:**
-
-```go
-// Add comprehensive validation
+// Added validation tags
 type PlaceOrderRequest struct {
-    Symbol   string  `json:"symbol" validate:"required,min=1,max=10"`
+    Symbol   string  `json:"symbol" validate:"required,min=1,max=20"`
     Side     string  `json:"side" validate:"required,oneof=buy sell"`
     Type     string  `json:"type" validate:"required,oneof=market limit"`
     Quantity float64 `json:"quantity" validate:"required,gt=0,lte=1000000"`
     Price    float64 `json:"price" validate:"omitempty,gt=0"`
 }
 
-// Use validator library
-import "github.com/go-playground/validator/v10"
-
-validate := validator.New()
-if err := validate.Struct(req); err != nil {
-    writeJSON(w, http.StatusBadRequest, map[string]string{
-        "error": "validation failed",
-        "details": err.Error(),
-    })
+// Validation helper in validation.go
+if valErr := validateStruct(req); valErr != nil {
+    writeValidationError(w, valErr)  // Returns detailed field errors
     return
 }
 ```
+
+**Validation Coverage:**
+
+- `PlaceOrderRequest` - Symbol, side, type, quantity, price
+- `RunBacktestRequest` - Strategy, symbol, dates (end > start), initial capital
+
+**Testing:** Existing handler tests passing with new validation
+
+**Files:**
+
+- `backend/api/validation.go` - Validation helper with human-readable errors
+- `backend/api/handlers.go` - Updated request structs with tags
+
+**Risk:** ~~Invalid data causing crashes/corruption~~ **MITIGATED**  
+**Impact:** ~~High~~ **PROTECTED**
 
 ---
 
@@ -195,19 +186,16 @@ func corsMiddleware(allowedOrigins string) func(http.Handler) http.Handler {
 
 ---
 
-### ⚠️ 6. No Request Body Size Limit
+### ⚠️ 6. No Request Body Size Limit ✅ **RESOLVED**
 
 **Issue:** No protection against large payload attacks
 
-**Location:** All POST endpoints  
-**Risk:** Memory exhaustion, DoS  
-**Impact:** Medium - Service disruption
+**Status:** ✅ **IMPLEMENTED** - 2026-02-09
 
-**Recommendation:**
+**Implementation:**
 
 ```go
-// In router.go middleware stack
-r.Use(middleware.SetHeader("Content-Type", "application/json"))
+// router.go - Added request body size limit middleware
 r.Use(func(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
         r.Body = http.MaxBytesReader(w, r.Body, 1048576) // 1MB limit
@@ -215,6 +203,10 @@ r.Use(func(next http.Handler) http.Handler {
     })
 })
 ```
+
+**Location:** `backend/api/router.go:52-59`  
+**Risk:** ~~Memory exhaustion, DoS~~ **MITIGATED**  
+**Impact:** ~~Medium~~ **PROTECTED**
 
 ---
 
