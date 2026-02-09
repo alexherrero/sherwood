@@ -61,6 +61,7 @@ func NewRouter(cfg *config.Config, registry *strategies.Registry, provider data.
 		// Execution routes
 		r.Route("/execution", func(r chi.Router) {
 			r.Get("/orders", h.GetOrdersHandler)
+			r.Post("/orders", h.PlaceOrderHandler)
 			r.Get("/positions", h.GetPositionsHandler)
 			r.Get("/balance", h.GetBalanceHandler)
 		})

@@ -365,3 +365,65 @@ func TestExecutionEndpoints(t *testing.T) {
 		assert.Empty(t, orders)
 	})
 }
+
+// TestPlaceOrderHandler verifies manual order placement.
+func TestPlaceOrderHandler(t *testing.T) {
+	cfg := &config.Config{TradingMode: "test"}
+	registry := strategies.NewRegistry()
+	mockProvider := new(MockDataProvider)
+	mockBroker := new(MockBroker)
+
+	// Create OrderManager with MockBroker
+	orderManager := execution.NewOrderManager(mockBroker, nil)
+
+	handler := NewHandler(registry, mockProvider, cfg, orderManager)
+
+	t.Run("MarketBuy", func(t *testing.T) {
+		// Expectation: broker.PlaceOrder called
+		expectedOrder := &models.Order{
+			ID:       "test-order-1",
+			Symbol:   "AAPL",
+			Side:     models.OrderSideBuy,
+			Type:     models.OrderTypeMarket,
+			Quantity: 10,
+			Status:   models.OrderStatusFilled,
+		}
+		mockBroker.On("PlaceOrder", mock.MatchedBy(func(o models.Order) bool {
+			return o.Symbol == "AAPL" && o.Side == models.OrderSideBuy && o.Type == models.OrderTypeMarket && o.Quantity == 10
+		})).Return(expectedOrder, nil).Once()
+
+		payload := map[string]interface{}{
+			"symbol":   "AAPL",
+			"side":     "buy",
+			"type":     "market",
+			"quantity": 10,
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/execution/orders", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.PlaceOrderHandler(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var order models.Order
+		err := json.Unmarshal(rec.Body.Bytes(), &order)
+		require.NoError(t, err)
+		assert.Equal(t, "test-order-1", order.ID)
+	})
+
+	t.Run("InvalidInput", func(t *testing.T) {
+		payload := map[string]interface{}{
+			"symbol":   "", // Missing symbol
+			"side":     "buy",
+			"type":     "market",
+			"quantity": 10,
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/execution/orders", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		handler.PlaceOrderHandler(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}

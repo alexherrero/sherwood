@@ -11,6 +11,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/config"
 	"github.com/alexherrero/sherwood/backend/data"
 	"github.com/alexherrero/sherwood/backend/execution"
+	"github.com/alexherrero/sherwood/backend/models"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
@@ -245,6 +246,75 @@ func (h *Handler) GetBalanceHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, balance)
+}
+
+// PlaceOrderRequest defines the payload for placing an order.
+type PlaceOrderRequest struct {
+	Symbol   string  `json:"symbol"`
+	Side     string  `json:"side"` // "buy" or "sell"
+	Type     string  `json:"type"` // "market" or "limit"
+	Quantity float64 `json:"quantity"`
+	Price    float64 `json:"price"` // Optional, required for limit orders
+}
+
+// PlaceOrderHandler handles manual order placement.
+func (h *Handler) PlaceOrderHandler(w http.ResponseWriter, r *http.Request) {
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+
+	var req PlaceOrderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate inputs
+	if req.Symbol == "" {
+		writeError(w, http.StatusBadRequest, "Symbol is required")
+		return
+	}
+	if req.Quantity <= 0 {
+		writeError(w, http.StatusBadRequest, "Quantity must be positive")
+		return
+	}
+
+	var side models.OrderSide
+	switch req.Side {
+	case "buy":
+		side = models.OrderSideBuy
+	case "sell":
+		side = models.OrderSideSell
+	default:
+		writeError(w, http.StatusBadRequest, "Invalid side: must be 'buy' or 'sell'")
+		return
+	}
+
+	var order *models.Order
+	var err error
+
+	// Create order based on type
+	switch req.Type {
+	case "market":
+		order, err = h.orderManager.CreateMarketOrder(req.Symbol, side, req.Quantity)
+	case "limit":
+		if req.Price <= 0 {
+			writeError(w, http.StatusBadRequest, "Price must be positive for limit orders")
+			return
+		}
+		order, err = h.orderManager.CreateLimitOrder(req.Symbol, side, req.Quantity, req.Price)
+	default:
+		writeError(w, http.StatusBadRequest, "Invalid type: must be 'market' or 'limit'")
+		return
+	}
+
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to place order: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, order)
 }
 
 // writeError writes a JSON error response.
