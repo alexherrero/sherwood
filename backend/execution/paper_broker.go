@@ -105,19 +105,55 @@ func (b *PaperBroker) PlaceOrder(order models.Order) (*models.Order, error) {
 	order.UpdatedAt = time.Now()
 	order.Status = models.OrderStatusSubmitted
 
-	// Get price for execution
-	price := order.Price
+	// Determine execution price and fill status
+	var executionPrice float64
+	shouldFill := false
+
 	if order.Type == models.OrderTypeMarket {
 		if latestPrice, ok := b.latestPrices[order.Symbol]; ok {
-			price = latestPrice
+			executionPrice = latestPrice
+			shouldFill = true
 		} else {
 			return nil, fmt.Errorf("no price available for %s", order.Symbol)
 		}
+	} else if order.Type == models.OrderTypeLimit {
+		// Check against latest price if available
+		latestPrice, hasPrice := b.latestPrices[order.Symbol]
+
+		if !hasPrice {
+			// If no price, assume pending
+			shouldFill = false
+		} else {
+			if order.Side == models.OrderSideBuy {
+				// Buy limit: fill if market price <= limit price
+				if latestPrice <= order.Price {
+					executionPrice = order.Price // Fill at limit price (pessimistic) or market?
+					// Paper trading convention: fill at limit or better.
+					// Let's use limit price for simplicity or latestPrice?
+					// Using limit price guarantees price.
+					executionPrice = order.Price
+					shouldFill = true
+				}
+			} else {
+				// Sell limit: fill if market price >= limit price
+				if latestPrice >= order.Price {
+					executionPrice = order.Price
+					shouldFill = true
+				}
+			}
+		}
 	}
 
-	// Check if we have enough buying power for buys
+	// Just return pending if not filled
+	if !shouldFill {
+		order.Status = models.OrderStatusPending
+		b.orders[order.ID] = order
+		return &order, nil
+	}
+
+	// Check buying power (only if filling)
 	if order.Side == models.OrderSideBuy {
-		cost := price * order.Quantity
+		cost := executionPrice * order.Quantity
 		if cost > b.balance.BuyingPower {
 			order.Status = models.OrderStatusRejected
 			b.orders[order.ID] = order
@@ -126,17 +162,17 @@ func (b *PaperBroker) PlaceOrder(order models.Order) (*models.Order, error) {
 		}
 	}
 
-	// Simulate instant fill for paper trading
+	// Execute fill
 	order.Status = models.OrderStatusFilled
 	order.FilledQuantity = order.Quantity
-	order.AveragePrice = price
+	order.AveragePrice = executionPrice
 	order.UpdatedAt = time.Now()
 
 	// Update positions
 	if order.Side == models.OrderSideBuy {
-		b.executeBuy(order.Symbol, order.Quantity, price)
+		b.executeBuy(order.Symbol, order.Quantity, executionPrice)
 	} else {
-		b.executeSell(order.Symbol, order.Quantity, price)
+		b.executeSell(order.Symbol, order.Quantity, executionPrice)
 	}
 
 	b.orders[order.ID] = order
@@ -146,7 +182,7 @@ func (b *PaperBroker) PlaceOrder(order models.Order) (*models.Order, error) {
 		Str("symbol", order.Symbol).
 		Str("side", string(order.Side)).
 		Float64("quantity", order.Quantity).
-		Float64("price", price).
+		Float64("price", executionPrice).
 		Msg("Paper order executed")
 
 	return &order, nil

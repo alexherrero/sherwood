@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strings"
 	"testing"
 )
 
@@ -199,5 +200,56 @@ func TestConfigLoad_Full(t *testing.T) {
 	}
 	if cfg.APIKey != "secret-key" {
 		t.Errorf("Expected APIKey secret-key, got %s", cfg.APIKey)
+	}
+}
+
+func TestRotateAPIKey(t *testing.T) {
+	// Create temp .env file
+	tmpfile, err := os.CreateTemp("", ".env")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(tmpfile.Name())
+
+	// Write initial content
+	initialContent := []byte("PORT=8080\nAPI_KEY=old-key\nLOG_LEVEL=info")
+	if _, err := tmpfile.Write(initialContent); err != nil {
+		t.Fatal(err)
+	}
+	if err := tmpfile.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &Config{
+		EnvFile: tmpfile.Name(),
+		APIKey:  "old-key",
+	}
+
+	// Rotate key
+	newKey, err := cfg.RotateAPIKey()
+	if err != nil {
+		t.Fatalf("RotateAPIKey failed: %v", err)
+	}
+	if newKey == "" {
+		t.Error("Returned empty key")
+	}
+	if newKey == "old-key" {
+		t.Error("Key did not change")
+	}
+	if cfg.APIKey != newKey {
+		t.Errorf("Config APIKey not updated: expected %s, got %s", newKey, cfg.APIKey)
+	}
+
+	// Verify file content
+	content, err := os.ReadFile(tmpfile.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	contentStr := string(content)
+	if !strings.Contains(contentStr, "API_KEY="+newKey) {
+		t.Errorf("File content missing new key: %s", contentStr)
+	}
+	if !strings.Contains(contentStr, "PORT=8080") {
+		t.Errorf("File content missing preserved variables: %s", contentStr)
 	}
 }

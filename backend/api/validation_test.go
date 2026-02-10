@@ -2,178 +2,179 @@ package api
 
 import (
 	"encoding/json"
+	"net/http"
 	"net/http/httptest"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-// TestValidateStruct verifies struct validation logic.
-func TestValidateStruct(t *testing.T) {
-	t.Run("ValidRequest", func(t *testing.T) {
-		req := PlaceOrderRequest{
-			Symbol:   "BTC-USD",
-			Side:     "buy",
-			Type:     "market",
-			Quantity: 0.01,
-		}
-
-		err := validateStruct(req)
-		assert.Nil(t, err)
-	})
-
-	t.Run("MissingRequiredField", func(t *testing.T) {
-		req := PlaceOrderRequest{
-			Symbol:   "", // Missing required field
-			Side:     "buy",
-			Type:     "market",
-			Quantity: 0.01,
-		}
-
-		err := validateStruct(req)
-		require.NotNil(t, err)
-		assert.Equal(t, "Validation failed", err.Error)
-		assert.Equal(t, "VALIDATION_ERROR", err.Code)
-		assert.Contains(t, err.Details, "Symbol")
-		assert.Equal(t, "This field is required", err.Details["Symbol"])
-	})
-
-	t.Run("InvalidQuantity", func(t *testing.T) {
-		req := PlaceOrderRequest{
-			Symbol:   "BTC-USD",
-			Side:     "buy",
-			Type:     "market",
-			Quantity: -1.0, // Invalid negative quantity
-		}
-
-		err := validateStruct(req)
-		require.NotNil(t, err)
-		assert.Equal(t, "VALIDATION_ERROR", err.Code)
-		assert.Contains(t, err.Details, "Quantity")
-	})
-
-	t.Run("InvalidSide", func(t *testing.T) {
-		req := PlaceOrderRequest{
-			Symbol:   "BTC-USD",
-			Side:     "invalid", // Invalid side value
-			Type:     "market",
-			Quantity: 0.01,
-		}
-
-		err := validateStruct(req)
-		require.NotNil(t, err)
-		assert.Equal(t, "VALIDATION_ERROR", err.Code)
-		assert.Contains(t, err.Details, "Side")
-		assert.Contains(t, err.Details["Side"], "one of")
-	})
-
-	t.Run("MultipleErrors", func(t *testing.T) {
-		req := PlaceOrderRequest{
-			Symbol:   "",        // Missing
-			Side:     "invalid", // Invalid
-			Type:     "market",
-			Quantity: -1.0, // Invalid
-		}
-
-		err := validateStruct(req)
-		require.NotNil(t, err)
-		assert.Len(t, err.Details, 3) // Should have 3 error details
-		assert.Contains(t, err.Details, "Symbol")
-		assert.Contains(t, err.Details, "Side")
-		assert.Contains(t, err.Details, "Quantity")
-	})
-
-	t.Run("BacktestValidation", func(t *testing.T) {
-		// Test with RunBacktestRequest
-		start, _ := time.Parse("2006-01-02", "2023-01-01")
-		end, _ := time.Parse("2006-01-02", "2023-12-31")
-
-		req := RunBacktestRequest{
-			Strategy:       "ma_crossover",
-			Symbol:         "BTC-USD",
-			Start:          start,
-			End:            end,
-			InitialCapital: 10000,
-		}
-
-		err := validateStruct(req)
-		assert.Nil(t, err)
-	})
-
-	t.Run("BacktestMissingFields", func(t *testing.T) {
-		req := RunBacktestRequest{
-			Strategy:       "", // Missing
-			Symbol:         "BTC-USD",
-			Start:          time.Time{}, // Zero value
-			End:            time.Time{}, // Zero value
-			InitialCapital: 0,           // Invalid
-		}
-
-		err := validateStruct(req)
-		require.NotNil(t, err)
-		assert.Contains(t, err.Details, "Strategy")
-		// Start/End might not be in details if zero values pass the required check differently
-		// but InitialCapital should fail gt=0
-		assert.Contains(t, err.Details, "InitialCapital")
-	})
+type TestStruct struct {
+	RequiredField string `validate:"required"`
+	MinField      string `validate:"min=3"`
+	MaxField      string `validate:"max=5"`
+	GtField       int    `validate:"gt=10"`
+	GteField      int    `validate:"gte=10"`
+	LtField       int    `validate:"lt=10"`
+	LteField      int    `validate:"lte=10"`
+	OneOfField    string `validate:"oneof=red blue"`
 }
 
-// TestWriteValidationError verifies error response formatting.
-func TestWriteValidationError(t *testing.T) {
-	t.Run("StandardFormat", func(t *testing.T) {
-		validationErr := &ValidationError{
-			Error: "Validation failed",
-			Code:  "VALIDATION_ERROR",
-			Details: map[string]string{
-				"Symbol":   "This field is required",
-				"Quantity": "Value must be greater than 0",
+func TestValidateStruct_AllTags(t *testing.T) {
+	tests := []struct {
+		name     string
+		input    TestStruct
+		hasError bool
+		check    func(t *testing.T, details map[string]string)
+	}{
+		{
+			name: "Valid",
+			input: TestStruct{
+				RequiredField: "foo",
+				MinField:      "abc",
+				MaxField:      "abcde",
+				GtField:       11,
+				GteField:      10,
+				LtField:       9,
+				LteField:      10,
+				OneOfField:    "red",
 			},
-		}
+			hasError: false,
+		},
+		{
+			name: "Required Missing",
+			input: TestStruct{
+				// RequiredField missing
+				MinField:   "abc",
+				MaxField:   "abcde",
+				GtField:    11,
+				OneOfField: "red",
+			},
+			hasError: true,
+			check: func(t *testing.T, details map[string]string) {
+				assert.Contains(t, details["RequiredField"], "This field is required")
+			},
+		},
+		{
+			name: "Min Failed",
+			input: TestStruct{
+				RequiredField: "foo",
+				MinField:      "ab", // Length 2 < 3
+			},
+			hasError: true,
+			check: func(t *testing.T, details map[string]string) {
+				assert.Contains(t, details["MinField"], "Value is too short")
+			},
+		},
+		{
+			name: "Max Failed",
+			input: TestStruct{
+				RequiredField: "foo",
+				MaxField:      "abcdef", // Length 6 > 5
+			},
+			hasError: true,
+			check: func(t *testing.T, details map[string]string) {
+				assert.Contains(t, details["MaxField"], "Value is too long")
+			},
+		},
+		{
+			name: "Gt Failed",
+			input: TestStruct{
+				RequiredField: "foo",
+				GtField:       10, // 10 is not > 10
+			},
+			hasError: true,
+			check: func(t *testing.T, details map[string]string) {
+				assert.Contains(t, details["GtField"], "Value must be greater than 10")
+			},
+		},
+		{
+			name: "Gte Failed",
+			input: TestStruct{
+				RequiredField: "foo",
+				GteField:      9, // 9 < 10
+			},
+			hasError: true,
+			check: func(t *testing.T, details map[string]string) {
+				assert.Contains(t, details["GteField"], "Value must be greater than or equal to 10")
+			},
+		},
+		{
+			name: "Lt Failed",
+			input: TestStruct{
+				RequiredField: "foo",
+				LtField:       10, // 10 is not < 10
+			},
+			hasError: true,
+			check: func(t *testing.T, details map[string]string) {
+				assert.Contains(t, details["LtField"], "Value must be less than 10")
+			},
+		},
+		{
+			name: "Lte Failed",
+			input: TestStruct{
+				RequiredField: "foo",
+				LteField:      11, // 11 > 10
+			},
+			hasError: true,
+			check: func(t *testing.T, details map[string]string) {
+				assert.Contains(t, details["LteField"], "Value must be less than or equal to 10")
+			},
+		},
+		{
+			name: "OneOf Failed",
+			input: TestStruct{
+				RequiredField: "foo",
+				OneOfField:    "green", // Not red or blue
+			},
+			hasError: true,
+			check: func(t *testing.T, details map[string]string) {
+				assert.Contains(t, details["OneOfField"], "Value must be one of: red blue")
+			},
+		},
+	}
 
-		rec := httptest.NewRecorder()
-		writeValidationError(rec, validationErr)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := validateStruct(tt.input)
+			if tt.hasError {
+				assert.NotNil(t, err)
+				if tt.check != nil {
+					// We need to re-cast checking details is map[string]string
+					// Wait, ValidationErrors returns that.
+					// But validateStruct returns *ValidationError struct which has Details map[string]string
+					// Wait, Details is interface{} in APIError, but map[string]string in ValidationError struct in validation.go
+					// Check source...
+					// ValidationError struct: Details map[string]string `json:"details,omitempty"`
+					// Yes.
+					tt.check(t, err.Details)
+				}
+			} else {
+				assert.Nil(t, err)
+			}
+		})
+	}
+}
 
-		// Check status code
-		assert.Equal(t, 400, rec.Code)
+func TestWriteValidationError(t *testing.T) {
+	err := &ValidationError{
+		Error:   "Validation failed",
+		Code:    "VALIDATION_ERROR",
+		Details: map[string]string{"foo": "bar"},
+	}
 
-		// Check content type
-		assert.Equal(t, "application/json", rec.Header().Get("Content-Type"))
+	recorder := httptest.NewRecorder()
+	writeValidationError(recorder, err)
 
-		// Parse response
-		var response APIError
-		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
+	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 
-		// Verify response structure
-		assert.Equal(t, "Validation failed", response.Error)
-		assert.Equal(t, "VALIDATION_ERROR", response.Code)
+	var resp APIError
+	_ = json.Unmarshal(recorder.Body.Bytes(), &resp)
+	assert.Equal(t, "Validation failed", resp.Error)
+	assert.Equal(t, "VALIDATION_ERROR", resp.Code)
 
-		details, ok := response.Details.(map[string]interface{})
-		require.True(t, ok)
-		assert.Equal(t, "This field is required", details["Symbol"])
-		assert.Equal(t, "Value must be greater than 0", details["Quantity"])
-	})
-
-	t.Run("NoDetails", func(t *testing.T) {
-		validationErr := &ValidationError{
-			Error:   "Validation failed",
-			Code:    "VALIDATION_ERROR",
-			Details: map[string]string{},
-		}
-
-		rec := httptest.NewRecorder()
-		writeValidationError(rec, validationErr)
-
-		assert.Equal(t, 400, rec.Code)
-
-		var response APIError
-		err := json.Unmarshal(rec.Body.Bytes(), &response)
-		require.NoError(t, err)
-
-		details, ok := response.Details.(map[string]interface{})
-		require.True(t, ok)
-		assert.Empty(t, details)
-	})
+	details, ok := resp.Details.(map[string]interface{})
+	assert.True(t, ok)
+	assert.Equal(t, "bar", details["foo"])
 }

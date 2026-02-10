@@ -201,6 +201,7 @@ func TestOrderManager_CreateMarketOrder(t *testing.T) {
 func TestOrderManager_CreateLimitOrder(t *testing.T) {
 	broker := NewPaperBroker(10000)
 	require.NoError(t, broker.Connect())
+	broker.SetPrice("AAPL", 140.0) // Set price below limit to ensure Buy fill
 
 	om := NewOrderManager(broker, nil, nil, nil)
 
@@ -281,4 +282,47 @@ func TestOrderManager_Persistence(t *testing.T) {
 	// Verify in-memory cache is populated
 	allOrders = om2.GetAllOrders()
 	assert.Len(t, allOrders, 1)
+}
+
+func TestOrderManager_ModifyOrder(t *testing.T) {
+	broker := NewPaperBroker(10000)
+	require.NoError(t, broker.Connect())
+
+	om := NewOrderManager(broker, nil, nil, nil)
+
+	// Create a limit order
+	order, _ := om.CreateLimitOrder(context.Background(), "AAPL", models.OrderSideBuy, 10, 100.0)
+
+	// Modify it
+	modified, err := om.ModifyOrder(context.Background(), order.ID, 105.0, 15.0)
+	require.NoError(t, err)
+	assert.Equal(t, 105.0, modified.Price)
+	assert.Equal(t, 15.0, modified.Quantity)
+
+	// Verify cache update
+	retrieved, _ := om.GetOrder(order.ID)
+	assert.Equal(t, 105.0, retrieved.Price)
+}
+
+func TestOrderManager_PassThroughs(t *testing.T) {
+	broker := NewPaperBroker(10000)
+	require.NoError(t, broker.Connect())
+	broker.SetPrice("AAPL", 150.0)
+
+	om := NewOrderManager(broker, nil, nil, nil)
+
+	// GetBalance
+	bal, err := om.GetBalance()
+	require.NoError(t, err)
+	assert.Equal(t, 10000.0, bal.Cash)
+
+	// GetPositions (empty)
+	pos, err := om.GetPositions()
+	require.NoError(t, err)
+	assert.Empty(t, pos)
+
+	// GetTrades (empty)
+	trades, err := om.GetTrades()
+	require.NoError(t, err)
+	assert.Empty(t, trades)
 }
