@@ -57,7 +57,7 @@ func setupTestHandler() (*Handler, *MockDataProvider, *strategies.Registry) {
 
 	mockProvider := new(MockDataProvider)
 
-	handler := NewHandler(registry, mockProvider, cfg, nil, nil)
+	handler := NewHandler(registry, mockProvider, cfg, nil, nil, nil)
 	return handler, mockProvider, registry
 }
 
@@ -68,7 +68,7 @@ func TestHealthHandler(t *testing.T) {
 	// Add expectation for Name() call
 	mockProvider.On("Name").Return("mock_provider")
 
-	handler := NewHandler(nil, mockProvider, cfg, nil, nil)
+	handler := NewHandler(nil, mockProvider, cfg, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/health", nil)
 	rec := httptest.NewRecorder()
@@ -91,7 +91,7 @@ func TestHealthHandler(t *testing.T) {
 // TestMetricsHandler verifies metrics endpoint.
 func TestMetricsHandler(t *testing.T) {
 	cfg := &config.Config{TradingMode: "test"}
-	handler := NewHandler(nil, nil, cfg, nil, nil)
+	handler := NewHandler(nil, nil, cfg, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/metrics", nil)
 	rec := httptest.NewRecorder()
@@ -143,7 +143,7 @@ func TestGetStrategyHandler(t *testing.T) {
 	_ = registry.Register(strategies.NewMACrossover())
 	mockProvider := new(MockDataProvider)
 
-	router := NewRouter(cfg, registry, mockProvider, nil, nil)
+	router := NewRouter(cfg, registry, mockProvider, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/strategies/ma_crossover", nil)
 	rec := httptest.NewRecorder()
@@ -203,7 +203,7 @@ func TestGetBacktestResultHandler(t *testing.T) {
 	}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
-	router := NewRouter(cfg, registry, mockProvider, nil, nil)
+	router := NewRouter(cfg, registry, mockProvider, nil, nil, nil)
 
 	// We need to inject a result into the handler used by the router.
 	// Since NewRouter creates its own handler, we can't easily access it.
@@ -261,7 +261,7 @@ func TestRouterIntegration(t *testing.T) {
 	mockProvider := new(MockDataProvider)
 	mockProvider.On("Name").Return("mock_provider")
 
-	router := NewRouter(cfg, registry, mockProvider, nil, nil)
+	router := NewRouter(cfg, registry, mockProvider, nil, nil, nil)
 	assert.NotNil(t, router)
 
 	// Test health endpoint
@@ -358,9 +358,9 @@ func TestExecutionEndpoints(t *testing.T) {
 	mockBroker := new(MockBroker)
 
 	// Create OrderManager with MockBroker
-	orderManager := execution.NewOrderManager(mockBroker, nil, nil)
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
 
-	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil)
+	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil, nil)
 
 	// Test GetBalance
 	t.Run("GetBalance", func(t *testing.T) {
@@ -437,9 +437,9 @@ func TestPlaceOrderHandler(t *testing.T) {
 	mockBroker := new(MockBroker)
 
 	// Create OrderManager with MockBroker
-	orderManager := execution.NewOrderManager(mockBroker, nil, nil)
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
 
-	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil)
+	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil, nil)
 
 	t.Run("MarketBuy", func(t *testing.T) {
 		// Expectation: broker.PlaceOrder called
@@ -501,8 +501,8 @@ func TestCancelOrderHandler(t *testing.T) {
 	mockProvider := new(MockDataProvider)
 	mockBroker := new(MockBroker)
 
-	orderManager := execution.NewOrderManager(mockBroker, nil, nil)
-	router := NewRouter(cfg, registry, mockProvider, orderManager, nil)
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+	router := NewRouter(cfg, registry, mockProvider, orderManager, nil, nil)
 
 	t.Run("SuccessfulCancellation", func(t *testing.T) {
 		// Expectation: broker.CancelOrder succeeds
@@ -562,7 +562,7 @@ func TestStartEngineHandler(t *testing.T) {
 
 	t.Run("EngineNotAvailable", func(t *testing.T) {
 		// Handler with nil engine
-		handler := NewHandler(registry, mockProvider, cfg, nil, nil)
+		handler := NewHandler(registry, mockProvider, cfg, nil, nil, nil)
 
 		payload := map[string]bool{"confirm": true}
 		body, _ := json.Marshal(payload)
@@ -581,9 +581,9 @@ func TestStartEngineHandler(t *testing.T) {
 	t.Run("WithoutConfirmation", func(t *testing.T) {
 		// Create a real engine for this test (won't actually start it)
 		mockBroker := new(MockBroker)
-		orderManager := execution.NewOrderManager(mockBroker, nil, nil)
-		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, []string{"AAPL"}, time.Minute)
-		handler := NewHandler(registry, mockProvider, cfg, nil, testEngine)
+		orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, nil, []string{"AAPL"}, time.Minute)
+		handler := NewHandler(registry, mockProvider, cfg, nil, testEngine, nil)
 
 		payload := map[string]bool{"confirm": false}
 		body, _ := json.Marshal(payload)
@@ -611,7 +611,7 @@ func TestStopEngineHandler(t *testing.T) {
 	mockProvider := new(MockDataProvider)
 
 	t.Run("EngineNotAvailable", func(t *testing.T) {
-		handler := NewHandler(registry, mockProvider, cfg, nil, nil)
+		handler := NewHandler(registry, mockProvider, cfg, nil, nil, nil)
 
 		payload := map[string]bool{"confirm": true}
 		body, _ := json.Marshal(payload)
@@ -629,9 +629,9 @@ func TestStopEngineHandler(t *testing.T) {
 
 	t.Run("WithoutConfirmation", func(t *testing.T) {
 		mockBroker := new(MockBroker)
-		orderManager := execution.NewOrderManager(mockBroker, nil, nil)
-		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, []string{"AAPL"}, time.Minute)
-		handler := NewHandler(registry, mockProvider, cfg, nil, testEngine)
+		orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, nil, []string{"AAPL"}, time.Minute)
+		handler := NewHandler(registry, mockProvider, cfg, nil, testEngine, nil)
 
 		payload := map[string]bool{"confirm": false}
 		body, _ := json.Marshal(payload)
@@ -663,7 +663,7 @@ func TestGetConfigValidationHandler(t *testing.T) {
 	mockProvider := new(MockDataProvider)
 	mockProvider.On("Name").Return("yahoo")
 
-	handler := NewHandler(registry, mockProvider, cfg, nil, nil)
+	handler := NewHandler(registry, mockProvider, cfg, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config/validation", nil)
 	rec := httptest.NewRecorder()

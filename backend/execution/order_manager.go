@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/alexherrero/sherwood/backend/models"
+	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/rs/zerolog/log"
 )
 
@@ -26,6 +27,7 @@ type OrderManager struct {
 	riskManager *RiskManager
 	orders      map[string]models.Order // In-memory cache
 	store       OrderStore              // Database persistence
+	wsManager   *realtime.WebSocketManager
 	mu          sync.RWMutex
 }
 
@@ -35,15 +37,22 @@ type OrderManager struct {
 //   - broker: The broker for order execution
 //   - riskManager: Risk manager for position limits
 //   - store: Optional persistent storage for orders (can be nil)
+//   - wsManager: WebSocket manager for real-time updates (can be nil)
 //
 // Returns:
 //   - *OrderManager: The order manager instance
-func NewOrderManager(broker Broker, riskManager *RiskManager, store OrderStore) *OrderManager {
+func NewOrderManager(
+	broker Broker,
+	riskManager *RiskManager,
+	store OrderStore,
+	wsManager *realtime.WebSocketManager,
+) *OrderManager {
 	return &OrderManager{
 		broker:      broker,
 		riskManager: riskManager,
 		orders:      make(map[string]models.Order),
 		store:       store,
+		wsManager:   wsManager,
 	}
 }
 
@@ -95,6 +104,11 @@ func (om *OrderManager) SubmitOrder(order models.Order) (*models.Order, error) {
 		Float64("price", result.Price).
 		Str("status", string(result.Status)).
 		Msg("Order submitted")
+
+	// Broadcast update
+	if om.wsManager != nil {
+		om.wsManager.Broadcast("order_update", result)
+	}
 
 	return result, nil
 }

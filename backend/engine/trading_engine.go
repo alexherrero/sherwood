@@ -9,6 +9,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/data"
 	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/models"
+	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/rs/zerolog/log"
 )
@@ -18,6 +19,7 @@ type TradingEngine struct {
 	provider     data.DataProvider
 	registry     *strategies.Registry
 	orderManager *execution.OrderManager
+	wsManager    *realtime.WebSocketManager
 	symbols      []string
 	interval     time.Duration
 	stopCh       chan struct{}
@@ -32,6 +34,7 @@ type TradingEngine struct {
 //   - provider: Data provider for market data
 //   - registry: Strategy registry
 //   - orderManager: Execution order manager
+//   - wsManager: WebSocket manager for real-time updates (can be nil)
 //   - symbols: List of symbols to trade
 //   - interval: Polling interval
 //
@@ -41,6 +44,7 @@ func NewTradingEngine(
 	provider data.DataProvider,
 	registry *strategies.Registry,
 	orderManager *execution.OrderManager,
+	wsManager *realtime.WebSocketManager,
 	symbols []string,
 	interval time.Duration,
 ) *TradingEngine {
@@ -48,6 +52,7 @@ func NewTradingEngine(
 		provider:     provider,
 		registry:     registry,
 		orderManager: orderManager,
+		wsManager:    wsManager,
 		symbols:      symbols,
 		interval:     interval,
 		stopCh:       make(chan struct{}),
@@ -146,6 +151,15 @@ func (e *TradingEngine) processSymbol(symbol string) error {
 
 	if len(candles) == 0 {
 		return fmt.Errorf("no data returned")
+	}
+
+	// Broadcast latest candle
+	if e.wsManager != nil {
+		latest := candles[len(candles)-1]
+		e.wsManager.Broadcast("market_data", map[string]interface{}{
+			"symbol": symbol,
+			"candle": latest,
+		})
 	}
 
 	// 2. Iterate over strategies
