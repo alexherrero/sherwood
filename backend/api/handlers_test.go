@@ -347,6 +347,19 @@ func (m *MockBroker) GetBalance() (*models.Balance, error) {
 	return args.Get(0).(*models.Balance), args.Error(1)
 }
 
+func (m *MockBroker) GetTrades() ([]models.Trade, error) {
+	args := m.Called()
+	return args.Get(0).([]models.Trade), args.Error(1)
+}
+
+func (m *MockBroker) ModifyOrder(orderID string, newPrice, newQuantity float64) (*models.Order, error) {
+	args := m.Called(orderID, newPrice, newQuantity)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Order), args.Error(1)
+}
+
 // TestExecutionEndpoints verifies /execution routes
 func TestExecutionEndpoints(t *testing.T) {
 	cfg := &config.Config{
@@ -488,6 +501,91 @@ func TestPlaceOrderHandler(t *testing.T) {
 		handler.PlaceOrderHandler(rec, req)
 
 		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}
+
+// TestModifyOrderHandler verifies order modification endpoint.
+func TestModifyOrderHandler(t *testing.T) {
+	cfg := &config.Config{
+		TradingMode:    "test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
+	registry := strategies.NewRegistry()
+	mockProvider := new(MockDataProvider)
+	mockBroker := new(MockBroker)
+
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+	router := NewRouter(cfg, registry, mockProvider, orderManager, nil, nil)
+
+	t.Run("SuccessfulModification", func(t *testing.T) {
+		expectedOrder := &models.Order{
+			ID:       "test-order-1",
+			Symbol:   "AAPL",
+			Price:    155.0,
+			Quantity: 10,
+		}
+		mockBroker.On("ModifyOrder", "test-order-1", 155.0, 10.0).Return(expectedOrder, nil).Once()
+
+		payload := map[string]interface{}{
+			"price":    155.0,
+			"quantity": 10.0,
+		}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/execution/orders/test-order-1", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var order models.Order
+		err := json.Unmarshal(rec.Body.Bytes(), &order)
+		require.NoError(t, err)
+		assert.Equal(t, 155.0, order.Price)
+	})
+
+	t.Run("InvalidInput", func(t *testing.T) {
+		// Empty payload (no price or quantity)
+		payload := map[string]interface{}{}
+		body, _ := json.Marshal(payload)
+		req := httptest.NewRequest(http.MethodPatch, "/api/v1/execution/orders/test-order-1", bytes.NewReader(body))
+		rec := httptest.NewRecorder()
+
+		router.ServeHTTP(rec, req)
+
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+	})
+}
+
+// TestGetTradesHandler verifies trades retrieval endpoint.
+func TestGetTradesHandler(t *testing.T) {
+	cfg := &config.Config{
+		TradingMode:    "test",
+		AllowedOrigins: []string{"http://localhost:3000"},
+	}
+	registry := strategies.NewRegistry()
+	mockProvider := new(MockDataProvider)
+	mockBroker := new(MockBroker)
+
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil, nil)
+
+	t.Run("GetTrades", func(t *testing.T) {
+		expectedTrades := []models.Trade{
+			{ID: "trade-1", Symbol: "AAPL", Quantity: 10, Price: 150},
+		}
+		mockBroker.On("GetTrades").Return(expectedTrades, nil).Once()
+
+		req := httptest.NewRequest(http.MethodGet, "/api/v1/execution/trades", nil)
+		rec := httptest.NewRecorder()
+
+		handler.GetTradesHandler(rec, req)
+
+		assert.Equal(t, http.StatusOK, rec.Code)
+		var trades []models.Trade
+		err := json.Unmarshal(rec.Body.Bytes(), &trades)
+		require.NoError(t, err)
+		assert.Len(t, trades, 1)
+		assert.Equal(t, "trade-1", trades[0].ID)
 	})
 }
 

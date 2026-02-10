@@ -228,6 +228,67 @@ func (h *Handler) CancelOrderHandler(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "cancelled", "id": id})
 }
 
+// ModifyOrderRequest defines the payload for modifying an order.
+type ModifyOrderRequest struct {
+	Price    float64 `json:"price" validate:"omitempty,gt=0"`
+	Quantity float64 `json:"quantity" validate:"omitempty,gt=0"`
+}
+
+// ModifyOrderHandler handles order modification.
+func (h *Handler) ModifyOrderHandler(w http.ResponseWriter, r *http.Request) {
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		writeError(w, http.StatusBadRequest, "Order ID is required")
+		return
+	}
+
+	var req ModifyOrderRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Validate request
+	if valErr := validateStruct(req); valErr != nil {
+		writeValidationError(w, valErr)
+		return
+	}
+
+	if req.Price == 0 && req.Quantity == 0 {
+		writeError(w, http.StatusBadRequest, "Must provide either new price or new quantity")
+		return
+	}
+
+	order, err := h.orderManager.ModifyOrder(r.Context(), id, req.Price, req.Quantity)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to modify order: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, order)
+}
+
+// GetTradesHandler returns a list of executed trades.
+func (h *Handler) GetTradesHandler(w http.ResponseWriter, r *http.Request) {
+	if h.orderManager == nil {
+		writeError(w, http.StatusServiceUnavailable, "Execution layer not available")
+		return
+	}
+
+	trades, err := h.orderManager.GetTrades()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to get trades: %v", err))
+		return
+	}
+
+	writeJSON(w, http.StatusOK, trades)
+}
+
 // getQueryInt parses a query parameter as an integer.
 func getQueryInt(r *http.Request, key string, defaultVal int) int {
 	valStr := r.URL.Query().Get(key)
