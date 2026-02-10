@@ -114,9 +114,9 @@ func TestStdDev(t *testing.T) {
 		t.Error("Expected NaN for first few elements")
 	}
 
-	// Manual check for index 2 (4, 4, 4) -> should be 0
-	if result[2] != 0 {
-		t.Errorf("Expected 0 stddev, got %f", result[2])
+	// Index 3 (4th element) uses window [4, 4, 4] -> should be 0
+	if result[3] != 0 {
+		t.Errorf("Expected 0 stddev at index 3, got %f", result[3])
 	}
 
 	// Manual check for index 5 (4, 5, 5) -> mean = 14/3 = 4.666

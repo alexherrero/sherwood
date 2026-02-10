@@ -13,11 +13,51 @@ import (
 	"github.com/alexherrero/sherwood/backend/models"
 )
 
+// BinanceAPI defines the interface for Binance API calls.
+type BinanceAPI interface {
+	GetKlines(symbol, interval string, start, end int64, limit int) ([]*binance.Kline, error)
+	GetPrices(symbol string) ([]*binance.SymbolPrice, error)
+	GetExchangeInfo(symbol string) (*binance.ExchangeInfo, error)
+}
+
+// defaultBinanceAPI implements BinanceAPI using the official library.
+type defaultBinanceAPI struct {
+	client *binance.Client
+}
+
+func (api *defaultBinanceAPI) GetKlines(symbol, interval string, start, end int64, limit int) ([]*binance.Kline, error) {
+	service := api.client.NewKlinesService().
+		Symbol(symbol).
+		Interval(interval).
+		Limit(limit)
+
+	if start > 0 {
+		service = service.StartTime(start)
+	}
+	if end > 0 {
+		service = service.EndTime(end)
+	}
+
+	return service.Do(context.Background())
+}
+
+func (api *defaultBinanceAPI) GetPrices(symbol string) ([]*binance.SymbolPrice, error) {
+	return api.client.NewListPricesService().
+		Symbol(symbol).
+		Do(context.Background())
+}
+
+func (api *defaultBinanceAPI) GetExchangeInfo(symbol string) (*binance.ExchangeInfo, error) {
+	return api.client.NewExchangeInfoService().
+		Symbol(symbol).
+		Do(context.Background())
+}
+
 // BinanceProvider fetches cryptocurrency data from Binance exchange.
 // Uses the official Binance API via adshao/go-binance library.
 // Supports both Binance.com (international) and Binance.US (for US users).
 type BinanceProvider struct {
-	client      *binance.Client
+	api         BinanceAPI
 	rateLimiter time.Time
 	minInterval time.Duration
 	useUS       bool
@@ -34,7 +74,7 @@ type BinanceProvider struct {
 func NewBinanceProvider(apiKey, apiSecret string) *BinanceProvider {
 	client := binance.NewClient(apiKey, apiSecret)
 	return &BinanceProvider{
-		client:      client,
+		api:         &defaultBinanceAPI{client: client},
 		rateLimiter: time.Time{},
 		minInterval: 100 * time.Millisecond, // ~10 requests/second max
 		useUS:       false,
@@ -54,7 +94,7 @@ func NewBinanceUSProvider(apiKey, apiSecret string) *BinanceProvider {
 	client := binance.NewClient(apiKey, apiSecret)
 	client.BaseURL = "https://api.binance.us"
 	return &BinanceProvider{
-		client:      client,
+		api:         &defaultBinanceAPI{client: client},
 		rateLimiter: time.Time{},
 		minInterval: 100 * time.Millisecond,
 		useUS:       true,
@@ -168,13 +208,7 @@ func (p *BinanceProvider) GetHistoricalData(symbol string, start, end time.Time,
 	for currentStart.Before(end) {
 		p.rateLimit()
 
-		klines, err := p.client.NewKlinesService().
-			Symbol(binanceSymbol).
-			Interval(binanceInterval).
-			StartTime(currentStart.UnixMilli()).
-			EndTime(end.UnixMilli()).
-			Limit(1000).
-			Do(context.Background())
+		klines, err := p.api.GetKlines(binanceSymbol, binanceInterval, currentStart.UnixMilli(), end.UnixMilli(), 1000)
 
 		if err != nil {
 			return nil, fmt.Errorf("failed to fetch klines for %s: %w", binanceSymbol, err)
@@ -233,9 +267,7 @@ func (p *BinanceProvider) GetLatestPrice(symbol string) (float64, error) {
 
 	binanceSymbol := convertSymbol(symbol)
 
-	prices, err := p.client.NewListPricesService().
-		Symbol(binanceSymbol).
-		Do(context.Background())
+	prices, err := p.api.GetPrices(binanceSymbol)
 
 	if err != nil {
 		return 0.0, fmt.Errorf("failed to fetch price for %s: %w", binanceSymbol, err)
@@ -266,9 +298,7 @@ func (p *BinanceProvider) GetTicker(symbol string) (*models.Ticker, error) {
 
 	binanceSymbol := convertSymbol(symbol)
 
-	info, err := p.client.NewExchangeInfoService().
-		Symbol(binanceSymbol).
-		Do(context.Background())
+	info, err := p.api.GetExchangeInfo(binanceSymbol)
 
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch exchange info for %s: %w", binanceSymbol, err)

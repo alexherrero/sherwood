@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/alexherrero/sherwood/backend/config"
@@ -56,4 +57,71 @@ func TestRotateAPIKeyHandler(t *testing.T) {
 	content, err := os.ReadFile(tmpEnv)
 	require.NoError(t, err)
 	assert.Contains(t, string(content), "API_KEY="+newKey)
+}
+
+func TestGenerateConfigWarnings(t *testing.T) {
+	tests := []struct {
+		name         string
+		cfg          *config.Config
+		enabledCount int
+		wantWarning  string
+	}{
+		{
+			name: "NoStrategies",
+			cfg: &config.Config{
+				TradingMode: config.ModeDryRun,
+			},
+			enabledCount: 0,
+			wantWarning:  "No strategies enabled",
+		},
+		{
+			name: "LiveNoKey",
+			cfg: &config.Config{
+				TradingMode: config.ModeLive,
+				APIKey:      "",
+			},
+			enabledCount: 1,
+			wantWarning:  "Running in LIVE mode without API_KEY",
+		},
+		{
+			name: "TiingoNoKey",
+			cfg: &config.Config{
+				TradingMode:  config.ModeDryRun,
+				DataProvider: "tiingo",
+				TiingoAPIKey: "",
+			},
+			enabledCount: 1,
+			wantWarning:  "Tiingo provider selected but TIINGO_API_KEY not set",
+		},
+		{
+			name: "BinanceNoKey",
+			cfg: &config.Config{
+				TradingMode:   config.ModeDryRun,
+				DataProvider:  "binance",
+				BinanceAPIKey: "",
+			},
+			enabledCount: 1,
+			wantWarning:  "Binance provider selected but API credentials not set",
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			warnings := generateConfigWarnings(tt.cfg, tt.enabledCount)
+			found := false
+			for _, w := range warnings {
+				if strings.Contains(w, tt.wantWarning) {
+					found = true
+					break
+				}
+			}
+			if !found {
+				t.Errorf("Expected warning containing '%s', got %v", tt.wantWarning, warnings)
+			}
+		})
+	}
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && s[0:len(substr)] == substr // Prefix check is enough for these messages
 }
