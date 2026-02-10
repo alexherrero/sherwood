@@ -80,6 +80,10 @@ func (m *MockBroker) GetOrder(id string) (*models.Order, error)      { return ni
 func (m *MockBroker) GetPositions() ([]models.Position, error)       { return nil, nil }
 func (m *MockBroker) GetPosition(s string) (*models.Position, error) { return nil, nil }
 func (m *MockBroker) GetBalance() (*models.Balance, error)           { return nil, nil }
+func (m *MockBroker) GetTrades() ([]models.Trade, error)             { return nil, nil }
+func (m *MockBroker) ModifyOrder(id string, p, q float64) (*models.Order, error) {
+	return nil, nil
+}
 
 func TestTradingEngine_RunLoop(t *testing.T) {
 	// Setup Mocks

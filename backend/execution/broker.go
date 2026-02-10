@@ -78,4 +78,23 @@ type Broker interface {
 	//   - *models.Balance: Account balance
 	//   - error: Any error encountered
 	GetBalance() (*models.Balance, error)
+
+	// GetTrades retrieves executed trades.
+	//
+	// Returns:
+	//   - []models.Trade: Executed trades
+	//   - error: Any error encountered
+	GetTrades() ([]models.Trade, error)
+
+	// ModifyOrder updates an existing open order.
+	//
+	// Args:
+	//   - orderID: ID of the order to modify
+	//   - newPrice: New limit price (0 to keep current)
+	//   - newQuantity: New quantity (0 to keep current)
+	//
+	// Returns:
+	//   - *models.Order: The modified order
+	//   - error: Any error encountered
+	ModifyOrder(orderID string, newPrice, newQuantity float64) (*models.Order, error)
 }

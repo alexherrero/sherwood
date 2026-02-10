@@ -269,3 +269,65 @@ func (b *PaperBroker) GetBalance() (*models.Balance, error) {
 	defer b.mu.RUnlock()
 	return &b.balance, nil
 }
+
+// GetTrades retrieves executed trades.
+func (b *PaperBroker) GetTrades() ([]models.Trade, error) {
+	b.mu.RLock()
+	defer b.mu.RUnlock()
+
+	var trades []models.Trade
+	for _, order := range b.orders {
+		if order.Status == models.OrderStatusFilled {
+			// In paper trading, we assume 1 order = 1 trade for simplicity
+			trades = append(trades, models.Trade{
+				ID:         "trade-" + order.ID,
+				OrderID:    order.ID,
+				Symbol:     order.Symbol,
+				Side:       order.Side,
+				Quantity:   order.FilledQuantity,
+				Price:      order.AveragePrice,
+				ExecutedAt: order.UpdatedAt,
+			})
+		}
+	}
+	return trades, nil
+}
+
+// ModifyOrder updates an existing open order.
+func (b *PaperBroker) ModifyOrder(orderID string, newPrice, newQuantity float64) (*models.Order, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+
+	order, exists := b.orders[orderID]
+	if !exists {
+		return nil, fmt.Errorf("order not found: %s", orderID)
+	}
+
+	// Only pending or submitted orders can be modified
+	if order.Status != models.OrderStatusPending && order.Status != models.OrderStatusSubmitted {
+		return nil, fmt.Errorf("cannot modify order in status: %s", order.Status)
+	}
+
+	// Update fields if provided
+	if newPrice > 0 {
+		if order.Type == models.OrderTypeMarket {
+			return nil, fmt.Errorf("cannot set price for market order")
+		}
+		order.Price = newPrice
+	}
+
+	if newQuantity > 0 {
+		order.Quantity = newQuantity
+	}
+
+	order.UpdatedAt = time.Now()
+	b.orders[orderID] = order
+
+	log.Info().
+		Str("order_id", orderID).
+		Float64("new_price", order.Price).
+		Float64("new_quantity", order.Quantity).
+		Msg("Order modified")
+
+	return &order, nil
+}

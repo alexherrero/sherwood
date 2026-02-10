@@ -344,3 +344,57 @@ func (om *OrderManager) GetPositions() ([]models.Position, error) {
 func (om *OrderManager) GetBalance() (*models.Balance, error) {
 	return om.broker.GetBalance()
 }
+
+// GetTrades retrieves executed trades from the broker.
+//
+// Returns:
+//   - []models.Trade: Executed trades
+//   - error: Any error encountered
+func (om *OrderManager) GetTrades() ([]models.Trade, error) {
+	return om.broker.GetTrades()
+}
+
+// ModifyOrder modifies an existing open order.
+// The context carries audit information (user IP, API key ID) for logging.
+//
+// Args:
+//   - ctx: Context with audit information
+//   - orderID: ID of the order to modify
+//   - newPrice: New limit price (0 to keep current)
+//   - newQuantity: New quantity (0 to keep current)
+//
+// Returns:
+//   - *models.Order: The modified order
+//   - error: Any error encountered
+func (om *OrderManager) ModifyOrder(ctx context.Context, orderID string, newPrice, newQuantity float64) (*models.Order, error) {
+	log.Info().
+		Str("order_id", orderID).
+		Float64("new_price", newPrice).
+		Float64("new_quantity", newQuantity).
+		Str("user_ip", auditIPFromCtx(ctx)).
+		Str("api_key_id", auditKeyIDFromCtx(ctx)).
+		Msg("Order modification requested")
+
+	order, err := om.broker.ModifyOrder(orderID, newPrice, newQuantity)
+	if err != nil {
+		log.Warn().
+			Str("order_id", orderID).
+			Err(err).
+			Msg("Order modification failed")
+		return nil, err
+	}
+
+	// Update local cache
+	om.mu.Lock()
+	om.orders[order.ID] = *order
+	om.mu.Unlock()
+
+	// Update persistence
+	if om.store != nil {
+		if err := om.store.SaveOrder(*order); err != nil {
+			log.Error().Err(err).Str("order_id", order.ID).Msg("Failed to persist modified order")
+		}
+	}
+
+	return order, nil
+}

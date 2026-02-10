@@ -120,8 +120,10 @@ func NewRouter(
 			r.Get("/orders", h.GetOrdersHandler)
 			r.Post("/orders", h.PlaceOrderHandler)
 			r.Get("/orders/{id}", h.GetOrderHandler)
+			r.Patch("/orders/{id}", h.ModifyOrderHandler) // New route
 			r.Delete("/orders/{id}", h.CancelOrderHandler)
 			r.Get("/history", h.GetOrderHistoryHandler) // Alias/wrapper for GetOrders
+			r.Get("/trades", h.GetTradesHandler)        // New route
 			r.Get("/positions", h.GetPositionsHandler)
 			r.Get("/balance", h.GetBalanceHandler)
 		})
