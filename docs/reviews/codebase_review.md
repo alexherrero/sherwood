@@ -4,7 +4,7 @@
 
 The backend foundation for Sherwood is solid, with a well-structured Go application following the `DESIGN.md`. All core packages (`api`, `data`, `strategies`, `execution`, `backtesting`) are in place and contain functional code with unit tests.
 
-However, several critical components are missing for a "production-ready" automated trading system. The current state is more of a "Backtesting Engine & API" than a live trading bot.
+The backend is now **production-ready for proof-of-concept deployment**. Critical gaps (trading engine, execution wiring, dynamic configuration, security hardening, API completeness) have been addressed. Remaining work is the **frontend** and **deployment configuration**.
 
 ## Critical Gaps (Must Fix for functionality)
 

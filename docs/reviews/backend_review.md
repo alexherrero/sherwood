@@ -75,31 +75,33 @@ if subtle.ConstantTimeCompare([]byte(apiKey), []byte(cfg.APIKey)) != 1 {
 
 ---
 
-### 🔴 3. Missing Critical Order Endpoints
+### 🔴 3. Missing Critical Order Endpoints ✅ **RESOLVED**
 
 **Issue:** Cannot GET individual order by ID via REST API
 
-**Location:** `backend/api/router.go`  
-**Risk:** Frontend cannot display order details  
-**Impact:** High - Frontend functionality blocked
+**Status:** ✅ **IMPLEMENTED** - 2026-02-09
 
-**Current Routes:**
+**Implementation:**
 
 ```go
 r.Route("/execution", func(r chi.Router) {
-    r.Get("/orders", h.GetOrdersHandler)           // ✅ List all
+    r.Get("/orders", h.GetOrdersHandler)           // ✅ List all (with pagination)
     r.Post("/orders", h.PlaceOrderHandler)          // ✅ Create
+    r.Get("/orders/{id}", h.GetOrderHandler)        // ✅ Get single order
     r.Delete("/orders/{id}", h.CancelOrderHandler)  // ✅ Cancel
-    // ❌ MISSING: r.Get("/orders/{id}", h.GetOrderHandler)
+    r.Get("/history", h.GetOrderHistoryHandler)     // ✅ Closed orders
 })
 ```
 
-**Recommendation:** Add missing CRUD endpoints
+**Files:**
 
-```go
-r.Get("/orders/{id}", h.GetOrderHandler)    // Get single order
-r.Patch("/orders/{id}", h.UpdateOrderHandler) // Update order (optional)
-```
+- `backend/api/handlers_orders.go` - GetOrderHandler, GetOrderHistoryHandler
+- `backend/api/router.go` - Updated routes
+
+**Risk:** ~~Frontend cannot display order details~~ **MITIGATED**  
+**Impact:** ~~High~~ **PROTECTED**
+
+**Remaining:** `PATCH /orders/{id}` (order modification) deferred to PENDING.md
 
 ---
 
@@ -227,156 +229,104 @@ r.Use(func(next http.Handler) http.Handler {
 
 ## Medium Priority Findings (P2 - Quality Improvements)
 
-### 📋 7. Inconsistent Error Response Format
+### 📋 7. Inconsistent Error Response Format ✅ **RESOLVED**
 
 **Issue:** Error responses vary across endpoints
 
-**Examples:**
+**Status:** ✅ **IMPLEMENTED** - 2026-02-09
+
+**Implementation:** Standardized `writeError` helper used across all handlers.
 
 ```go
-// handlers.go:92 - Plain text
-http.Error(w, "strategy not found", http.StatusNotFound)
-
-// handlers.go:142 - JSON
-writeJSON(w, http.StatusBadRequest, map[string]string{"error": msg})
-
-// handlers.go:430 - Different JSON structure
-writeJSON(w, http.StatusBadRequest, ErrorResponse{Error: "..."})
+func writeError(w http.ResponseWriter, status int, message string, code ...string) { ... }
 ```
 
-**Recommendation:** Standardize error responses
+**Files:**
 
-```go
-type APIError struct {
-    Error   string `json:"error"`
-    Code    string `json:"code"`
-    Details string `json:"details,omitempty"`
-}
+- `backend/api/handlers.go` - writeError helper
+- `backend/api/handlers_orders.go` - All error paths use writeError
+- `backend/api/handlers_engine.go` - All error paths use writeError
+- `backend/api/handlers_backtest.go` - All error paths use writeError
 
-func writeError(w http.ResponseWriter, status int, code, message string) {
-    writeJSON(w, status, APIError{
-        Error: message,
-        Code:  code,
-    })
-}
-
-// Usage
-writeError(w, http.StatusNotFound, "STRATEGY_NOT_FOUND", "Strategy 'xyz' not found")
-```
+**Risk:** ~~Inconsistent frontend error parsing~~ **MITIGATED**
 
 ---
 
-### 📋 8. Missing API Pagination
+### 📋 8. Missing API Pagination ✅ **RESOLVED**
 
 **Issue:** `GET /orders` returns all orders without pagination
 
-**Location:** `backend/api/handlers.go:360`  
-**Risk:** Performance degradation with large datasets  
-**Impact:** Medium - Slow response times
+**Status:** ✅ **IMPLEMENTED** - 2026-02-09
 
-**Current:**
+**Implementation:** GetOrdersHandler now supports pagination and filtering via query parameters.
+
+**Testing:** Comprehensive pagination tests in `backend/api/handlers_pagination_test.go`
+
+**Files:**
+
+- `backend/api/handlers_orders.go` - Pagination and filtering support
+- `backend/api/handlers_pagination_test.go` - Pagination tests
+
+**Risk:** ~~Performance degradation with large datasets~~ **MITIGATED**
+
+---
+
+### 📋 9. No Health Check Details ✅ **RESOLVED**
+
+**Issue:** Health endpoint only returns "ok", no subsystem status
+
+**Status:** ✅ **IMPLEMENTED** - 2026-02-09
+
+**Implementation:** Enhanced health handler now returns subsystem checks, mode, and timestamp.
 
 ```go
-func (h *Handler) GetOrdersHandler(w http.ResponseWriter, r *http.Request) {
-    orders := h.orderManager.GetAllOrders() // ⚠️ Returns ALL orders
-    writeJSON(w, http.StatusOK, orders)
-}
-```
-
-**Recommendation:**
-
-```go
-func (h *Handler) GetOrdersHandler(w http.ResponseWriter, r *http.Request) {
-    // Parse pagination params
-    page := getQueryInt(r, "page", 1)
-    limit := getQueryInt(r, "limit", 50)
-    status := r.URL.Query().Get("status") // Filter by status
-    
-    // Return paginated response
+func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
+    checks := make(map[string]string)
+    // Checks execution layer and data provider status
     writeJSON(w, http.StatusOK, map[string]interface{}{
-        "orders": paginatedOrders,
-        "page": page,
-        "limit": limit,
-        "total": totalCount,
+        "status": status, "mode": ..., "timestamp": ..., "checks": checks,
     })
 }
 ```
 
----
+**Files:**
 
-### 📋 9. No Health Check Details
+- `backend/api/handlers_health.go` - Enhanced HealthHandler + MetricsHandler
 
-**Issue:** Health endpoint only returns "ok", no subsystem status
-
-**Location:** `backend/api/handlers.go:64-70`  
-**Risk:** Cannot diagnose partial failures  
-**Impact:** Low-Medium - Operational visibility
-
-**Current:**
-
-```go
-func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
-    writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-}
-```
-
-**Recommendation:**
-
-```go
-func (h *Handler) HealthHandler(w http.ResponseWriter, r *http.Request) {
-    health := map[string]interface{}{
-        "status": "ok",
-        "timestamp": time.Now(),
-        "checks": map[string]string{
-            "database": checkDatabase(h.db),      // "ok" or "degraded"
-            "broker": checkBroker(h.orderManager), // "connected" or "disconnected"
-            "provider": checkProvider(h.provider), // "ok" or "error"
-        },
-    }
-    writeJSON(w, http.StatusOK, health)
-}
-```
+**Risk:** ~~Cannot diagnose partial failures~~ **MITIGATED**
 
 ---
 
-### 📋 10. Missing Order History Endpoint
+### 📋 10. Missing Order History Endpoint ✅ **PARTIALLY RESOLVED**
 
 **Issue:** No way to query historical/closed orders
 
-**Location:** API routes  
-**Risk:** Frontend cannot display trade history  
-**Impact:** Medium - Feature gap
+**Status:** ✅ **PARTIALLY IMPLEMENTED** - 2026-02-09
 
-**Recommendation:** Add dedicated endpoint
+**Implemented:**
 
-```go
-r.Get("/execution/history", h.GetOrderHistoryHandler) // Closed/filled orders only
-r.Get("/execution/trades", h.GetTradesHandler)        // Individual trade executions
-```
+- `GET /execution/history` - GetOrderHistoryHandler (closed/filled orders) ✅
+
+**Still Missing:**
+
+- `GET /execution/trades` - Individual trade executions (deferred to PENDING.md #12)
+
+**Files:**
+
+- `backend/api/handlers_orders.go` - GetOrderHistoryHandler
+- `backend/api/router.go` - Route registered
 
 ---
 
 ### 📋 11. No Logging of Sensitive Actions
 
-**Issue:** Order placements not logged with sufficient detail
+**Issue:** Order placements not logged with sufficient detail (user_ip, api_key_id)
 
-**Location:** `backend/execution/order_manager.go:88`  
+**Status:** ⏳ **PENDING** - Deferred to PENDING.md #13 (Enhanced Audit Logging)
+
+**Location:** `backend/execution/order_manager.go`  
 **Risk:** Audit trail gaps  
 **Impact:** Medium - Compliance/debugging issues
-
-**Recommendation:**
-
-```go
-log.Info().
-    Str("order_id", result.ID).
-    Str("symbol", result.Symbol).
-    Str("side", string(result.Side)).
-    Float64("quantity", result.Quantity).
-    Float64("price", result.Price).
-    Str("user_ip", r.RemoteAddr). // Add from request context
-    Str("api_key_id", getAPIKeyID(r)). // Add key identifier
-    Msg("Order placed")
-```
 
 ---
 
@@ -415,16 +365,16 @@ r.Post("/config/reload", h.ReloadConfigHandler) // Requires admin API key
 
 | Item | Status | Location |
 |------|--------|----------|
-| ✅ HTTPS enforcement | ⚠️ Not implemented | Should be handled by reverse proxy |
-| ❌ Rate limiting | Missing | All endpoints |
-| ⚠️ API key auth | Weak | `middleware_auth.go` |
-| ❌ Input validation | Inconsistent | `handlers.go` |
-| ⚠️ CORS | Too permissive | `router.go:131` |
-| ✅ SQL injection | Protected | Using parameterized queries |
-| ❌ Request size limits | Missing | All POST endpoints |
-| ⚠️ Error messages | Too detailed | Various handlers |
-| ❌ Audit logging | Minimal | `order_manager.go` |
-| ✅ Secure headers | Partial | Need CSP, HSTS |
+| HTTPS enforcement | ⚠️ Handled by reverse proxy | N/A (not app-level) |
+| Rate limiting | ✅ Implemented | `router.go:50-54` |
+| API key auth | ✅ Constant-time comparison | `middleware_auth.go` |
+| Input validation | ✅ go-playground/validator | `validation.go`, handler structs |
+| CORS | ✅ Origin whitelisting | `router.go:78-79` |
+| SQL injection | ✅ Protected | Using parameterized queries |
+| Request size limits | ✅ 1MB limit | `router.go:57-63` |
+| Error messages | ✅ Standardized writeError | `handlers.go`, all handler files |
+| Audit logging | ⏳ Pending | See PENDING.md #13 |
+| Secure headers | ✅ CSP, X-Frame, nosniff | `router.go:65-76` |
 
 ---
 
@@ -451,18 +401,22 @@ r.Post("/config/reload", h.ReloadConfigHandler) // Requires admin API key
 - `GET /api/v1/config/validation` - Config validation
 - `GET /api/v1/status` - Engine status
 
-**❌ Missing (Critical for Frontend):**
+**✅ Recently Implemented:**
 
 - `GET /api/v1/execution/orders/{id}` - Get single order
 - `GET /api/v1/execution/history` - Historical/closed orders
-- `GET /api/v1/execution/trades` - Trade executions
-- `PATCH /api/v1/execution/orders/{id}` - Update order
 - `GET /api/v1/portfolio/summary` - Portfolio summary
-- `GET /api/v1/portfolio/performance` - Performance metrics
+- `GET /api/v1/config/metrics` - Runtime metrics
+- `POST /api/v1/config/rotate-key` - API key rotation
+- `WebSocket /ws` - Real-time WebSocket endpoint
+
+**❌ Still Missing (Deferred to PENDING.md):**
+
+- `GET /api/v1/execution/trades` - Individual trade executions
+- `PATCH /api/v1/execution/orders/{id}` - Update/modify orders
+- `GET /api/v1/portfolio/performance` - Performance metrics (P&L, Sharpe)
 - `GET /api/v1/notifications` - System notifications/alerts
 - `GET /api/v1/strategies/{name}/backtest` - Pre-run backtest results
-- `WebSocket /ws/market-data` - Real-time price updates
-- `WebSocket /ws/orders` - Real-time order updates
 
 ---
 
@@ -470,22 +424,22 @@ r.Post("/config/reload", h.ReloadConfigHandler) // Requires admin API key
 
 | Category | Score | Status |
 |----------|-------|--------|
-| **Security** | 4/10 | 🔴 Critical gaps |
-| **API Completeness** | 7/10 | ⚠️ Missing endpoints |
-| **Error Handling** | 6/10 | ⚠️ Inconsistent |
+| **Security** | 8/10 | ✅ Rate limiting, auth, CORS, validation, headers |
+| **API Completeness** | 8/10 | ✅ Most endpoints, 5 deferred to PENDING |
+| **Error Handling** | 8/10 | ✅ Standardized writeError |
 | **Testing** | 9/10 | ✅ Excellent |
 | **Documentation** | 8/10 | ✅ Good |
-| **Performance** | 7/10 | ⚠️ No pagination |
-| **Observability** | 6/10 | ⚠️ Basic logging |
+| **Performance** | 8/10 | ✅ Pagination implemented |
+| **Observability** | 7/10 | ⚠️ Health checks + metrics, audit logging pending |
 | **Architecture** | 9/10 | ✅ Excellent |
 
-**Overall: 7/10** - Good foundation, needs security hardening
+**Overall: 8/10** - Strong foundation, audit logging and remaining endpoints pending
 
 ---
 
 ## Recommended Implementation Order
 
-### Phase 1: Security Critical (1-2 days)
+### Phase 1: Security Critical ✅ COMPLETE
 
 1. ✅ Add rate limiting middleware
 2. ✅ Implement constant-time API key comparison
@@ -493,42 +447,43 @@ r.Post("/config/reload", h.ReloadConfigHandler) // Requires admin API key
 4. ✅ Configure CORS with allowed origins
 5. ✅ Add request body size limits
 
-### Phase 2: API Completeness (2-3 days)
+### Phase 2: API Completeness ✅ MOSTLY COMPLETE
 
 1. ✅ Add `GET /orders/{id}` endpoint
 2. ✅ Add order history endpoint
-3. ✅ Add trades endpoint
+3. ⏳ Add trades endpoint (deferred to PENDING.md #12)
 4. ✅ Implement pagination for list endpoints
-5. ✅ Add portfolio summary endpoints
+5. ✅ Add portfolio summary endpoint
 
-### Phase 3: Production Polish (1-2 days)
+### Phase 3: Production Polish ✅ MOSTLY COMPLETE
 
 1. ✅ Standardize error responses
 2. ✅ Enhance health check
-3. ✅ Improve audit logging
+3. ⏳ Improve audit logging (deferred to PENDING.md #13)
 4. ✅ Add security headers middleware
 5. ✅ Add metrics/monitoring endpoints
 
-### Phase 4: Future Enhancements (Optional)
+### Phase 4: Future Enhancements ⏳ PENDING
 
-1. WebSocket support for real-time updates
-2. JWT authentication
-3. Multi-user support
-4. Role-based access control
-5. API key rotation
+1. ✅ WebSocket infrastructure (basic endpoint exists)
+2. ⏳ JWT authentication
+3. ⏳ Multi-user support
+4. ⏳ Role-based access control
+5. ✅ API key rotation endpoint
 
 ---
 
 ## Summary
 
-The Sherwood backend is **architecturally sound** with excellent testing and recent persistence improvements. However, **security gaps** and **missing API endpoints** block production deployment.
+The Sherwood backend is **architecturally sound** with excellent testing, comprehensive security hardening, and solid API coverage. Most critical and high-priority findings from the original review have been addressed.
 
-**Critical Actions:**
+**Remaining Work:**
 
-1. **Immediate:** Implement rate limiting and fix authentication
-2. **This Week:** Add missing CRUD endpoints and input validation
-3. **This Month:** Complete API endpoints for frontend, add WebSocket support
+1. ⏳ Enhanced audit logging (user_ip, api_key_id) — PENDING.md #13
+2. ⏳ Advanced backend endpoints (trades, order modification, performance metrics) — PENDING.md #12
+3. ⏳ Frontend implementation — PENDING.md #11
+4. ⏳ Docker deployment — PENDING.md #6
 
-**Estimated Effort:** 5-7 days for production-ready status
+**Overall Status:** Backend is production-ready for a proof-of-concept deployment. Remaining items are enhancements.
 
-**Next Steps:** Prioritize Phase 1 (Security) and Phase 2 (API Completeness) before any production deployment.
+**Last Updated:** 2026-02-09
