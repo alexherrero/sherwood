@@ -102,6 +102,7 @@ func TestTradingEngine_RunLoop(t *testing.T) {
 		nil,
 		[]string{"AAPL"},
 		10*time.Millisecond,
+		24*time.Hour,
 	)
 
 	// Expectation: GetHistoricalData called

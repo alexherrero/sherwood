@@ -90,8 +90,10 @@ func NewRouter(
 		})
 	})
 
-	// WebSocket endpoint
-	r.Get("/ws", h.wsManager.HandleWebSocket)
+	// WebSocket endpoint (only if wsManager is available)
+	if wsManager != nil {
+		r.Get("/ws", h.wsManager.HandleWebSocket)
+	}
 
 	// Health check endpoint
 	r.Get("/health", h.HealthHandler)
