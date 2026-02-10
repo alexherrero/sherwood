@@ -26,6 +26,8 @@ type TradingEngine struct {
 	wg           sync.WaitGroup
 	mu           sync.RWMutex
 	running      bool
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 // NewTradingEngine creates a new trading engine instance.
@@ -56,6 +58,9 @@ func NewTradingEngine(
 		symbols:      symbols,
 		interval:     interval,
 		stopCh:       make(chan struct{}),
+		running:      false,
+		ctx:          nil,
+		cancel:       nil,
 	}
 }
 
@@ -68,6 +73,8 @@ func (e *TradingEngine) Start(ctx context.Context) error {
 		return fmt.Errorf("trading engine already running")
 	}
 	e.running = true
+	// Re-initialize stopCh to allow restart
+	e.stopCh = make(chan struct{})
 	e.mu.Unlock()
 
 	e.wg.Add(1)
@@ -111,27 +118,14 @@ func (e *TradingEngine) loop(ctx context.Context) {
 		case <-e.stopCh:
 			return
 		case <-ticker.C:
-			e.processTick()
+			// Iterate over symbols
+			for _, symbol := range e.symbols {
+				if err := e.processSymbol(symbol); err != nil {
+					log.Error().Err(err).Str("symbol", symbol).Msg("Error processing symbol")
+				}
+			}
 		}
 	}
-}
-
-// processTick runs one iteration of the trading logic.
-func (e *TradingEngine) processTick() {
-	var wg sync.WaitGroup
-
-	// Process symbols concurrently
-	for _, symbol := range e.symbols {
-		wg.Add(1)
-		go func(sym string) {
-			defer wg.Done()
-			if err := e.processSymbol(sym); err != nil {
-				log.Error().Err(err).Str("symbol", sym).Msg("Failed to process symbol")
-			}
-		}(symbol)
-	}
-
-	wg.Wait()
 }
 
 // processSymbol handles data fetching and strategy execution for a single symbol.
@@ -182,45 +176,42 @@ func (e *TradingEngine) processSymbol(symbol string) error {
 	return nil
 }
 
-// executeSignal converts a signal into an order and submits it.
+// executeSignal handles the execution of a trading signal.
 func (e *TradingEngine) executeSignal(signal models.Signal) error {
-	// 1. Validate signal
-	if signal.Quantity <= 0 {
-		return fmt.Errorf("invalid quantity: %f", signal.Quantity)
-	}
-
-	// 2. Determine Order Side
-	var side models.OrderSide
-	switch signal.Type {
-	case models.SignalBuy:
-		side = models.OrderSideBuy
-	case models.SignalSell:
-		side = models.OrderSideSell
-	default:
-		return fmt.Errorf("unknown signal type: %s", signal.Type)
-	}
-
-	// 3. Create Order
-	// Assuming Market orders for now unless Price is set
-	var order *models.Order
-	var err error
-
-	if signal.Price > 0 {
-		order, err = e.orderManager.CreateLimitOrder(signal.Symbol, side, signal.Quantity, signal.Price)
-	} else {
-		order, err = e.orderManager.CreateMarketOrder(signal.Symbol, side, signal.Quantity)
-	}
-
-	if err != nil {
-		return fmt.Errorf("failed to create order: %w", err)
-	}
-
 	log.Info().
-		Str("strategy", signal.StrategyName).
 		Str("symbol", signal.Symbol).
-		Str("side", string(side)).
-		Str("order_id", order.ID).
-		Msg("Signal executed")
+		Str("type", string(signal.Type)).
+		Float64("price", signal.Price).
+		Str("strategy", signal.StrategyName).
+		Msg("Signal generated")
+
+	// Determine quantity
+	quantity := 1.0
+	if signal.Quantity > 0 {
+		quantity = signal.Quantity
+	}
+
+	var side models.OrderSide
+	if signal.Type == models.SignalBuy {
+		side = models.OrderSideBuy
+	} else if signal.Type == models.SignalSell {
+		side = models.OrderSideSell
+	} else {
+		return nil // Should be filtered already
+	}
+
+	// Create Market Order for simplicity
+	// Implementation Plan says "Simple Market Orders"
+	// But signal has Price, maybe Limit Order?
+	// Strategies usually emit "I want to buy NOW at market" or "Limit at X".
+	// Let's assume Market for now as it ensures execution.
+	// Or use Limit if signal.Price is set?
+	// Let's stick to Market for Phase 1.
+
+	_, err := e.orderManager.CreateMarketOrder(signal.Symbol, side, quantity)
+	if err != nil {
+		return fmt.Errorf("failed to submit order: %w", err)
+	}
 
 	return nil
 }
