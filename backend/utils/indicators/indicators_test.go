@@ -98,3 +98,71 @@ func TestBollingerBands(t *testing.T) {
 		t.Errorf("Expected Lower Band 10, got %f", lower[4])
 	}
 }
+
+func TestStdDev(t *testing.T) {
+	data := []float64{2, 4, 4, 4, 5, 5, 7, 9}
+	period := 3
+	result := StdDev(data, period)
+
+	// verify length
+	if len(result) != len(data) {
+		t.Fatalf("Expected length %d, got %d", len(data), len(result))
+	}
+
+	// verify first few are NaN
+	if !math.IsNaN(result[0]) || !math.IsNaN(result[1]) {
+		t.Error("Expected NaN for first few elements")
+	}
+
+	// Manual check for index 2 (4, 4, 4) -> should be 0
+	if result[2] != 0 {
+		t.Errorf("Expected 0 stddev, got %f", result[2])
+	}
+
+	// Manual check for index 5 (4, 5, 5) -> mean = 14/3 = 4.666
+	// var = ((4-4.66)^2 + (5-4.66)^2 + (5-4.66)^2) / 3
+	//     = (0.44 + 0.11 + 0.11) / 3 = 0.66/3 = 0.22 -> sqrt = 0.47
+	// approximate check
+	if math.Abs(result[5]-0.471) > 0.01 {
+		t.Errorf("Expected ~0.471 stddev, got %f", result[5])
+	}
+}
+
+func TestMACD(t *testing.T) {
+	data := []float64{
+		10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+		20, 19, 18, 17, 16, 15, 14, 13, 12, 11, 10, 9,
+		10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21,
+	}
+	fastPeriod := 12
+	slowPeriod := 26
+	signalPeriod := 9
+
+	macdLine, signalLine, histogram := MACD(data, fastPeriod, slowPeriod, signalPeriod)
+
+	if len(macdLine) != len(data) {
+		t.Fatalf("Expected length %d, got %d", len(data), len(macdLine))
+	}
+
+	// First 25 (slowPeriod-1) should be NaN for MACD line?
+	// Usually libraries implementation vary. Assuming standard behavior (Wait for slow period).
+	// Actually typical implementation:
+	// EMA(12) starts at 12th bar.
+	// EMA(26) starts at 26th bar.
+	// MACD = EMA12 - EMA26. So valid from 26th bar.
+
+	// Index 25 (26th element) should be valid MACD?
+	// Depends on implementation of EMA (if it needs previous EMA, creates lag).
+
+	// We check for No Panic and Length consistency mostly, and non-NaN at end.
+	lastIndex := len(data) - 1
+	if math.IsNaN(macdLine[lastIndex]) {
+		t.Error("Expected valid MACD at end")
+	}
+	if math.IsNaN(signalLine[lastIndex]) {
+		t.Error("Expected valid Signal Line at end")
+	}
+	if math.IsNaN(histogram[lastIndex]) {
+		t.Error("Expected valid Histogram at end")
+	}
+}

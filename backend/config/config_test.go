@@ -161,3 +161,43 @@ func TestConfigLoad_EnabledStrategies(t *testing.T) {
 		})
 	}
 }
+
+func TestConfigLoad_Full(t *testing.T) {
+	// Set all env vars
+	os.Setenv("PORT", "9090")
+	os.Setenv("HOST", "0.0.0.0")
+	os.Setenv("API_KEY", "secret-key")
+	os.Setenv("TRADING_MODE", "live")
+	os.Setenv("DATABASE_PATH", "/tmp/test.db")
+	os.Setenv("LOG_LEVEL", "debug")
+	os.Setenv("ALLOWED_ORIGINS", "http://example.com,http://foo.com")
+	os.Setenv("DATA_PROVIDER", "binance")
+	os.Setenv("ENABLED_STRATEGIES", "strategy1,strategy2")
+
+	defer func() {
+		os.Unsetenv("PORT")
+		os.Unsetenv("HOST")
+		os.Unsetenv("API_KEY")
+		os.Unsetenv("TRADING_MODE")
+		os.Unsetenv("DATABASE_PATH")
+		os.Unsetenv("LOG_LEVEL")
+		os.Unsetenv("ALLOWED_ORIGINS")
+		os.Unsetenv("DATA_PROVIDER")
+		os.Unsetenv("ENABLED_STRATEGIES")
+	}()
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("Failed to load config: %v", err)
+	}
+
+	if cfg.ServerPort != 9090 {
+		t.Errorf("Expected Port 9090, got %d", cfg.ServerPort)
+	}
+	if cfg.ServerHost != "0.0.0.0" {
+		t.Errorf("Expected Host 0.0.0.0, got %s", cfg.ServerHost)
+	}
+	if cfg.APIKey != "secret-key" {
+		t.Errorf("Expected APIKey secret-key, got %s", cfg.APIKey)
+	}
+}

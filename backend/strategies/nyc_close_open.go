@@ -54,7 +54,36 @@ func (s *NYCCloseOpen) Validate() error {
 
 // GetParameters returns the strategy's parameter definitions.
 func (s *NYCCloseOpen) GetParameters() map[string]Parameter {
-	return map[string]Parameter{}
+	return map[string]Parameter{
+		"buy_hour": {
+			Type:        "int",
+			Default:     16,
+			Description: "Hour to buy (ET)",
+			Min:         0,
+			Max:         23,
+		},
+		"buy_minute": {
+			Type:        "int",
+			Default:     0,
+			Description: "Minute to buy (ET)",
+			Min:         0,
+			Max:         59,
+		},
+		"sell_hour": {
+			Type:        "int",
+			Default:     8,
+			Description: "Hour to sell (ET)",
+			Min:         0,
+			Max:         23,
+		},
+		"sell_minute": {
+			Type:        "int",
+			Default:     30,
+			Description: "Minute to sell (ET)",
+			Min:         0,
+			Max:         59,
+		},
+	}
 }
 
 // OnData processes OHLCV data and generates trading signals.
@@ -110,17 +139,22 @@ func (s *NYCCloseOpen) OnData(data []models.OHLCV) models.Signal {
 
 	isWeekend := candleTimeNYC.Weekday() == time.Saturday || candleTimeNYC.Weekday() == time.Sunday
 
+	buyHour := s.GetConfigInt("buy_hour", 16)
+	buyMinute := s.GetConfigInt("buy_minute", 0)
+	sellHour := s.GetConfigInt("sell_hour", 8)
+	sellMinute := s.GetConfigInt("sell_minute", 30)
+
 	if !isWeekend {
-		if hour == 16 && minute == 0 {
+		if hour == buyHour && minute == buyMinute {
 			signal.Type = models.SignalBuy
 			signal.Strength = models.SignalStrengthStrong
-			signal.Reason = fmt.Sprintf("Market Close (16:00 ET) on %s", candleTimeNYC.Weekday())
+			signal.Reason = fmt.Sprintf("Market Close (%02d:%02d ET) on %s", buyHour, buyMinute, candleTimeNYC.Weekday())
 			signal.Symbol = candle.Symbol
 			signal.Price = candle.Close
-		} else if hour == 8 && minute == 30 {
+		} else if hour == sellHour && minute == sellMinute {
 			signal.Type = models.SignalSell
 			signal.Strength = models.SignalStrengthStrong
-			signal.Reason = fmt.Sprintf("Pre-Market (08:30 ET) on %s", candleTimeNYC.Weekday())
+			signal.Reason = fmt.Sprintf("Pre-Market (%02d:%02d ET) on %s", sellHour, sellMinute, candleTimeNYC.Weekday())
 			signal.Symbol = candle.Symbol
 			signal.Price = candle.Close
 		}
