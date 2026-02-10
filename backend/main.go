@@ -115,7 +115,8 @@ func main() {
 		orderManager,
 		wsManager,
 		symbols,
-		1*time.Minute, // Tick every minute
+		1*time.Minute,    // Tick every minute
+		100*24*time.Hour, // Lookback 100 days
 	)
 
 	// Start Trading Engine

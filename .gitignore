@@ -67,3 +67,9 @@ test_output.txt
 # Debug files
 debug
 *.pprof
+
+# Coverage files (no extension)
+coverage
+
+# Test output text files
+*[Tt][Ee][Ss][Tt]*.txt

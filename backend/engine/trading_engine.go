@@ -22,6 +22,7 @@ type TradingEngine struct {
 	wsManager    *realtime.WebSocketManager
 	symbols      []string
 	interval     time.Duration
+	lookback     time.Duration
 	stopCh       chan struct{}
 	wg           sync.WaitGroup
 	mu           sync.RWMutex
@@ -39,6 +40,7 @@ type TradingEngine struct {
 //   - wsManager: WebSocket manager for real-time updates (can be nil)
 //   - symbols: List of symbols to trade
 //   - interval: Polling interval
+//   - lookback: Historical data lookback period
 //
 // Returns:
 //   - *TradingEngine: The engine instance
@@ -49,6 +51,7 @@ func NewTradingEngine(
 	wsManager *realtime.WebSocketManager,
 	symbols []string,
 	interval time.Duration,
+	lookback time.Duration,
 ) *TradingEngine {
 	return &TradingEngine{
 		provider:     provider,
@@ -57,6 +60,7 @@ func NewTradingEngine(
 		wsManager:    wsManager,
 		symbols:      symbols,
 		interval:     interval,
+		lookback:     lookback,
 		stopCh:       make(chan struct{}),
 		running:      false,
 		ctx:          nil,
@@ -131,10 +135,9 @@ func (e *TradingEngine) loop(ctx context.Context) {
 // processSymbol handles data fetching and strategy execution for a single symbol.
 func (e *TradingEngine) processSymbol(symbol string) error {
 	// 1. Fetch latest data
-	// Fetch enough candles for strategies (e.g., 100)
-	// TODO: Make lookback configurable or dynamic
+	// Fetch enough candles for strategies
 	end := time.Now()
-	start := end.Add(-100 * 24 * time.Hour) // Rough estimate for daily candles
+	start := end.Add(-e.lookback)
 
 	// Assume generic timeframe (Daily) for now.
 	// In a real system, we'd need to handle multiple timeframes.
