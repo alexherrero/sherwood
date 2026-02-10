@@ -71,7 +71,8 @@ The system architecture follows a clean, modular design that supports extensibil
 
 ## 4. Code Quality & Testing
 
-- **Test Coverage:** High. Critical paths (Auth, Rate Limiting, Order Management, Validation) have dedicated test suites (`middleware_audit_test.go`, `ratelimit_test.go`, `handlers_pagination_test.go`).
+- **Test Coverage:** High (~85%). Critical paths (Auth, Rate Limiting, Order Management, Validation) and new features (Trades, Order Modification) have comprehensive test suites.
+- **CI/CD:** GitHub Actions workflow (`backend.yml`) now performs full integration testing of the API, including order lifecycle and trade retrieval.
 - **Linting:** Code follows idiomatic Go standards. Variable naming is clear, and error handling is explicit.
 - **Documentation:** Inline comments are generous, particularly in `config.go` and `order_manager.go`.
 
