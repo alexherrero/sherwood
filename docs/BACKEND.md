@@ -47,17 +47,19 @@ See [API.md](./API.md) for complete endpoint documentation.
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/health` | Health check |
-| GET | `/api/v1/strategies` | List strategies |
-| GET | `/api/v1/strategies/{name}` | Get strategy details |
-| POST | `/api/v1/backtests` | Run backtest |
-| GET | `/api/v1/backtests/{id}` | Get backtest results |
-| GET | `/api/v1/config` | Get configuration |
-| GET | `/api/v1/status` | Get engine status |
+| GET | `/health` | Health and subsystem status |
+| GET | `/api/v1/status` | Engine mode and status |
+| GET | `/api/v1/strategies` | List all trading strategies |
+| POST | `/api/v1/backtests` | Execute strategy backtest |
+| GET | `/api/v1/execution/orders` | List and filter active orders |
+| POST | `/api/v1/execution/orders` | Place manual Market/Limit order |
+| GET | `/api/v1/execution/balance` | Real-time account balance |
+| GET | `/api/v1/portfolio/summary` | Portfolio performance overview |
 
 ## Trading Modes
 
-- **dry_run**: Paper trading (default) - simulated trades with no real money
-- **live**: Live trading - real money at risk
+- **dry_run**: Simulated trading with basic data (default)
+- **paper**: Realistic paper trading against exchange data
+- **live**: Real money execution on supported exchanges
 
 > ⚠️ **WARNING**: Live trading involves substantial risk. Always test extensively in dry_run mode first.

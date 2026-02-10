@@ -30,6 +30,51 @@ Generates buy signals when a short-term moving average crosses above a long-term
 | `short_period` | int | 10 | 2-50 | Short MA period |
 | `long_period` | int | 20 | 5-200 | Long MA period |
 
+### RSI Momentum (`rsi_momentum`)
+
+Capitalizes on mean reversion by identifying overbought and oversold conditions.
+
+**Parameters:**
+
+| Parameter | Type | Default | Range | Description |
+|-----------|------|---------|-------|-------------|
+| `period` | int | 14 | 2-100 | RSI lookback period |
+| `overbought` | float | 70.0 | 50-95 | Sell threshold |
+| `oversold` | float | 30.0 | 5-50 | Buy threshold |
+
+### Bollinger Bands (`bb_mean_reversion`)
+
+Uses volatility bands to identify potential price reversals.
+
+**Parameters:**
+
+| Parameter | Type | Default | Range | Description |
+|-----------|------|---------|-------|-------------|
+| `period` | int | 20 | 2-100 | SMA lookback period |
+| `std_dev` | float | 2.0 | 0.5-5 | Standard deviation multiplier |
+
+### MACD Trend Follower (`macd_trend_follower`)
+
+Filters noise and identifies strong trends using moving average convergence divergence.
+
+**Parameters:**
+
+| Parameter | Type | Default | Range | Description |
+|-----------|------|---------|-------|-------------|
+| `fast_period` | int | 12 | 2-100 | Fast EMA period |
+| `slow_period` | int | 26 | 2-200 | Slow EMA period |
+| `signal_period` | int | 9 | 2-100 | Signal line period |
+
+### NYC Market Close/Open (`nyc_close_open`)
+
+Time-based strategy for Bitcoin/Crypto to capture overnight volatility.
+
+**Parameters:**
+
+| Parameter | Type | Default | Range | Description |
+|-----------|------|---------|-------|-------------|
+| `quantity` | float | 1.0 | >0 | Position size to trade |
+
 **Example Configuration:**
 
 ```json

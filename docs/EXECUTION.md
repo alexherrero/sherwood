@@ -8,11 +8,11 @@ The execution engine handles order management, broker integration, and risk cont
 
 Brokers execute trades against real or simulated markets:
 
-| Broker | Type | Description |
-|--------|------|-------------|
-| `PaperBroker` | Simulated | Paper trading (no real money) |
-| Robinhood | Live | (Planned) |
-| Alpaca | Live | (Planned) |
+| Broker | Type | Status | Description |
+|--------|------|--------|-------------|
+| `PaperBroker` | Simulated | ✅ Implemented | High-fidelity paper trading with persistence |
+| Binance | Live | ⏳ Planned | Direct exchange execution (Crypto) |
+| Robinhood | Live | ⏳ Planned | Implementation via private API (Planned) |
 
 ### Order Manager
 
