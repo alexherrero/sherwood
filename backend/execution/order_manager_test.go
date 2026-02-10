@@ -1,6 +1,7 @@
 package execution
 
 import (
+	"context"
 	"path/filepath"
 	"testing"
 
@@ -36,7 +37,7 @@ func TestOrderManager_SubmitOrder_Success(t *testing.T) {
 		Quantity: 10,
 	}
 
-	result, err := om.SubmitOrder(order)
+	result, err := om.SubmitOrder(context.Background(), order)
 	require.NoError(t, err)
 	assert.NotEmpty(t, result.ID)
 	assert.Equal(t, models.OrderStatusFilled, result.Status)
@@ -92,7 +93,7 @@ func TestOrderManager_SubmitOrder_ValidationFails(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			_, err := om.SubmitOrder(tt.order)
+			_, err := om.SubmitOrder(context.Background(), tt.order)
 			assert.Error(t, err)
 			assert.Contains(t, err.Error(), tt.errContains)
 		})
@@ -117,7 +118,7 @@ func TestOrderManager_SubmitOrder_RiskCheckFails(t *testing.T) {
 		Price:    100.0,
 	}
 
-	_, err := om.SubmitOrder(order)
+	_, err := om.SubmitOrder(context.Background(), order)
 	assert.Error(t, err)
 	assert.Contains(t, err.Error(), "risk check failed")
 }
@@ -137,10 +138,10 @@ func TestOrderManager_CancelOrder(t *testing.T) {
 		Type:     models.OrderTypeMarket,
 		Quantity: 1,
 	}
-	result, _ := om.SubmitOrder(order)
+	result, _ := om.SubmitOrder(context.Background(), order)
 
 	// Paper broker fills instantly, so cancel will fail
-	err := om.CancelOrder(result.ID)
+	err := om.CancelOrder(context.Background(), result.ID)
 	assert.Error(t, err)
 }
 
@@ -158,7 +159,7 @@ func TestOrderManager_GetOrder(t *testing.T) {
 		Type:     models.OrderTypeMarket,
 		Quantity: 1,
 	}
-	result, _ := om.SubmitOrder(order)
+	result, _ := om.SubmitOrder(context.Background(), order)
 
 	retrieved, err := om.GetOrder(result.ID)
 	require.NoError(t, err)
@@ -174,8 +175,8 @@ func TestOrderManager_GetAllOrders(t *testing.T) {
 
 	om := NewOrderManager(broker, nil, nil, nil)
 
-	_, _ = om.SubmitOrder(models.Order{Symbol: "AAPL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
-	_, _ = om.SubmitOrder(models.Order{Symbol: "GOOGL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
+	_, _ = om.SubmitOrder(context.Background(), models.Order{Symbol: "AAPL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
+	_, _ = om.SubmitOrder(context.Background(), models.Order{Symbol: "GOOGL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
 
 	orders := om.GetAllOrders()
 	assert.Len(t, orders, 2)
@@ -189,7 +190,7 @@ func TestOrderManager_CreateMarketOrder(t *testing.T) {
 
 	om := NewOrderManager(broker, nil, nil, nil)
 
-	result, err := om.CreateMarketOrder("AAPL", models.OrderSideBuy, 5)
+	result, err := om.CreateMarketOrder(context.Background(), "AAPL", models.OrderSideBuy, 5)
 	require.NoError(t, err)
 	assert.Equal(t, "AAPL", result.Symbol)
 	assert.Equal(t, models.OrderTypeMarket, result.Type)
@@ -203,7 +204,7 @@ func TestOrderManager_CreateLimitOrder(t *testing.T) {
 
 	om := NewOrderManager(broker, nil, nil, nil)
 
-	result, err := om.CreateLimitOrder("AAPL", models.OrderSideBuy, 5, 145.0)
+	result, err := om.CreateLimitOrder(context.Background(), "AAPL", models.OrderSideBuy, 5, 145.0)
 	require.NoError(t, err)
 	assert.Equal(t, "AAPL", result.Symbol)
 	assert.Equal(t, models.OrderTypeLimit, result.Type)
@@ -227,7 +228,7 @@ func TestOrderManager_SubmitOrder_NoRiskManager(t *testing.T) {
 		Price:    100.0,
 	}
 
-	result, err := om.SubmitOrder(order)
+	result, err := om.SubmitOrder(context.Background(), order)
 	require.NoError(t, err)
 	assert.NotNil(t, result)
 }
@@ -249,7 +250,7 @@ func TestOrderManager_Persistence(t *testing.T) {
 
 	// Create first OrderManager and submit order
 	om1 := NewOrderManager(broker, nil, store, nil)
-	order, err := om1.CreateMarketOrder("AAPL", models.OrderSideBuy, 10)
+	order, err := om1.CreateMarketOrder(context.Background(), "AAPL", models.OrderSideBuy, 10)
 	require.NoError(t, err)
 	orderID := order.ID
 

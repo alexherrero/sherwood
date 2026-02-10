@@ -157,3 +157,34 @@ Added comprehensive integration tests to CI/CD pipeline to verify dynamic config
 **Key Files:**
 
 - `.github/workflows/backend_integration.yaml`
+
+---
+
+## Enhanced Audit Logging
+
+**Complexity:** Low
+**Completed:** 2026-02-09
+**Source:** PENDING.md #13
+
+**Description:**
+Added requestor context (IP address, API key identifier) to all order-related log entries for compliance and security auditing. Engine-initiated orders are clearly distinguished from manual API orders in the logs.
+
+**What Was Implemented:**
+
+- Audit context middleware (`backend/api/middleware_audit.go`) injects IP and hashed API key ID into request context
+- Audit context helpers (`backend/execution/audit_context.go`) with `NewEngineContext()` for automated orders
+- `SubmitOrder`, `CancelOrder`, `CreateMarketOrder`, `CreateLimitOrder` all accept `context.Context`
+- `SubmitOrder` log enriched with `user_ip` and `api_key_id` structured fields
+- `CancelOrder` now has audit logging (previously had none)
+- `AuditMiddleware` added to `/api/v1` route group in router
+- Comprehensive test coverage (7 new test cases in `middleware_audit_test.go`)
+
+**Key Files:**
+
+- `backend/api/middleware_audit.go` (new)
+- `backend/api/middleware_audit_test.go` (new)
+- `backend/execution/audit_context.go` (new)
+- `backend/execution/order_manager.go` (modified)
+- `backend/api/handlers_orders.go` (modified)
+- `backend/engine/trading_engine.go` (modified)
+- `backend/api/router.go` (modified)

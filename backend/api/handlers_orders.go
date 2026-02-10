@@ -187,13 +187,13 @@ func (h *Handler) PlaceOrderHandler(w http.ResponseWriter, r *http.Request) {
 	// Create order based on type
 	switch req.Type {
 	case "market":
-		order, err = h.orderManager.CreateMarketOrder(req.Symbol, side, req.Quantity)
+		order, err = h.orderManager.CreateMarketOrder(r.Context(), req.Symbol, side, req.Quantity)
 	case "limit":
 		if req.Price <= 0 {
 			writeError(w, http.StatusBadRequest, "Price must be positive for limit orders")
 			return
 		}
-		order, err = h.orderManager.CreateLimitOrder(req.Symbol, side, req.Quantity, req.Price)
+		order, err = h.orderManager.CreateLimitOrder(r.Context(), req.Symbol, side, req.Quantity, req.Price)
 	default:
 		writeError(w, http.StatusBadRequest, "Invalid type: must be 'market' or 'limit'")
 		return
@@ -220,7 +220,7 @@ func (h *Handler) CancelOrderHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.orderManager.CancelOrder(id); err != nil {
+	if err := h.orderManager.CancelOrder(r.Context(), id); err != nil {
 		writeError(w, http.StatusInternalServerError, fmt.Sprintf("Failed to cancel order: %v", err))
 		return
 	}
