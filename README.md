@@ -60,6 +60,11 @@ TRADING_MODE=dry_run  # Options: 'dry_run', 'paper', or 'live'
 DATABASE_PATH=./data/sherwood.db
 API_KEY=your-secret-key-here # Protects API access
 
+# Robinhood credentials (Optional - Planned for future live trading)
+# RH_USERNAME=your_email@example.com
+# RH_PASSWORD=your_password
+# RH_MFA_CODE=your_mfa_secret
+
 # Data Provider API Keys (optional, tests will use mocks if missing)
 BINANCE_API_KEY=your_binance_api_key
 BINANCE_API_SECRET=your_binance_api_secret

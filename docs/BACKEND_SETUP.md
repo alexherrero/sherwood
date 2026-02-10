@@ -36,6 +36,11 @@ DATABASE_PATH=./data/sherwood.db
 # Logging: debug, info, warn, error
 LOG_LEVEL=info
 
+# Robinhood credentials (Optional - Planned for future live trading)
+# RH_USERNAME=your_email@example.com
+# RH_PASSWORD=your_password
+# RH_MFA_CODE=your_mfa_secret
+
 # Data Provider API Keys (optional, tests will use mocks if missing)
 BINANCE_API_KEY=your_binance_key
 BINANCE_API_SECRET=your_binance_secret
