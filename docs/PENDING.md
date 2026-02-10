@@ -148,7 +148,7 @@ Create Dockerfiles and docker-compose configuration to containerize the applicat
 
 ---
 
-## 6. Benchmark Tests for Performance Monitoring
+## 7. Benchmark Tests for Performance Monitoring
 
 **Complexity:** Medium
 
@@ -190,7 +190,7 @@ func BenchmarkBacktest_LargeDataset(b *testing.B) {
 
 ---
 
-## 7. Concurrent Operation Tests
+## 8. Concurrent Operation Tests
 
 **Complexity:** Medium-High
 
@@ -233,7 +233,7 @@ func TestConcurrentOrderPlacement(t *testing.T) {
 
 ---
 
-## 8. Edge Case Test Coverage
+## 9. Edge Case Test Coverage
 
 **Complexity:** Low-Medium
 
@@ -270,7 +270,7 @@ Add table-driven tests for validation edge cases, integration tests for error re
 
 ---
 
-## 9. Property-Based Testing
+## 10. Property-Based Testing
 
 **Complexity:** High
 
@@ -306,31 +306,6 @@ func TestBacktest_BalanceNeverNegative(t *testing.T) {
 
 ---
 
-## 10. Deployment Configuration (Docker)
-
-**Complexity:** High
-
-**Description:**
-Create Dockerfiles and docker-compose configuration to containerize the application.
-
-**Implementation Requirements:**
-
-1. **Backend Dockerfile:** Multi-stage build (golang builder + alpine runtime)
-2. **Frontend Dockerfile:** Build React app with Vite, serve with nginx
-3. **docker-compose.yml:** Services for backend, frontend, database with health checks
-4. **Deployment Directory:** `deployments/docker/` and `deployments/k8s/` (optional)
-5. **Documentation:** Update README with Docker usage instructions
-
-**Files to Create:**
-
-- `backend/Dockerfile`
-- `frontend/Dockerfile`
-- `docker-compose.yml`
-- `docker-compose.dev.yml`
-- `.dockerignore`
-
----
-
 ## 11. Frontend Implementation
 
 **Complexity:** High
@@ -358,3 +333,69 @@ frontend/
 │   ├── hooks/
 │   └── store/       # Redux
 ```
+
+---
+
+## 12. Advanced Backend Endpoints (Phase 2 Completion)
+
+**Complexity:** Medium
+
+**Description:**
+Implement the remaining API endpoints identified during the backend review to support full frontend functionality.
+
+**Missing Endpoints:**
+
+1. `GET /api/v1/execution/trades` - List individual trade executions
+2. `PATCH /api/v1/execution/orders/{id}` - Modify open orders (price/quantity)
+3. `GET /api/v1/portfolio/performance` - Portfolio performance metrics (P&L, Sharpe, etc.)
+4. `GET /api/v1/notifications` - System alerts and notifications
+5. `GET /api/v1/strategies/{name}/backtest` - Retrieve pre-calculated backtest results
+
+**Implementation Requirements:**
+
+- Create new handlers in `backend/api/handlers.go`
+- Update `backend/execution/order_manager.go` to support order modification
+- Implement performance calculation logic in `backend/models` or `backend/analysis` package
+
+---
+
+## 13. Enhanced Audit Logging
+
+**Complexity:** Low
+
+**Description:**
+Improve audit logging in the `OrderManager` to include requestor details for compliance and security auditing.
+
+**Implementation Requirements:**
+
+1. Capture `User IP` and `API Key ID` context in API middleware
+2. Pass context to `OrderManager` methods
+3. Log these details with every order placement, cancellation, or modification
+4. Use structured logging fields (e.g., `user_ip`, `api_key_id`)
+
+**Files to Modify:**
+
+- `backend/api/middleware.go`
+- `backend/execution/order_manager.go`
+
+---
+
+## 14. Configuration Hot-Reload
+
+**Complexity:** Medium
+
+**Description:**
+Allow updating the application configuration without a full server restart.
+
+**Implementation Requirements:**
+
+1. Add `POST /api/v1/config/reload` endpoint (Admin-only)
+2. Implement `config.Reload()` method to re-read `.env` or config sources
+3. Notify components (Engine, Data Provider) of configuration changes
+4. Handle safe transitions (e.g., don't swap data provider while fetching data)
+
+**Files to Modify:**
+
+- `backend/config/config.go`
+- `backend/api/handlers.go`
+- `backend/engine/trading_engine.go`
