@@ -17,6 +17,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/data/providers"
 	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
+	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -48,6 +49,10 @@ func main() {
 	} else {
 		log.Info().Msg("📝 Paper trading mode (dry run)")
 	}
+
+	// Initialize WebSocket Manager
+	wsManager := realtime.NewWebSocketManager()
+	go wsManager.Run()
 
 	// Initialize Strategy Registry
 	registry := strategies.NewRegistry()
@@ -93,8 +98,8 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to connect to paper broker")
 	}
 
-	// Initialize Order Manager with persistence
-	orderManager := execution.NewOrderManager(broker, nil, orderStore)
+	// Initialize Order Manager with persistence and WebSocket
+	orderManager := execution.NewOrderManager(broker, nil, orderStore, wsManager)
 
 	// Restore orders from database
 	if err := orderManager.LoadOrders(); err != nil {
@@ -108,6 +113,7 @@ func main() {
 		provider,
 		registry,
 		orderManager,
+		wsManager,
 		symbols,
 		1*time.Minute, // Tick every minute
 	)
@@ -118,8 +124,8 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to start trading engine")
 	}
 
-	// Create API router
-	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine)
+	// Create API router with WebSocket Manager
+	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine, wsManager)
 
 	// Create HTTP server
 	server := &http.Server{

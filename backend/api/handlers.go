@@ -16,6 +16,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/models"
+	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
 	"github.com/rs/zerolog/log"
@@ -28,6 +29,7 @@ type Handler struct {
 	config       *config.Config
 	orderManager *execution.OrderManager
 	engine       *engine.TradingEngine
+	wsManager    *realtime.WebSocketManager
 	startTime    time.Time
 
 	// In-memory store for backtest results
@@ -44,6 +46,7 @@ type Handler struct {
 //   - config: Application configuration
 //   - orderManager: Order manager for execution data
 //   - engine: Trading engine instance (optional)
+//   - wsManager: WebSocket manager for real-time updates
 //
 // Returns:
 //   - *Handler: The handler instance
@@ -53,6 +56,7 @@ func NewHandler(
 	cfg *config.Config,
 	orderManager *execution.OrderManager,
 	engine *engine.TradingEngine,
+	wsManager *realtime.WebSocketManager,
 ) *Handler {
 	return &Handler{
 		registry:     registry,
@@ -60,6 +64,7 @@ func NewHandler(
 		config:       cfg,
 		orderManager: orderManager,
 		engine:       engine,
+		wsManager:    wsManager,
 		startTime:    time.Now(),
 		results:      make(map[string]*backtesting.BacktestResult),
 	}
@@ -367,6 +372,25 @@ func (h *Handler) GetConfigValidationHandler(w http.ResponseWriter, r *http.Requ
 	}
 
 	writeJSON(w, http.StatusOK, response)
+}
+
+// RotateAPIKeyHandler generates a new API key and returns it.
+// WARNING: This invalidates the old key immediately for future requests.
+func (h *Handler) RotateAPIKeyHandler(w http.ResponseWriter, r *http.Request) {
+	newKey, err := h.config.RotateAPIKey()
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "Failed to rotate API key")
+		log.Error().Err(err).Msg("Failed to rotate API key")
+		return
+	}
+
+	log.Info().Msg("API Key rotated successfully")
+
+	writeJSON(w, http.StatusOK, map[string]string{
+		"status":  "success",
+		"api_key": newKey,
+		"message": "API key rotated successfully. Please update your client configuration.",
+	})
 }
 
 // getProviderDescription returns a human-readable description for a provider.

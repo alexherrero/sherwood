@@ -92,13 +92,14 @@ func TestTradingEngine_RunLoop(t *testing.T) {
 	registry.Register(mockStrategy)
 
 	// Setup Order Manager
-	orderManager := execution.NewOrderManager(mockBroker, nil, nil)
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
 
 	// Setup Engine
 	engine := NewTradingEngine(
 		mockProvider,
 		registry,
 		orderManager,
+		nil,
 		[]string{"AAPL"},
 		10*time.Millisecond,
 	)

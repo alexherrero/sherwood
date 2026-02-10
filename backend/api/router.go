@@ -10,6 +10,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/data"
 	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
+	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -25,6 +26,7 @@ import (
 //   - provider: Data provider for backtesting
 //   - orderManager: Order manager for execution data
 //   - engine: Trading engine instance (optional)
+//   - wsManager: WebSocket manager for real-time updates
 //
 // Returns:
 //   - http.Handler: The configured router
@@ -34,6 +36,7 @@ func NewRouter(
 	provider data.DataProvider,
 	orderManager *execution.OrderManager,
 	engine *engine.TradingEngine,
+	wsManager *realtime.WebSocketManager,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -76,7 +79,19 @@ func NewRouter(
 	r.Use(newCORSMiddleware(cfg))
 
 	// Initialize handler with dependencies
-	h := NewHandler(registry, provider, cfg, orderManager, engine)
+	h := NewHandler(registry, provider, cfg, orderManager, engine, wsManager)
+
+	// Public routes
+	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		writeJSON(w, http.StatusOK, map[string]string{
+			"service": "sherwood-api",
+			"version": "1.0.0",
+			"status":  "running",
+		})
+	})
+
+	// WebSocket endpoint
+	r.Get("/ws", h.wsManager.HandleWebSocket)
 
 	// Health check endpoint
 	r.Get("/health", h.HealthHandler)
@@ -129,6 +144,7 @@ func NewRouter(
 			r.Get("/", h.GetConfigHandler)
 			r.Get("/metrics", h.MetricsHandler)
 			r.Get("/validation", h.GetConfigValidationHandler)
+			r.Post("/rotate-key", h.RotateAPIKeyHandler)
 		})
 
 		// Status endpoint

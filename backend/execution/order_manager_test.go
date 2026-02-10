@@ -15,7 +15,7 @@ func TestNewOrderManager(t *testing.T) {
 	broker := NewPaperBroker(10000)
 	rm := NewRiskManager(nil, broker)
 
-	om := NewOrderManager(broker, rm, nil)
+	om := NewOrderManager(broker, rm, nil, nil)
 
 	assert.NotNil(t, om)
 }
@@ -27,7 +27,7 @@ func TestOrderManager_SubmitOrder_Success(t *testing.T) {
 	broker.SetPrice("AAPL", 150.0)
 
 	rm := NewRiskManager(nil, broker)
-	om := NewOrderManager(broker, rm, nil)
+	om := NewOrderManager(broker, rm, nil, nil)
 
 	order := models.Order{
 		Symbol:   "AAPL",
@@ -47,7 +47,7 @@ func TestOrderManager_SubmitOrder_ValidationFails(t *testing.T) {
 	broker := NewPaperBroker(10000)
 	require.NoError(t, broker.Connect())
 
-	om := NewOrderManager(broker, nil, nil)
+	om := NewOrderManager(broker, nil, nil, nil)
 
 	tests := []struct {
 		name        string
@@ -107,7 +107,7 @@ func TestOrderManager_SubmitOrder_RiskCheckFails(t *testing.T) {
 	rm := NewRiskManager(nil, broker)
 	rm.UpdateDailyPnL(-600) // Exceed daily loss limit
 
-	om := NewOrderManager(broker, rm, nil)
+	om := NewOrderManager(broker, rm, nil, nil)
 
 	order := models.Order{
 		Symbol:   "AAPL",
@@ -128,7 +128,7 @@ func TestOrderManager_CancelOrder(t *testing.T) {
 	require.NoError(t, broker.Connect())
 	broker.SetPrice("AAPL", 100.0)
 
-	om := NewOrderManager(broker, nil, nil)
+	om := NewOrderManager(broker, nil, nil, nil)
 
 	// Place an order first
 	order := models.Order{
@@ -150,7 +150,7 @@ func TestOrderManager_GetOrder(t *testing.T) {
 	require.NoError(t, broker.Connect())
 	broker.SetPrice("AAPL", 100.0)
 
-	om := NewOrderManager(broker, nil, nil)
+	om := NewOrderManager(broker, nil, nil, nil)
 
 	order := models.Order{
 		Symbol:   "AAPL",
@@ -172,7 +172,7 @@ func TestOrderManager_GetAllOrders(t *testing.T) {
 	broker.SetPrice("AAPL", 100.0)
 	broker.SetPrice("GOOGL", 150.0)
 
-	om := NewOrderManager(broker, nil, nil)
+	om := NewOrderManager(broker, nil, nil, nil)
 
 	_, _ = om.SubmitOrder(models.Order{Symbol: "AAPL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
 	_, _ = om.SubmitOrder(models.Order{Symbol: "GOOGL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
@@ -187,7 +187,7 @@ func TestOrderManager_CreateMarketOrder(t *testing.T) {
 	require.NoError(t, broker.Connect())
 	broker.SetPrice("AAPL", 100.0)
 
-	om := NewOrderManager(broker, nil, nil)
+	om := NewOrderManager(broker, nil, nil, nil)
 
 	result, err := om.CreateMarketOrder("AAPL", models.OrderSideBuy, 5)
 	require.NoError(t, err)
@@ -201,7 +201,7 @@ func TestOrderManager_CreateLimitOrder(t *testing.T) {
 	broker := NewPaperBroker(10000)
 	require.NoError(t, broker.Connect())
 
-	om := NewOrderManager(broker, nil, nil)
+	om := NewOrderManager(broker, nil, nil, nil)
 
 	result, err := om.CreateLimitOrder("AAPL", models.OrderSideBuy, 5, 145.0)
 	require.NoError(t, err)
@@ -217,13 +217,14 @@ func TestOrderManager_SubmitOrder_NoRiskManager(t *testing.T) {
 	require.NoError(t, broker.Connect())
 	broker.SetPrice("AAPL", 100.0)
 
-	om := NewOrderManager(broker, nil, nil) // No risk manager
+	om := NewOrderManager(broker, nil, nil, nil) // No risk manager
 
 	order := models.Order{
 		Symbol:   "AAPL",
 		Side:     models.OrderSideBuy,
 		Type:     models.OrderTypeMarket,
 		Quantity: 10,
+		Price:    100.0,
 	}
 
 	result, err := om.SubmitOrder(order)
@@ -247,7 +248,7 @@ func TestOrderManager_Persistence(t *testing.T) {
 	broker.SetPrice("AAPL", 100.0)
 
 	// Create first OrderManager and submit order
-	om1 := NewOrderManager(broker, nil, store)
+	om1 := NewOrderManager(broker, nil, store, nil)
 	order, err := om1.CreateMarketOrder("AAPL", models.OrderSideBuy, 10)
 	require.NoError(t, err)
 	orderID := order.ID
@@ -258,7 +259,7 @@ func TestOrderManager_Persistence(t *testing.T) {
 	assert.Equal(t, orderID, retrieved1.ID)
 
 	// Create new OrderManager (simulating restart)
-	om2 := NewOrderManager(broker, nil, store)
+	om2 := NewOrderManager(broker, nil, store, nil)
 
 	// Before loading, order shouldn't be in memory cache
 	allOrders := om2.GetAllOrders()

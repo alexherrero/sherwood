@@ -3,9 +3,12 @@
 package config
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 
 	"github.com/joho/godotenv"
 )
@@ -57,6 +60,9 @@ type Config struct {
 	// Dynamic Configuration (Phase 2)
 	DataProvider      string   // Selected data provider (yahoo, tiingo, binance)
 	EnabledStrategies []string // List of enabled strategy names
+
+	// Internal settings
+	EnvFile string // Path to .env file (default: .env)
 }
 
 // Load reads configuration from environment variables and .env files.
@@ -97,6 +103,8 @@ func Load() (*Config, error) {
 		// Dynamic Configuration (Phase 2)
 		DataProvider:      getEnv("DATA_PROVIDER", "yahoo"),
 		EnabledStrategies: parseStrategies(getEnv("ENABLED_STRATEGIES", "ma_crossover")),
+
+		EnvFile: ".env",
 	}
 
 	if err := config.Validate(); err != nil {
@@ -198,4 +206,59 @@ func splitAndTrim(s, delimiter string) []string {
 		}
 	}
 	return result
+}
+
+// GenerateAPIKey generates a secure random API key of 32 bytes (64 hex characters).
+func GenerateAPIKey() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(bytes), nil
+}
+
+// RotateAPIKey generates a new API key, updates the config, and saves it to the .env file.
+func (c *Config) RotateAPIKey() (string, error) {
+	newKey, err := GenerateAPIKey()
+	if err != nil {
+		return "", err
+	}
+
+	c.APIKey = newKey
+
+	// Update .env file
+	envFile := c.EnvFile
+	if envFile == "" {
+		envFile = ".env"
+	}
+
+	content, err := os.ReadFile(envFile)
+	if err != nil {
+		// If .env doesn't exist, create it
+		if os.IsNotExist(err) {
+			return newKey, os.WriteFile(envFile, []byte("API_KEY="+newKey+"\n"), 0644)
+		}
+		return "", err
+	}
+
+	lines := strings.Split(string(content), "\n")
+	found := false
+	for i, line := range lines {
+		if strings.HasPrefix(line, "API_KEY=") {
+			lines[i] = "API_KEY=" + newKey
+			found = true
+			break
+		}
+	}
+
+	if !found {
+		lines = append(lines, "API_KEY="+newKey)
+	}
+
+	err = os.WriteFile(envFile, []byte(strings.Join(lines, "\n")), 0644)
+	if err != nil {
+		return "", fmt.Errorf("failed to write .env file: %w", err)
+	}
+
+	return newKey, nil
 }
