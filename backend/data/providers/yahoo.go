@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/piquette/finance-go"
 	"github.com/piquette/finance-go/chart"
 	"github.com/piquette/finance-go/datetime"
 	"github.com/piquette/finance-go/quote"
@@ -12,9 +13,54 @@ import (
 	"github.com/alexherrero/sherwood/backend/models"
 )
 
+// YahooAPI defines the interface for Yahoo Finance API calls.
+type YahooAPI interface {
+	GetQuote(symbol string) (*finance.Quote, error)
+	GetChartData(params *chart.Params) ([]models.OHLCV, error)
+}
+
+// defaultYahooAPI implements YahooAPI using the finance-go library.
+type defaultYahooAPI struct{}
+
+func (api *defaultYahooAPI) GetQuote(symbol string) (*finance.Quote, error) {
+	return quote.Get(symbol)
+}
+
+func (api *defaultYahooAPI) GetChartData(params *chart.Params) ([]models.OHLCV, error) {
+	iter := chart.Get(params)
+	if iter.Err() != nil {
+		return nil, iter.Err()
+	}
+
+	var ohlcvData []models.OHLCV
+	for iter.Next() {
+		bar := iter.Bar()
+		if bar == nil {
+			continue
+		}
+
+		ohlcv := models.OHLCV{
+			Timestamp: time.Unix(int64(bar.Timestamp), 0),
+			Symbol:    params.Symbol,
+			Open:      bar.Open.InexactFloat64(),
+			High:      bar.High.InexactFloat64(),
+			Low:       bar.Low.InexactFloat64(),
+			Close:     bar.Close.InexactFloat64(),
+			Volume:    float64(bar.Volume),
+		}
+		ohlcvData = append(ohlcvData, ohlcv)
+	}
+
+	if iter.Err() != nil {
+		return nil, iter.Err()
+	}
+	return ohlcvData, nil
+}
+
 // YahooProvider fetches market data from Yahoo Finance.
 // Uses the unofficial Yahoo Finance API via piquette/finance-go library.
 type YahooProvider struct {
+	api YahooAPI
 	// rateLimiter controls request rate to avoid API throttling.
 	lastRequest time.Time
 	minInterval time.Duration
@@ -26,6 +72,7 @@ type YahooProvider struct {
 //   - *YahooProvider: The provider instance
 func NewYahooProvider() *YahooProvider {
 	return &YahooProvider{
+		api:         &defaultYahooAPI{},
 		lastRequest: time.Time{},
 		minInterval: 200 * time.Millisecond, // ~5 requests/second max
 	}
@@ -110,32 +157,9 @@ func (p *YahooProvider) GetHistoricalData(symbol string, start, end time.Time, i
 		End:      datetime.New(&end),
 	}
 
-	iter := chart.Get(params)
-	if iter.Err() != nil {
-		return nil, fmt.Errorf("failed to fetch chart data for %s: %w", symbol, iter.Err())
-	}
-
-	var ohlcvData []models.OHLCV
-	for iter.Next() {
-		bar := iter.Bar()
-		if bar == nil {
-			continue
-		}
-
-		ohlcv := models.OHLCV{
-			Timestamp: time.Unix(int64(bar.Timestamp), 0),
-			Symbol:    symbol,
-			Open:      bar.Open.InexactFloat64(),
-			High:      bar.High.InexactFloat64(),
-			Low:       bar.Low.InexactFloat64(),
-			Close:     bar.Close.InexactFloat64(),
-			Volume:    float64(bar.Volume),
-		}
-		ohlcvData = append(ohlcvData, ohlcv)
-	}
-
-	if iter.Err() != nil {
-		return nil, fmt.Errorf("error iterating chart data for %s: %w", symbol, iter.Err())
+	ohlcvData, err := p.api.GetChartData(params)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch chart data for %s: %w", symbol, err)
 	}
 
 	if len(ohlcvData) == 0 {
@@ -156,7 +180,7 @@ func (p *YahooProvider) GetHistoricalData(symbol string, start, end time.Time, i
 func (p *YahooProvider) GetLatestPrice(symbol string) (float64, error) {
 	p.rateLimit()
 
-	q, err := quote.Get(symbol)
+	q, err := p.api.GetQuote(symbol)
 	if err != nil {
 		return 0.0, fmt.Errorf("failed to fetch quote for %s: %w", symbol, err)
 	}
@@ -179,7 +203,7 @@ func (p *YahooProvider) GetLatestPrice(symbol string) (float64, error) {
 func (p *YahooProvider) GetTicker(symbol string) (*models.Ticker, error) {
 	p.rateLimit()
 
-	q, err := quote.Get(symbol)
+	q, err := p.api.GetQuote(symbol)
 	if err != nil {
 		return nil, fmt.Errorf("failed to fetch quote for %s: %w", symbol, err)
 	}
