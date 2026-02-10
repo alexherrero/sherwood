@@ -359,28 +359,7 @@ Implement the remaining API endpoints identified during the backend review to su
 
 ---
 
-## 13. Enhanced Audit Logging
-
-**Complexity:** Low
-
-**Description:**
-Improve audit logging in the `OrderManager` to include requestor details for compliance and security auditing.
-
-**Implementation Requirements:**
-
-1. Capture `User IP` and `API Key ID` context in API middleware
-2. Pass context to `OrderManager` methods
-3. Log these details with every order placement, cancellation, or modification
-4. Use structured logging fields (e.g., `user_ip`, `api_key_id`)
-
-**Files to Modify:**
-
-- `backend/api/middleware.go`
-- `backend/execution/order_manager.go`
-
----
-
-## 14. Configuration Hot-Reload
+## 13. Configuration Hot-Reload
 
 **Complexity:** Medium
 

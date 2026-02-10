@@ -101,6 +101,7 @@ func NewRouter(
 	// API v1 routes (protected)
 	r.Route("/api/v1", func(r chi.Router) {
 		r.Use(AuthMiddleware(cfg))
+		r.Use(AuditMiddleware)
 
 		// Strategies routes
 		r.Route("/strategies", func(r chi.Router) {

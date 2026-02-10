@@ -2,6 +2,7 @@
 package execution
 
 import (
+	"context"
 	"fmt"
 	"sort"
 	"sync"
@@ -57,14 +58,16 @@ func NewOrderManager(
 }
 
 // SubmitOrder validates and submits an order for execution.
+// The context carries audit information (user IP, API key ID) for logging.
 //
 // Args:
+//   - ctx: Context with audit information
 //   - order: The order to submit
 //
 // Returns:
 //   - *models.Order: The submitted order
 //   - error: Any error encountered
-func (om *OrderManager) SubmitOrder(order models.Order) (*models.Order, error) {
+func (om *OrderManager) SubmitOrder(ctx context.Context, order models.Order) (*models.Order, error) {
 	// Validate order
 	if err := om.validateOrder(order); err != nil {
 		return nil, fmt.Errorf("order validation failed: %w", err)
@@ -95,6 +98,7 @@ func (om *OrderManager) SubmitOrder(order models.Order) (*models.Order, error) {
 		}
 	}
 
+	// Audit log with requestor context
 	log.Info().
 		Str("order_id", result.ID).
 		Str("symbol", result.Symbol).
@@ -103,6 +107,8 @@ func (om *OrderManager) SubmitOrder(order models.Order) (*models.Order, error) {
 		Float64("quantity", result.Quantity).
 		Float64("price", result.Price).
 		Str("status", string(result.Status)).
+		Str("user_ip", auditIPFromCtx(ctx)).
+		Str("api_key_id", auditKeyIDFromCtx(ctx)).
 		Msg("Order submitted")
 
 	// Broadcast update
@@ -157,14 +163,29 @@ func (om *OrderManager) LoadOrders() error {
 }
 
 // CancelOrder cancels an order.
+// The context carries audit information (user IP, API key ID) for logging.
 //
 // Args:
+//   - ctx: Context with audit information
 //   - orderID: ID of the order to cancel
 //
 // Returns:
 //   - error: Any error encountered
-func (om *OrderManager) CancelOrder(orderID string) error {
-	return om.broker.CancelOrder(orderID)
+func (om *OrderManager) CancelOrder(ctx context.Context, orderID string) error {
+	log.Info().
+		Str("order_id", orderID).
+		Str("user_ip", auditIPFromCtx(ctx)).
+		Str("api_key_id", auditKeyIDFromCtx(ctx)).
+		Msg("Order cancellation requested")
+
+	err := om.broker.CancelOrder(orderID)
+	if err != nil {
+		log.Warn().
+			Str("order_id", orderID).
+			Err(err).
+			Msg("Order cancellation failed")
+	}
+	return err
 }
 
 // GetOrder retrieves an order by ID.
@@ -255,8 +276,10 @@ func (om *OrderManager) GetAllOrders() []models.Order {
 }
 
 // CreateMarketOrder creates a market order.
+// The context carries audit information (user IP, API key ID) for logging.
 //
 // Args:
+//   - ctx: Context with audit information
 //   - symbol: Ticker symbol
 //   - side: Buy or sell
 //   - quantity: Amount to trade
@@ -264,7 +287,7 @@ func (om *OrderManager) GetAllOrders() []models.Order {
 // Returns:
 //   - *models.Order: The submitted order
 //   - error: Any error encountered
-func (om *OrderManager) CreateMarketOrder(symbol string, side models.OrderSide, quantity float64) (*models.Order, error) {
+func (om *OrderManager) CreateMarketOrder(ctx context.Context, symbol string, side models.OrderSide, quantity float64) (*models.Order, error) {
 	order := models.Order{
 		Symbol:    symbol,
 		Side:      side,
@@ -274,12 +297,14 @@ func (om *OrderManager) CreateMarketOrder(symbol string, side models.OrderSide, 
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	return om.SubmitOrder(order)
+	return om.SubmitOrder(ctx, order)
 }
 
 // CreateLimitOrder creates a limit order.
+// The context carries audit information (user IP, API key ID) for logging.
 //
 // Args:
+//   - ctx: Context with audit information
 //   - symbol: Ticker symbol
 //   - side: Buy or sell
 //   - quantity: Amount to trade
@@ -288,7 +313,7 @@ func (om *OrderManager) CreateMarketOrder(symbol string, side models.OrderSide, 
 // Returns:
 //   - *models.Order: The submitted order
 //   - error: Any error encountered
-func (om *OrderManager) CreateLimitOrder(symbol string, side models.OrderSide, quantity, price float64) (*models.Order, error) {
+func (om *OrderManager) CreateLimitOrder(ctx context.Context, symbol string, side models.OrderSide, quantity, price float64) (*models.Order, error) {
 	order := models.Order{
 		Symbol:    symbol,
 		Side:      side,
@@ -299,7 +324,7 @@ func (om *OrderManager) CreateLimitOrder(symbol string, side models.OrderSide, q
 		CreatedAt: time.Now(),
 		UpdatedAt: time.Now(),
 	}
-	return om.SubmitOrder(order)
+	return om.SubmitOrder(ctx, order)
 }
 
 // GetPositions retrieves all current positions from the broker.

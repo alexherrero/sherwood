@@ -211,7 +211,7 @@ func (e *TradingEngine) executeSignal(signal models.Signal) error {
 	// Or use Limit if signal.Price is set?
 	// Let's stick to Market for Phase 1.
 
-	_, err := e.orderManager.CreateMarketOrder(signal.Symbol, side, quantity)
+	_, err := e.orderManager.CreateMarketOrder(execution.NewEngineContext(), signal.Symbol, side, quantity)
 	if err != nil {
 		return fmt.Errorf("failed to submit order: %w", err)
 	}

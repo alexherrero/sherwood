@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -50,7 +51,7 @@ func TestGetOrdersPaginationAndFiltering(t *testing.T) {
 			Quantity:  10,
 		}, nil).Once()
 
-		_, err := orderManager.CreateMarketOrder(symbol, models.OrderSideBuy, 10)
+		_, err := orderManager.CreateMarketOrder(context.Background(), symbol, models.OrderSideBuy, 10)
 		require.NoError(t, err)
 	}
 
@@ -118,7 +119,7 @@ func TestGetOrderHandler(t *testing.T) {
 	mockBroker.On("PlaceOrder", mock.Anything).Return(&models.Order{
 		ID: "test-id-1", Symbol: "AAPL",
 	}, nil).Once()
-	orderManager.CreateMarketOrder("AAPL", models.OrderSideBuy, 1)
+	orderManager.CreateMarketOrder(context.Background(), "AAPL", models.OrderSideBuy, 1)
 
 	// Since NewRouter creates its own handler, we test Handler method directly or use Router
 	// Let's use Router to test URL param parsing
