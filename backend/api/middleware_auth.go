@@ -32,7 +32,7 @@ func AuthMiddleware(cfg *config.Config) func(http.Handler) http.Handler {
 					Str("ip", r.RemoteAddr).
 					Str("path", r.URL.Path).
 					Msg("Unauthorized access attempt: invalid API key")
-				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				writeError(w, http.StatusUnauthorized, "Unauthorized", "UNAUTHORIZED")
 				return
 			}
 
