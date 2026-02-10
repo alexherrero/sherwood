@@ -21,10 +21,9 @@ type DataProvider interface {
 
 | Provider | Asset Type | Status | Notes |
 |----------|------------|--------|-------|
-| Yahoo Finance | Stocks, ETFs, Crypto | ✅ Implemented | Uses `piquette/finance-go` (unofficial API) |
-| Tiingo | Stocks, ETFs | ✅ Implemented | Free tier: 500 req/hr. Requires API key |
-| Binance | Crypto | ✅ Implemented | Uses `go-binance`. International users |
-| Binance.US | Crypto | ✅ Implemented | For US users (geo-restricted from binance.com) |
+| Yahoo Finance | Stocks, ETFs, Crypto | ✅ Implemented | Uses `piquette/finance-go` (v1.1.0) |
+| Tiingo | Stocks, ETFs | ✅ Implemented | Reliable backtest data. Requires API key |
+| Binance | Crypto | ✅ Implemented | Global and US support via `adshao/go-binance` |
 
 ### Database (SQLite)
 

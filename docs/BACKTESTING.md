@@ -76,12 +76,12 @@ fmt.Println(report.TradeList())
 | `StartDate` | time.Time | Backtest start date |
 | `EndDate` | time.Time | Backtest end date |
 | `InitialCapital` | float64 | Starting capital |
-| `PositionSize` | float64 | Fixed position size (0 = use all) |
-| `Commission` | float64 | Commission per trade |
+| `PositionSize` | float64 | Fixed position size (0 = use 95% of available cash) |
+| `Commission` | float64 | Commission per trade (flat fee) |
 
 ## Limitations
 
-- Long-only strategies currently supported
-- No slippage modeling
-- Single symbol per backtest
-- Market orders only (no limit orders)
+- **Long-only**: Focused on spot trading currently.
+- **Single symbol**: One asset per backtest run.
+- **Slippage**: No execution slippage modeling.
+- **Fills**: Simulated at the next bar's Close price.

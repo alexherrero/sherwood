@@ -56,21 +56,13 @@ Edit `.env` with your settings:
 ```env
 # General Configuration
 PORT=8099
-TRADING_MODE=dry_run  # Options: 'dry_run' or 'live'
+TRADING_MODE=dry_run  # Options: 'dry_run', 'paper', or 'live'
 DATABASE_PATH=./data/sherwood.db
 API_KEY=your-secret-key-here # Protects API access
 
-# Robinhood Credentials (required for live trading)
-RH_USERNAME=your_email@example.com
-RH_PASSWORD=your_password
-RH_MFA_CODE=your_device_mfa_secret
-
-# Binance Configuration (for crypto)
-BINANCE_USE_US=true  # Set to true for US users
+# Data Provider API Keys (optional, tests will use mocks if missing)
 BINANCE_API_KEY=your_binance_api_key
 BINANCE_API_SECRET=your_binance_api_secret
-
-# Tiingo API Key (get free at tiingo.com)
 TIINGO_API_KEY=your_tiingo_api_key
 ```
 
@@ -78,21 +70,18 @@ TIINGO_API_KEY=your_tiingo_api_key
 
 ```bash
 # Build and run
-go build -o sherwood ./backend/...
+go build -o sherwood ./backend/main.go
 ./sherwood
 
 # Or run directly
-go run ./backend/...
+go run ./backend/main.go
 ```
 
 ### 4. Run Tests
 
 ```bash
-# Unit tests only
-go test ./...
-
-# Include integration tests (requires API keys)
-go test ./... -tags=integration
+# Run all tests
+go test ./... -v
 ```
 
 ---
@@ -103,13 +92,13 @@ go test ./... -tags=integration
 sherwood/
 ├── backend/
 │   ├── main.go              # Application entry point
-│   ├── api/                 # REST API handlers
+│   ├── api/                 # REST API handlers and middleware
 │   ├── config/              # Configuration management
-│   ├── data/                # Data layer
-│   │   └── providers/       # Market data providers
-│   ├── models/              # Domain models
+│   ├── data/                # Data layer and providers
+│   ├── models/              # Shared domain models
 │   ├── strategies/          # Trading strategies
-│   └── execution/           # Trade execution (planned)
+│   ├── execution/           # Trade execution and order management
+│   └── backtesting/         # Backtesting framework
 ├── frontend/                # React dashboard (planned)
 ├── docs/                    # Documentation
 ├── .env.example             # Environment template

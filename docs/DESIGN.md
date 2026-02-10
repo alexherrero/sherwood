@@ -106,11 +106,18 @@ The backend exposes a RESTful API for frontend integration. All `/api/v1/*` endp
 
 ### Execution
 
-- `GET /api/v1/execution/orders` - List all orders
+- `GET /api/v1/execution/orders` - List all orders (supports pagination/filtering)
 - `POST /api/v1/execution/orders` - Place a manual order
+- `GET /api/v1/execution/orders/{id}` - Get single order details
 - `DELETE /api/v1/execution/orders/{id}` - Cancel an order
+- `GET /api/v1/execution/history` - List closed/filled orders
 - `GET /api/v1/execution/positions` - Get current positions
 - `GET /api/v1/execution/balance` - Get account balance
+
+### Portfolio & Metrics
+
+- `GET /api/v1/portfolio/summary` - Unified portfolio view
+- `GET /api/v1/config/metrics` - Runtime performance metrics
 
 ### Market Data
 
@@ -121,6 +128,16 @@ The backend exposes a RESTful API for frontend integration. All `/api/v1/*` endp
 
 - `POST /api/v1/engine/start` - Start the trading engine
 - `POST /api/v1/engine/stop` - Stop the trading engine
+
+### Configuration & Security
+
+- `GET /api/v1/config` - Current configuration (sanitized)
+- `GET /api/v1/config/validation` - Detail configuration validation
+- `POST /api/v1/config/rotate-key` - Rotate the API authentication key
+
+### Real-time
+
+- `GET /ws` - WebSocket endpoint for real-time updates (requires Auth)
 
 ## Technology Stack
 
@@ -197,9 +214,9 @@ sherwood/
 │   │   ├── metrics.go       # Performance metrics
 │   │   └── reports.go       # Report generation
 │   ├── api/                 # REST API
-│   │   ├── handlers/        # HTTP Handlers
-│   │   ├── middleware.go    # Auth, logging, etc.
-│   │   └── types.go         # Request/response structs
+│   │   ├── handlers_*.go    # HTTP Handlers (orders, backtesting, etc.)
+│   │   ├── middleware_*.go  # Auth, Audit, Rate Limiting, CORS
+│   │   └── validation.go    # Input validation logic
 │   ├── config/              # Configuration management
 │   ├── utils/               # Utility functions
 │   └── models/              # Shared domain models

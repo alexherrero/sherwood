@@ -4,7 +4,7 @@ This guide covers setting up, running, and verifying the Sherwood trading engine
 
 ## Prerequisites
 
-- **Go 1.25+**: [Download Go](https://go.dev/dl/)
+- **Go 1.21+**: [Download Go](https://go.dev/dl/)
 
 ## Installation
 
@@ -27,7 +27,7 @@ PORT=8099
 HOST=0.0.0.0
 API_KEY=your-secret-key # Protects API access
 
-# Trading mode: 'dry_run' (paper) or 'live'
+# Trading mode: 'dry_run', 'paper', or 'live'
 TRADING_MODE=dry_run
 
 # Database
@@ -35,11 +35,6 @@ DATABASE_PATH=./data/sherwood.db
 
 # Logging: debug, info, warn, error
 LOG_LEVEL=info
-
-# Robinhood credentials (optional)
-RH_USERNAME=your_email@example.com
-RH_PASSWORD=your_password
-RH_MFA_CODE=your_mfa_secret
 
 # Data Provider API Keys (optional, tests will use mocks if missing)
 BINANCE_API_KEY=your_binance_key
