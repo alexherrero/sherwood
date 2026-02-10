@@ -142,6 +142,45 @@ jobs:
         
         echo "✅ Order successfully persisted across restart!"
 
+    - name: Verify trade history (empty initially)
+      run: |
+        RESPONSE=$(curl -s http://127.0.0.1:8099/api/v1/execution/trades \
+          -H "X-Sherwood-API-Key: test-key-12345")
+        echo "Trades response: $RESPONSE"
+        # Should be empty array or null (depending on implementation for no trades), but valid JSON
+        if echo "$RESPONSE" | grep -q "error"; then
+          echo "Failed to fetch trades"
+          exit 1
+        fi
+        echo "✅ Trade history endpoint functional"
+
+    - name: Verify order modification
+      run: |
+        # Submit a new pending limit order
+        RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/execution/orders \
+          -H "Content-Type: application/json" \
+          -H "X-Sherwood-API-Key: test-key-12345" \
+          -d '{"symbol":"ETH-USD","side":"buy","type":"limit","quantity":1.0,"price":3000.00}')
+        MOD_ORDER_ID=$(echo $RESPONSE | jq -r '.id')
+        
+        if [ -z "$MOD_ORDER_ID" ] || [ "$MOD_ORDER_ID" = "null" ]; then
+           echo "Failed to submit limit order for modification"
+           exit 1
+        fi
+
+        # Modify it
+        MOD_RESPONSE=$(curl -s -X PATCH http://127.0.0.1:8099/api/v1/execution/orders/$MOD_ORDER_ID \
+          -H "Content-Type: application/json" \
+          -H "X-Sherwood-API-Key: test-key-12345" \
+          -d '{"price": 3100.00}')
+        
+        NEW_PRICE=$(echo $MOD_RESPONSE | jq -r '.price')
+        if [ "$NEW_PRICE" != "3100" ]; then
+          echo "Order modification failed! Expected 3100, got $NEW_PRICE"
+          exit 1
+        fi
+        echo "✅ Order modification verified"
+
     - name: Cleanup
       if: always()
       run: |

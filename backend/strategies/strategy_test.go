@@ -94,6 +94,30 @@ func TestRegistryGet(t *testing.T) {
 	assert.False(t, exists)
 }
 
+func TestBaseStrategy_Helpers(t *testing.T) {
+	s := NewBaseStrategy("base", "desc")
+	config := map[string]interface{}{
+		"int_val":     float64(10), // JSON often decodes numbers as float64
+		"float_val":   20.5,
+		"mixed_int":   30,
+		"mixed_float": 40, // Int provided where float expected
+		"string_val":  "50",
+	}
+	s.Init(config)
+
+	// GetConfigInt
+	assert.Equal(t, 10, s.GetConfigInt("int_val", 0))
+	assert.Equal(t, 30, s.GetConfigInt("mixed_int", 0))
+	assert.Equal(t, 99, s.GetConfigInt("missing", 99))
+	assert.Equal(t, 99, s.GetConfigInt("string_val", 99)) // Invalid type
+
+	// GetConfigFloat
+	assert.Equal(t, 20.5, s.GetConfigFloat("float_val", 0.0))
+	assert.Equal(t, 40.0, s.GetConfigFloat("mixed_float", 0.0))
+	assert.Equal(t, 99.9, s.GetConfigFloat("missing", 99.9))
+	assert.Equal(t, 99.9, s.GetConfigFloat("string_val", 99.9)) // Invalid type
+}
+
 // generateTestData creates test OHLCV data.
 func generateTestData(n int, startPrice, trend float64) []models.OHLCV {
 	data := make([]models.OHLCV, n)
