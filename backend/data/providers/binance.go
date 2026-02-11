@@ -219,11 +219,26 @@ func (p *BinanceProvider) GetHistoricalData(symbol string, start, end time.Time,
 		}
 
 		for _, k := range klines {
-			open, _ := strconv.ParseFloat(k.Open, 64)
-			high, _ := strconv.ParseFloat(k.High, 64)
-			low, _ := strconv.ParseFloat(k.Low, 64)
-			closePrice, _ := strconv.ParseFloat(k.Close, 64)
-			volume, _ := strconv.ParseFloat(k.Volume, 64)
+			open, err := strconv.ParseFloat(k.Open, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse open price: %w", err)
+			}
+			high, err := strconv.ParseFloat(k.High, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse high price: %w", err)
+			}
+			low, err := strconv.ParseFloat(k.Low, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse low price: %w", err)
+			}
+			closePrice, err := strconv.ParseFloat(k.Close, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse close price: %w", err)
+			}
+			volume, err := strconv.ParseFloat(k.Volume, 64)
+			if err != nil {
+				return nil, fmt.Errorf("failed to parse volume: %w", err)
+			}
 
 			ohlcv := models.OHLCV{
 				Timestamp: time.UnixMilli(k.OpenTime),

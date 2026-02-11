@@ -270,9 +270,10 @@ func (om *OrderManager) GetOrders(filter OrderFilter) ([]models.Order, int, erro
 //
 // Returns:
 //   - []models.Order: All orders
-func (om *OrderManager) GetAllOrders() []models.Order {
-	orders, _, _ := om.GetOrders(OrderFilter{})
-	return orders
+//   - error: Any error encountered
+func (om *OrderManager) GetAllOrders() ([]models.Order, error) {
+	orders, _, err := om.GetOrders(OrderFilter{})
+	return orders, err
 }
 
 // CreateMarketOrder creates a market order.

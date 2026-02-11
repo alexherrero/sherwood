@@ -159,7 +159,10 @@ func (p *TiingoProvider) GetHistoricalData(symbol string, start, end time.Time, 
 
 	ohlcvData := make([]models.OHLCV, len(priceData))
 	for i, pd := range priceData {
-		timestamp, _ := time.Parse(time.RFC3339, pd.Date)
+		timestamp, err := time.Parse(time.RFC3339, pd.Date)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse date for %s: %w", symbol, err)
+		}
 		ohlcvData[i] = models.OHLCV{
 			Timestamp: timestamp,
 			Symbol:    symbol,
