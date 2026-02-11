@@ -37,6 +37,9 @@ func CalculateMetrics(orders []models.Order, initialBalance float64) Performance
 		}
 	}
 	sort.Slice(filled, func(i, j int) bool {
+		if filled[i].UpdatedAt.Equal(filled[j].UpdatedAt) {
+			return filled[i].ID < filled[j].ID
+		}
 		return filled[i].UpdatedAt.Before(filled[j].UpdatedAt)
 	})
 
