@@ -122,6 +122,32 @@ func TestGenerateConfigWarnings(t *testing.T) {
 	}
 }
 
+// TestGetConfigHandler verifies config retrieval endpoint.
+func TestGetConfigHandler(t *testing.T) {
+	cfg := &config.Config{
+		TradingMode: "test",
+		ServerPort:  8080,
+		LogLevel:    "info",
+		APIKey:      "secret-key",
+	}
+	handler := NewHandler(nil, nil, cfg, nil, nil, nil)
+
+	req := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
+	rec := httptest.NewRecorder()
+
+	handler.GetConfigHandler(rec, req)
+
+	assert.Equal(t, http.StatusOK, rec.Code)
+
+	var response map[string]interface{}
+	err := json.Unmarshal(rec.Body.Bytes(), &response)
+	require.NoError(t, err)
+
+	assert.Equal(t, "test", response["trading_mode"])
+	assert.Equal(t, "info", response["log_level"])
+	assert.NotContains(t, response, "api_key", "Secrets should not be exposed")
+}
+
 func contains(s, substr string) bool {
 	return len(s) >= len(substr) && s[0:len(substr)] == substr // Prefix check is enough for these messages
 }

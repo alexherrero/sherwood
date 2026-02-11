@@ -108,6 +108,7 @@ func TestPaperBroker_PlaceOrder_LimitBuy(t *testing.T) {
 	broker := NewPaperBroker(10000.0)
 	require.NoError(t, broker.Connect())
 
+	// 1. Place limit order without current price -> Pending
 	order := models.Order{
 		Symbol:   "AAPL",
 		Side:     models.OrderSideBuy,
@@ -118,8 +119,51 @@ func TestPaperBroker_PlaceOrder_LimitBuy(t *testing.T) {
 
 	result, err := broker.PlaceOrder(order)
 	require.NoError(t, err)
-	assert.Equal(t, models.OrderStatusFilled, result.Status)
-	assert.Equal(t, 145.0, result.AveragePrice)
+	assert.Equal(t, models.OrderStatusPending, result.Status)
+
+	// 2. Set price that triggers fill (price <= limit)
+	broker.SetPrice("AAPL", 140.0)
+
+	// Logic to trigger fill in broker needs to be called.
+	// Broker currently only checks fill on PlaceOrder submission.
+	// We need a way to trigger check or just simulate re-submission behavior?
+	// Or we just submit a new Limit order that fills immediately now that price is set.
+
+	order2 := models.Order{
+		Symbol:   "AAPL",
+		Side:     models.OrderSideBuy,
+		Type:     models.OrderTypeLimit,
+		Quantity: 10,
+		Price:    145.0,
+	}
+	result2, err := broker.PlaceOrder(order2)
+	require.NoError(t, err)
+	assert.Equal(t, models.OrderStatusFilled, result2.Status)
+	assert.Equal(t, 145.0, result2.AveragePrice) // Fills at limit price per our impl
+}
+
+func TestPaperBroker_CancelOrder_Pending(t *testing.T) {
+	broker := NewPaperBroker(10000.0)
+	require.NoError(t, broker.Connect())
+
+	// Place pending limit order (no price set)
+	order := models.Order{
+		Symbol:   "AAPL",
+		Side:     models.OrderSideBuy,
+		Type:     models.OrderTypeLimit,
+		Quantity: 10,
+		Price:    145.0,
+	}
+	result, _ := broker.PlaceOrder(order)
+	assert.Equal(t, models.OrderStatusPending, result.Status)
+
+	// Cancel it
+	err := broker.CancelOrder(result.ID)
+	require.NoError(t, err)
+
+	// Verify cancelled status
+	retrieved, _ := broker.GetOrder(result.ID)
+	assert.Equal(t, models.OrderStatusCancelled, retrieved.Status)
 }
 
 // TestPaperBroker_PlaceOrder_Sell verifies sell order execution.
@@ -257,6 +301,24 @@ func TestPaperBroker_GetPositions(t *testing.T) {
 	positions, err := broker.GetPositions()
 	require.NoError(t, err)
 	assert.Len(t, positions, 2)
+}
+
+func TestPaperBroker_GetTrades(t *testing.T) {
+	broker := NewPaperBroker(10000.0)
+	require.NoError(t, broker.Connect())
+	broker.SetPrice("AAPL", 100.0)
+
+	// Create two trades
+	_, _ = broker.PlaceOrder(models.Order{
+		Symbol: "AAPL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 5,
+	})
+	_, _ = broker.PlaceOrder(models.Order{
+		Symbol: "AAPL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 2,
+	})
+
+	trades, err := broker.GetTrades()
+	require.NoError(t, err)
+	assert.Len(t, trades, 2)
 }
 
 // TestPaperBroker_MarketOrder_NoPrice verifies error when no price available.
