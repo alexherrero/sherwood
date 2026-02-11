@@ -31,6 +31,9 @@ func (m *MockDataProvider) Name() string {
 
 func (m *MockDataProvider) GetHistoricalData(symbol string, start, end time.Time, interval string) ([]models.OHLCV, error) {
 	args := m.Called(symbol, start, end, interval)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
 	return args.Get(0).([]models.OHLCV), args.Error(1)
 }
 
