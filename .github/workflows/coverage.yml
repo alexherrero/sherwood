@@ -36,7 +36,25 @@ jobs:
             fi
           done
 
-      - name: Calculate and Summarize Coverage
+      - name: Calculate Coverage
+        run: |
+          go tool cover -func=coverage.out
+          
+          # Extract total coverage percentage
+          TOTAL_COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          
+          echo "Total Coverage: $TOTAL_COVERAGE%"
+          
+          # Check if coverage is below 80%
+          if awk "BEGIN {exit !($TOTAL_COVERAGE < 80)}"; then
+            echo "::error::Coverage is below 80% ($TOTAL_COVERAGE%)"
+            exit 1
+          else
+            echo "Coverage check passed ($TOTAL_COVERAGE%)"
+          fi
+
+      - name: Generate Coverage Summary
+        if: always()
         shell: python
         env:
           THRESHOLD: 80
@@ -47,7 +65,7 @@ jobs:
           coverage_file = "coverage.out"
           if not os.path.exists(coverage_file):
               print("No coverage file found")
-              sys.exit(1)
+              sys.exit(0) # Exit gracefully if prior step failed
 
           file_stats = {}
           module_prefix = "github.com/alexherrero/sherwood/"
@@ -76,15 +94,12 @@ jobs:
                       if count > 0:
                           file_stats[filename]["covered"] += stmts
                   except Exception as e:
-                      print(f"Error parsing line: {line.strip()} - {e}")
+                      # Ignore parsing errors for individual lines
                       continue
 
           if not file_stats:
               print("No meaningful coverage data found")
-              # Create a failed summary
-              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
-                  f.write("# ❌ Code Coverage Failed\n\nNo coverage data found in coverage.out")
-              sys.exit(1)
+              sys.exit(0)
 
           file_percentages = []
           total_stmts = 0
@@ -111,10 +126,7 @@ jobs:
               if pct > highest_cov:
                   highest_cov = pct
                   highest_file = fname
-              elif pct == highest_cov:
-                  # If tie, just keep one or could append? Keep simple.
-                  pass
-                  
+              
               if pct < lowest_cov:
                   lowest_cov = pct
                   lowest_file = fname
@@ -126,7 +138,6 @@ jobs:
           passed = total_coverage_pct >= pass_threshold
           
           status_header = "✅ PASS" if passed else "❌ FAIL"
-          status_color = "green" if passed else "red"
 
           summary_md = f"""
           # Code Coverage Summary: {status_header}
@@ -138,7 +149,6 @@ jobs:
           | **Average File Coverage** | {avg_file_coverage:.2f}% | (Across {len(file_percentages)} files) |
           | **Highest File Coverage** | {highest_cov:.2f}% | `{highest_file}` |
           | **Lowest File Coverage** | {lowest_cov:.2f}% | `{lowest_file}` |
-
           """
           
           # Write to GITHUB_STEP_SUMMARY
@@ -146,9 +156,3 @@ jobs:
           if step_summary_file:
               with open(step_summary_file, "a") as f:
                   f.write(summary_md)
-
-          print(f"Total Coverage: {total_coverage_pct:.2f}%")
-          
-          if not passed:
-              print(f"::error::Coverage is below {pass_threshold}% ({total_coverage_pct:.2f}%)")
-              sys.exit(1)
