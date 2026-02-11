@@ -1,0 +1,79 @@
+name: Auto Release
+
+on:
+  schedule:
+    # Runs at 16:00 UTC every Monday (08:00 AM PST / 09:00 AM PDT)
+    - cron: '0 16 * * 1'
+  workflow_dispatch:
+
+jobs:
+  build-and-release:
+    name: Build & Release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # Important: Fetch all history for tags
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install dependencies
+        run: go mod download
+
+      # Build Linux Binary
+      # Using CGO_ENABLED=0 for static binaries (modernc.org/sqlite supports this)
+      - name: Build Linux Binary
+        run: |
+          CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o sherwood-linux-amd64 ./backend/main.go
+
+      # Build Windows Binary
+      - name: Build Windows Binary
+        run: |
+          CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o sherwood-windows-amd64.exe ./backend/main.go
+
+      - name: Determine Version
+        id: version
+        # Run bash logic to find the next release number for today
+        run: |
+          DATE=$(date +'%Y.%m.%d')
+          # List tags matching today's date pattern: YYYY.MM.DD-*
+          # Note: If no tags exist, grep might fail, so we handle it gracefully or check variable
+          EXISTING_TAGS=$(git tag --list "$DATE-*")
+          
+          if [ -z "$EXISTING_TAGS" ]; then
+            NEXT_NUM=1
+          else
+            # Extract the suffix number, sort numerically descending, take the top one
+            LAST_NUM=$(echo "$EXISTING_TAGS" | sed "s/^$DATE-//" | sort -rn | head -n 1)
+            # Check if LAST_NUM is a valid integer (in case of weird tags), default to 0 if empty
+            if [[ ! "$LAST_NUM" =~ ^[0-9]+$ ]]; then LAST_NUM=0; fi
+            NEXT_NUM=$((LAST_NUM + 1))
+          fi
+          
+          NEW_TAG="$DATE-$NEXT_NUM"
+          echo "Calculated new tag: $NEW_TAG"
+          echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
+
+      # Create Release with auto-generated notes
+      # Note: For a custom LLM-based AI summary, you would typically use an action like 'release-drafter' 
+      # or a specific OpenAI-connected action which requires an API key secret. 
+      # GitHub's standard 'generate_release_notes' provides a categorized changelog automatically.
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AutoRelease ${{ steps.version.outputs.tag }}
+          tag_name: ${{ steps.version.outputs.tag }}
+          files: |
+            sherwood-linux-amd64
+            sherwood-windows-amd64.exe
+          generate_release_notes: true
+          draft: false
+          prerelease: false
