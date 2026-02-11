@@ -236,3 +236,29 @@ Implemented a fully automated GitHub Actions workflow for weekly releases. This 
 
 - `.github/workflows/auto_release.yml`
 - `.github/release.yml`
+
+---
+
+## GitHub Wiki Setup & Automation
+
+**Complexity:** Low
+**Completed:** 2026-02-11
+**Source:** User Request
+
+**Description:**
+Established the structure for the project's GitHub Wiki and implemented an automated deployment workflow. Updated agent instructions to ensure wiki documentation stays synchronized with source documentation.
+
+**What Was Implemented:**
+
+- Created `wiki/` directory with initial content (`Home.md`, `Backend-Setup.md`, `Completed-Features.md`, `Pending-Features.md`)
+- Created `wiki/_Sidebar.md` for navigation
+- Implemented GitHub Action `.github/workflows/deploy_wiki.yml` to publish wiki changes on push
+- Updated `docs/MAINTENANCE.md` with guidelines for wiki maintenance
+- Updated `.agent/rules/prompt.md` to include wiki updates in standard workflow
+
+**Key Files:**
+
+- `wiki/`
+- `.github/workflows/deploy_wiki.yml`
+- `docs/MAINTENANCE.md`
+- `.agent/rules/prompt.md`
