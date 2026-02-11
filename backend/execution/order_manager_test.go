@@ -178,7 +178,8 @@ func TestOrderManager_GetAllOrders(t *testing.T) {
 	_, _ = om.SubmitOrder(context.Background(), models.Order{Symbol: "AAPL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
 	_, _ = om.SubmitOrder(context.Background(), models.Order{Symbol: "GOOGL", Side: models.OrderSideBuy, Type: models.OrderTypeMarket, Quantity: 1})
 
-	orders := om.GetAllOrders()
+	orders, err := om.GetAllOrders()
+	require.NoError(t, err)
 	assert.Len(t, orders, 2)
 }
 
@@ -264,7 +265,8 @@ func TestOrderManager_Persistence(t *testing.T) {
 	om2 := NewOrderManager(broker, nil, store, nil)
 
 	// Before loading, order shouldn't be in memory cache
-	allOrders := om2.GetAllOrders()
+	allOrders, err := om2.GetAllOrders()
+	require.NoError(t, err)
 	assert.Len(t, allOrders, 0)
 
 	// Load orders from database
@@ -280,7 +282,8 @@ func TestOrderManager_Persistence(t *testing.T) {
 	assert.Equal(t, 10.0, restored.Quantity)
 
 	// Verify in-memory cache is populated
-	allOrders = om2.GetAllOrders()
+	allOrders, err = om2.GetAllOrders()
+	require.NoError(t, err)
 	assert.Len(t, allOrders, 1)
 }
 
@@ -291,7 +294,8 @@ func TestOrderManager_ModifyOrder(t *testing.T) {
 	om := NewOrderManager(broker, nil, nil, nil)
 
 	// Create a limit order
-	order, _ := om.CreateLimitOrder(context.Background(), "AAPL", models.OrderSideBuy, 10, 100.0)
+	order, err := om.CreateLimitOrder(context.Background(), "AAPL", models.OrderSideBuy, 10, 100.0)
+	require.NoError(t, err)
 
 	// Modify it
 	modified, err := om.ModifyOrder(context.Background(), order.ID, 105.0, 15.0)

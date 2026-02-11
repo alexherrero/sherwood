@@ -47,7 +47,7 @@ func (m *MockDataProvider) GetTicker(symbol string) (*models.Ticker, error) {
 	return args.Get(0).(*models.Ticker), args.Error(1)
 }
 
-func setupTestHandler() (*Handler, *MockDataProvider, *strategies.Registry) {
+func setupTestHandler(t *testing.T) (*Handler, *MockDataProvider, *strategies.Registry) {
 	cfg := &config.Config{
 		TradingMode:    "test",
 		AllowedOrigins: []string{"http://localhost:3000"},
@@ -56,7 +56,8 @@ func setupTestHandler() (*Handler, *MockDataProvider, *strategies.Registry) {
 
 	// Register a mock strategy
 	strategy := strategies.NewMACrossover()
-	_ = registry.Register(strategy)
+	err := registry.Register(strategy)
+	require.NoError(t, err)
 
 	mockProvider := new(MockDataProvider)
 
@@ -119,7 +120,7 @@ func TestMetricsHandler(t *testing.T) {
 
 // TestListStrategiesHandler verifies strategies list endpoint.
 func TestListStrategiesHandler(t *testing.T) {
-	handler, _, _ := setupTestHandler()
+	handler, _, _ := setupTestHandler(t)
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/strategies", nil)
 	rec := httptest.NewRecorder()
 
@@ -143,7 +144,8 @@ func TestGetStrategyHandler(t *testing.T) {
 		AllowedOrigins: []string{"http://localhost:3000"},
 	}
 	registry := strategies.NewRegistry()
-	_ = registry.Register(strategies.NewMACrossover())
+	err := registry.Register(strategies.NewMACrossover())
+	require.NoError(t, err)
 	mockProvider := new(MockDataProvider)
 
 	router := NewRouter(cfg, registry, mockProvider, nil, nil, nil)
@@ -156,14 +158,14 @@ func TestGetStrategyHandler(t *testing.T) {
 	assert.Equal(t, http.StatusOK, rec.Code)
 
 	var response map[string]interface{}
-	err := json.Unmarshal(rec.Body.Bytes(), &response)
+	err = json.Unmarshal(rec.Body.Bytes(), &response)
 	require.NoError(t, err)
 	assert.Equal(t, "ma_crossover", response["name"])
 }
 
 // TestRunBacktestHandler verifies backtest submission endpoint.
 func TestRunBacktestHandler(t *testing.T) {
-	handler, mockProvider, _ := setupTestHandler()
+	handler, mockProvider, _ := setupTestHandler(t)
 
 	// Mock data provider response
 	mockData := []models.OHLCV{
@@ -226,7 +228,8 @@ func TestGetBacktestResultHandler(t *testing.T) {
 		InitialCapital: 10000,
 	}
 	// We need to register strategy first
-	_ = registry.Register(strategies.NewMACrossover())
+	err := registry.Register(strategies.NewMACrossover())
+	require.NoError(t, err)
 
 	body, _ := json.Marshal(payload)
 	runReq := httptest.NewRequest(http.MethodPost, "/api/v1/backtests", bytes.NewReader(body))
@@ -237,7 +240,7 @@ func TestGetBacktestResultHandler(t *testing.T) {
 	require.Equal(t, http.StatusAccepted, runRec.Code, "Backtest run failed: %s", runRec.Body.String())
 
 	var runResp map[string]interface{}
-	err := json.Unmarshal(runRec.Body.Bytes(), &runResp)
+	err = json.Unmarshal(runRec.Body.Bytes(), &runResp)
 	require.NoError(t, err)
 	id := runResp["id"].(string)
 

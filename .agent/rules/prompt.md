@@ -153,3 +153,4 @@ Always adhere to these principles:
 * Use mocks for external dependencies
 * Keep tests fast and isolated
 * Write descriptive test names
+* **Always Check Errors**: Use `require.NoError(t, err)` for all function calls in tests. Never use `_` to ignore errors.
