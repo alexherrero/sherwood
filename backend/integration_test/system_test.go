@@ -393,6 +393,9 @@ func TestSystemFlow_PerformanceMetrics(t *testing.T) {
 	_, err = orderManager.CreateMarketOrder(ctx, "AAPL", models.OrderSideBuy, 10.0)
 	require.NoError(t, err)
 
+	// Sleep to ensure different UpdatedAt
+	time.Sleep(10 * time.Millisecond)
+
 	// Update price to 110
 	broker.SetPrice("AAPL", 110.0)
 
