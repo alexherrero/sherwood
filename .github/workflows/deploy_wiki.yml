@@ -1,0 +1,35 @@
+name: Deploy Wiki
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'wiki/**'
+      - '.github/workflows/deploy_wiki.yml'
+  pull_request:
+    types: [opened, synchronize, reopened]
+    paths:
+      - 'wiki/**'
+      - '.github/workflows/deploy_wiki.yml'
+
+jobs:
+  deploy-wiki:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Deploy to GitHub Wiki
+        uses: Andrew-Chen-Wang/github-wiki-action@v4
+        with:
+          # The folder in your repo that contains the wiki content
+          wiki-src-path: 'wiki'
+          # The destination path in the wiki repo (root by default)
+          wiki-dest-path: ''
+          # Strategy 'clone' is robust for full sync
+          strategy: clone
+        env:
+          # This token is automatically provided by GitHub Actions
+          # Ensure "Workflow permissions" are set to "Read and write permissions" in repo settings
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
