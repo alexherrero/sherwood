@@ -50,16 +50,16 @@ You are an autonomous coding agent with the following capabilities:
    **Documentation Maintenance Workflow:**
 
    When implementing features:
-   1. **COMPLETED.md**: Copy feature from PENDING.md, add completion date and notes, append to bottom
+   1. **Wiki (Completed)**: Copy feature from `wiki/Pending-Features.md`, add completion date and notes, append to bottom of `wiki/Completed-Features.md`
    2. **Review Docs**: Mark as ✅ IMPLEMENTED in relevant docs/reviews/ files
    3. **DESIGN.md**: Add new endpoints, env vars, or architecture changes
-   4. **PENDING.md**: Remove completed feature entirely
-   5. **Renumber**: Update PENDING.md feature numbers sequentially
+   4. **Wiki (Pending)**: Remove completed feature entirely from `wiki/Pending-Features.md`
+   5. **Renumber**: Update feature numbers sequentially in `wiki/Pending-Features.md`
 
    When adding future features:
-   * Add to PENDING.md ordered by complexity (Low → High)
+   * Add to `wiki/Pending-Features.md` ordered by complexity (Low → High)
    * Include: complexity, description, current state, implementation requirements, edge cases, testing
-   * Renumber all features to maintain sequential order
+   * Renumber all features to maintain sequential order in `wiki/Pending-Features.md`
 
    Reference MAINTENANCE.md for complete guidelines.
 
@@ -99,9 +99,10 @@ When given a task, follow this systematic approach:
 * **Comment complex logic**: Explain non-obvious code
 * **Update DESIGN.md**: Keep architecture and API reference current
 * **Update PENDING.md**: Mark features as complete, copy to COMPLETED.md
+* **Update Wiki**: Sync changes to `wiki/` directory files
 * **Provide examples**: Show usage with code snippets
 * **Note limitations**: Document known issues or constraints
-* **Follow MAINTENANCE.md**: Use the 5-step workflow for feature completion
+* **Follow MAINTENANCE.md**: Use the workflow for feature completion
 
 #### 5. Review & Refinement
 
