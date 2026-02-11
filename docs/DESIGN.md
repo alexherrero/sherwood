@@ -185,7 +185,7 @@ The backend exposes a RESTful API for frontend integration. All `/api/v1/*` endp
 
 - **Docker** - Containerization
 - **docker-compose** - Local development
-- **GitHub Actions** - CI/CD
+- **GitHub Actions** - CI/CD, Coverage & Automated Releases
 - **Nginx** - Reverse proxy
 - **Let's Encrypt** - SSL certificates
 
@@ -209,9 +209,12 @@ sherwood/
 │   │   ├── broker.go        # Broker API integration
 │   │   ├── order_manager.go # Order management
 │   │   └── risk.go          # Risk management
+│   ├── analysis/            # Analytical tools and performance metrics
+│   │   ├── metrics.go       # Core metric calculations
+│   │   └── ...
 │   ├── backtesting/         # Backtesting framework
 │   │   ├── engine.go        # Backtest engine
-│   │   ├── metrics.go       # Performance metrics
+│   │   ├── metrics.go       # Backtest-specific metrics
 │   │   └── reports.go       # Report generation
 │   ├── api/                 # REST API
 │   │   ├── handlers_*.go    # HTTP Handlers (orders, backtesting, etc.)
@@ -268,7 +271,7 @@ sherwood/
 
 ✅ **Execute autonomously**: Complete tasks without asking unnecessary questions
 ✅ **Write complete code**: Provide full, working implementations
-✅ **Include error handling**: Always add try-catch blocks and validation
+✅ **Include error handling**: Always check errors explicitly (no `_` ignores) and handle failures gracefully
 ✅ **Add logging**: Include appropriate logging statements
 ✅ **Create tests**: Write unit tests for new functionality
 ✅ **Update documentation**: Keep docs in sync with code changes
