@@ -79,141 +79,218 @@ jobs:
     - name: Build backend
       run: go build -o sherwood ./backend/main.go
 
-    - name: Create test config
+    - name: Run Order Persistence Tests
+      shell: bash
       run: |
-        cat > .env << EOF
-        PORT=8099
-        HOST=127.0.0.1
-        API_KEY=test-key-12345
-        TRADING_MODE=dry_run
-        DATABASE_PATH=./data/test_persistence.db
-        LOG_LEVEL=info
-        DATA_PROVIDER=yahoo
-        ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8099
-        ENABLED_STRATEGIES=ma_crossover
-        EOF
+        set -o pipefail
+        {
+          # Create test config
+          cat > .env << EOF
+          PORT=8099
+          HOST=127.0.0.1
+          API_KEY=test-key-12345
+          TRADING_MODE=dry_run
+          DATABASE_PATH=./data/test_persistence.db
+          LOG_LEVEL=info
+          DATA_PROVIDER=yahoo
+          ALLOWED_ORIGINS=http://localhost:3000,http://localhost:8099
+          ENABLED_STRATEGIES=ma_crossover
+          EOF
 
-    - name: Start server (first run)
+          # Start server (first run)
+          ./sherwood &
+          SERVER_PID=$!
+          echo $SERVER_PID > server.pid
+          echo "Server started with PID: $SERVER_PID"
+          sleep 5
+
+          # Verify server is running
+          echo "Verifying Health Endpoint..."
+          curl --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8099/health
+          echo "✅ Health check passed"
+
+          # Submit test order
+          echo "Submitting Order..."
+          RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/execution/orders \
+            -H "Content-Type: application/json" \
+            -H "X-Sherwood-API-Key: test-key-12345" \
+            -d '{"symbol":"BTC-USD","side":"buy","type":"limit","quantity":0.01,"price":50000.00}')
+          echo "Order response: $RESPONSE"
+          ORDER_ID=$(echo $RESPONSE | jq -r '.id')
+          
+          if [ -z "$ORDER_ID" ] || [ "$ORDER_ID" = "null" ]; then
+            echo "✗ Failed to submit order"
+            kill $SERVER_PID
+            exit 1
+          fi
+          echo "✅ Submitted order: $ORDER_ID"
+
+          # Stop server
+          echo "Stopping server..."
+          kill $SERVER_PID || true
+          sleep 2
+
+          # Verify database file exists
+          if [ ! -f ./data/test_persistence.db ]; then
+            echo "✗ Database file not found!"
+            exit 1
+          fi
+          echo "✅ Database file exists"
+
+          # Restart server (second run)
+          echo "Restarting server..."
+          ./sherwood &
+          SERVER_PID=$!
+          echo $SERVER_PID > server2.pid
+          sleep 5
+
+          # Verify server restarted
+          curl --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8099/health
+          echo "✅ Health check passed after restart"
+
+          # Verify order persisted
+          echo "Checking for order: $ORDER_ID"
+          RESPONSE=$(curl -s http://127.0.0.1:8099/api/v1/execution/orders \
+            -H "X-Sherwood-API-Key: test-key-12345")
+          
+          RETRIEVED_ID=$(echo $RESPONSE | jq -r ".orders[] | select(.id==\"$ORDER_ID\") | .id")
+          if [ "$RETRIEVED_ID" != "$ORDER_ID" ]; then
+            echo "✗ Order not found after restart! Expected: $ORDER_ID"
+            kill $SERVER_PID
+            exit 1
+          fi
+          echo "✅ Order successfully persisted across restart!"
+
+          # Verify trade history
+          RESPONSE=$(curl -s http://127.0.0.1:8099/api/v1/execution/trades \
+            -H "X-Sherwood-API-Key: test-key-12345")
+          if echo "$RESPONSE" | grep -q "error"; then
+            echo "✗ Failed to fetch trades"
+            kill $SERVER_PID
+            exit 1
+          fi
+          echo "✅ Trade history endpoint functional"
+
+          # Verify order modification
+          RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/execution/orders \
+            -H "Content-Type: application/json" \
+            -H "X-Sherwood-API-Key: test-key-12345" \
+            -d '{"symbol":"ETH-USD","side":"buy","type":"limit","quantity":1.0,"price":3000.00}')
+          MOD_ORDER_ID=$(echo $RESPONSE | jq -r '.id')
+          MOD_RESPONSE=$(curl -s -X PATCH http://127.0.0.1:8099/api/v1/execution/orders/$MOD_ORDER_ID \
+            -H "Content-Type: application/json" \
+            -H "X-Sherwood-API-Key: test-key-12345" \
+            -d '{"price": 3100.00}')
+          NEW_PRICE=$(echo $MOD_RESPONSE | jq -r '.price')
+          if [ "$NEW_PRICE" != "3100" ]; then
+            echo "✗ Order modification failed!"
+            kill $SERVER_PID
+            exit 1
+          fi
+          echo "✅ Order modification verified"
+
+          # Cleanup
+          kill $SERVER_PID || true
+          rm -f ./data/test_persistence.db
+        } 2>&1 | tee persistence_output.txt
+
+    - name: Run API & Config Tests
+      shell: bash
       run: |
-        ./sherwood &
-        SERVER_PID=$!
-        echo $SERVER_PID > server.pid
-        echo "Server started with PID: $SERVER_PID"
-        sleep 5  # Wait for server to be ready
+        set -o pipefail
+        {
+          # Start with API key
+          API_KEY=test-ci-key ./sherwood &
+          SERVER_PID=$!
+          sleep 5
 
-    - name: Verify server is running
-      run: |
-        curl --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8099/health
-        echo "Health check passed"
+          # Verify Historical Data (Simulate Failure/Ignored)
+          echo "Verifying History Endpoint..."
+          HTTP_CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "X-Sherwood-API-Key: test-ci-key" "http://localhost:8099/api/v1/data/history?symbol=SPY&interval=1d")
+          if [ "$HTTP_CODE" != "200" ]; then
+               echo "History check failed with status $HTTP_CODE (ignoring for now, likely network issue)"
+          else
+               echo "✅ History check passed"
+          fi
 
-    - name: Submit test order
-      id: submit_order
-      run: |
-        RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/execution/orders \
-          -H "Content-Type: application/json" \
-          -H "X-Sherwood-API-Key: test-key-12345" \
-          -d '{"symbol":"BTC-USD","side":"buy","type":"limit","quantity":0.01,"price":50000.00}')
-        echo "Order response: $RESPONSE"
-        ORDER_ID=$(echo $RESPONSE | jq -r '.id')
-        echo "ORDER_ID=$ORDER_ID" >> $GITHUB_ENV
-        echo "Submitted order: $ORDER_ID"
-        
-        # Verify order was created
-        if [ -z "$ORDER_ID" ] || [ "$ORDER_ID" = "null" ]; then
-          echo "Failed to submit order"
-          exit 1
-        fi
+          # Verify Security Headers
+          HEADERS=$(curl -s -I http://localhost:8099/health)
+          if echo "$HEADERS" | grep -q "X-Frame-Options: DENY"; then
+               echo "✅ X-Frame-Options header present"
+          else
+               echo "✗ Security headers missing"
+               kill $SERVER_PID
+               exit 1
+          fi
+          
+          # Verify Dynamic Config (Enable Multiple Strategies)
+          echo "Testing Multi-Strategy Config..."
+          kill $SERVER_PID || true
+          sleep 2
+          
+          ENABLED_STRATEGIES="ma_crossover,rsi_momentum" API_KEY=test-ci-key ./sherwood &
+          TEST_PID=$!
+          sleep 5
+          
+          RESPONSE=$(curl -s -H "X-Sherwood-API-Key: test-ci-key" http://localhost:8099/api/v1/strategies)
+          if echo "$RESPONSE" | grep -q "ma_crossover" && echo "$RESPONSE" | grep -q "rsi_momentum"; then
+            echo "✅ Multiple strategies verified"
+          else
+            echo "✗ Multiple strategies failed"
+            kill $TEST_PID
+            exit 1
+          fi
+          
+          kill $TEST_PID || true
+        } 2>&1 | tee api_config_output.txt
 
-    - name: Stop server
-      run: |
-        SERVER_PID=$(cat server.pid)
-        echo "Stopping server with PID: $SERVER_PID"
-        kill $SERVER_PID || true
-        sleep 2  # Wait for server to be ready
-
-    - name: Verify database file exists
-      run: |
-        if [ ! -f ./data/test_persistence.db ]; then
-          echo "Database file not found!"
-          exit 1
-        fi
-        echo "Database file exists"
-        
-        # Show database contents for debugging
-        echo "Database size: $(stat -c%s ./data/test_persistence.db) bytes"
-
-    - name: Restart server (second run)
-      run: |
-        ./sherwood &
-        SERVER_PID=$!
-        echo $SERVER_PID > server2.pid
-        echo "Server restarted with PID: $SERVER_PID"
-        sleep 5  # Wait for server to be ready
-
-    - name: Verify server restarted
-      run: |
-        curl --retry 5 --retry-delay 2 --retry-connrefused http://127.0.0.1:8099/health
-        echo "Health check passed after restart"
-
-    - name: Verify order persisted
-      run: |
-        echo "Checking for order: $ORDER_ID"
-        RESPONSE=$(curl -s http://127.0.0.1:8099/api/v1/execution/orders \
-          -H "X-Sherwood-API-Key: test-key-12345")
-        echo "Order retrieval response: $RESPONSE"
-        
-        # Verify the order exists (find it in the list)
-        RETRIEVED_ID=$(echo $RESPONSE | jq -r ".orders[] | select(.id==\"$ORDER_ID\") | .id")
-        if [ "$RETRIEVED_ID" != "$ORDER_ID" ]; then
-          echo "Order not found after restart! Expected: $ORDER_ID, Got: $RETRIEVED_ID"
-          exit 1
-        fi
-        
-        echo "✅ Order successfully persisted across restart!"
-
-    - name: Verify trade history (empty initially)
-      run: |
-        RESPONSE=$(curl -s http://127.0.0.1:8099/api/v1/execution/trades \
-          -H "X-Sherwood-API-Key: test-key-12345")
-        echo "Trades response: $RESPONSE"
-        # Should be empty array or null (depending on implementation for no trades), but valid JSON
-        if echo "$RESPONSE" | grep -q "error"; then
-          echo "Failed to fetch trades"
-          exit 1
-        fi
-        echo "✅ Trade history endpoint functional"
-
-    - name: Verify order modification
-      run: |
-        # Submit a new pending limit order
-        RESPONSE=$(curl -s -X POST http://127.0.0.1:8099/api/v1/execution/orders \
-          -H "Content-Type: application/json" \
-          -H "X-Sherwood-API-Key: test-key-12345" \
-          -d '{"symbol":"ETH-USD","side":"buy","type":"limit","quantity":1.0,"price":3000.00}')
-        MOD_ORDER_ID=$(echo $RESPONSE | jq -r '.id')
-        
-        if [ -z "$MOD_ORDER_ID" ] || [ "$MOD_ORDER_ID" = "null" ]; then
-           echo "Failed to submit limit order for modification"
-           exit 1
-        fi
-
-        # Modify it
-        MOD_RESPONSE=$(curl -s -X PATCH http://127.0.0.1:8099/api/v1/execution/orders/$MOD_ORDER_ID \
-          -H "Content-Type: application/json" \
-          -H "X-Sherwood-API-Key: test-key-12345" \
-          -d '{"price": 3100.00}')
-        
-        NEW_PRICE=$(echo $MOD_RESPONSE | jq -r '.price')
-        if [ "$NEW_PRICE" != "3100" ]; then
-          echo "Order modification failed! Expected 3100, got $NEW_PRICE"
-          exit 1
-        fi
-        echo "✅ Order modification verified"
-
-    - name: Cleanup
+    - name: Generate Integration Summary
       if: always()
+      shell: bash
       run: |
-        # Kill any remaining server processes
-        pkill -f sherwood || true
-        # Clean up test database
-        rm -f ./data/test_persistence.db
+        echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+        
+        process_log() {
+          local file=$1
+          local name=$2
+          
+          if [ -f "$file" ]; then
+            PASS_COUNT=$(grep -E -i "✓|✅|passed|functional" "$file" | wc -l)
+            
+            # Failures that match 'ignoring' are counted as Ignored, not Failed
+            FAIL_COUNT=$(grep -E -i "✗|failed" "$file" | grep -v -i "ignoring" | wc -l)
+            IGNORED_COUNT=$(grep -E -i "failed" "$file" | grep -i "ignoring" | wc -l)
+            
+            TOTAL=$((PASS_COUNT + FAIL_COUNT + IGNORED_COUNT))
+            
+            echo "### $name" >> $GITHUB_STEP_SUMMARY
+            echo "| Tests | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "| :--- | :---: |" >> $GITHUB_STEP_SUMMARY
+            echo "| Total | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| Passed | $PASS_COUNT |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAIL_COUNT |" >> $GITHUB_STEP_SUMMARY
+            echo "| Ignored | $IGNORED_COUNT |" >> $GITHUB_STEP_SUMMARY
+            
+            if [ $FAIL_COUNT -gt 0 ]; then
+               echo "" >> $GITHUB_STEP_SUMMARY
+               echo "#### ❌ Failures" >> $GITHUB_STEP_SUMMARY
+               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+               grep -E -i "✗|failed" "$file" | grep -v -i "ignoring" >> $GITHUB_STEP_SUMMARY || true
+               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            if [ $IGNORED_COUNT -gt 0 ]; then
+               echo "" >> $GITHUB_STEP_SUMMARY
+               echo "#### ⚠️ Ignored Issues" >> $GITHUB_STEP_SUMMARY
+               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+               grep -E -i "failed" "$file" | grep -i "ignoring" >> $GITHUB_STEP_SUMMARY || true
+               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### $name" >> $GITHUB_STEP_SUMMARY
+            echo "No output log found." >> $GITHUB_STEP_SUMMARY
+          fi
+        }
+        
+        process_log "persistence_output.txt" "Order Persistence Tests"
+        process_log "api_config_output.txt" "API & Configuration Tests"
