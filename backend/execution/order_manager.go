@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strconv"
 	"sync"
 	"time"
 
@@ -20,6 +21,8 @@ type OrderStore interface {
 	GetAllOrders() ([]models.Order, error)
 	SavePosition(position models.Position) error
 	GetAllPositions() ([]models.Position, error)
+	GetSystemConfig(key string) (string, error)
+	SetSystemConfig(key, value string) error
 }
 
 // OrderManager handles order lifecycle and execution.
@@ -398,4 +401,34 @@ func (om *OrderManager) ModifyOrder(ctx context.Context, orderID string, newPric
 	}
 
 	return order, nil
+}
+
+// GetInitialCapital retrieves the initial capital from configuration.
+func (om *OrderManager) GetInitialCapital() (float64, error) {
+	if om.store == nil {
+		return 0, nil
+	}
+
+	valStr, err := om.store.GetSystemConfig("initial_capital")
+	if err != nil {
+		// Treat missing key as not found/default
+		return 0, err
+	}
+
+	val, err := strconv.ParseFloat(valStr, 64)
+	if err != nil {
+		return 0, fmt.Errorf("invalid initial capital value '%s': %w", valStr, err)
+	}
+
+	return val, nil
+}
+
+// SetInitialCapital stores the initial capital in configuration.
+func (om *OrderManager) SetInitialCapital(amount float64) error {
+	if om.store == nil {
+		return fmt.Errorf("no persistence configured")
+	}
+
+	valStr := strconv.FormatFloat(amount, 'f', 2, 64)
+	return om.store.SetSystemConfig("initial_capital", valStr)
 }

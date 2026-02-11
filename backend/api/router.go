@@ -131,6 +131,7 @@ func NewRouter(
 		// Portfolio routes
 		r.Route("/portfolio", func(r chi.Router) {
 			r.Get("/summary", h.GetPortfolioSummaryHandler)
+			r.Get("/performance", h.GetPortfolioPerformanceHandler)
 		})
 
 		// Market Data routes
@@ -149,6 +150,7 @@ func NewRouter(
 			r.Get("/", h.GetConfigHandler)
 			r.Get("/metrics", h.MetricsHandler)
 			r.Get("/validation", h.GetConfigValidationHandler)
+			r.Patch("/system", h.UpdateSystemConfigHandler)
 			r.Post("/rotate-key", h.RotateAPIKeyHandler)
 		})
 

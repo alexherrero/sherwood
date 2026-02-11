@@ -2,6 +2,7 @@ package integration_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -357,4 +358,75 @@ func TestSystemFlow_PortfolioSummary(t *testing.T) {
 	var body map[string]interface{}
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
 	assert.NotNil(t, body["balance"])
+}
+
+// TestSystemFlow_PerformanceMetrics verifies the performance metrics endpoint
+// with real trade execution.
+func TestSystemFlow_PerformanceMetrics(t *testing.T) {
+	cfg := &config.Config{
+		TradingMode:    "paper",
+		AllowedOrigins: []string{"*"},
+	}
+
+	broker := execution.NewPaperBroker(100000.0)
+	require.NoError(t, broker.Connect())
+
+	// Set price for market orders
+	broker.SetPrice("AAPL", 100.0)
+
+	db, err := data.NewDB(":memory:")
+	require.NoError(t, err)
+	orderStore := data.NewOrderStore(db)
+
+	orderManager := execution.NewOrderManager(broker, nil, orderStore, nil)
+	registry := strategies.NewRegistry()
+	provider := &TestableDataProvider{priceData: map[string][]models.OHLCV{}}
+
+	router := api.NewRouter(cfg, registry, provider, orderManager, nil, nil)
+	server := httptest.NewServer(router)
+	defer server.Close()
+
+	// 1. Execute a profitable trade
+	// Buy 10 AAPL @ 100
+	t.Log("Placing Buy Order")
+	ctx := context.Background()
+	_, err = orderManager.CreateMarketOrder(ctx, "AAPL", models.OrderSideBuy, 10.0)
+	require.NoError(t, err)
+
+	// Update price to 110
+	broker.SetPrice("AAPL", 110.0)
+
+	// Sell 10 AAPL @ 110
+	t.Log("Placing Sell Order")
+	_, err = orderManager.CreateMarketOrder(ctx, "AAPL", models.OrderSideSell, 10.0)
+	require.NoError(t, err)
+
+	// 2. Set Initial Capital via API
+	t.Log("Setting Initial Capital")
+	configPayload := map[string]interface{}{"initial_capital": 50000.0}
+	configBody, _ := json.Marshal(configPayload)
+	req, _ := http.NewRequest("PATCH", server.URL+"/api/v1/config/system", bytes.NewBuffer(configBody))
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := server.Client().Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// 3. Call Performance Endpoint
+	resp, err = server.Client().Get(server.URL + "/api/v1/portfolio/performance")
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	var metrics map[string]interface{}
+	require.NoError(t, json.NewDecoder(resp.Body).Decode(&metrics))
+
+	// 3. Verify Metrics
+	t.Logf("Metrics: %+v", metrics)
+
+	totalTrades := metrics["total_trades"].(float64) // JSON numbers are float64
+	winningTrades := metrics["winning_trades"].(float64)
+	totalPnL := metrics["total_pnl"].(float64)
+
+	assert.Equal(t, 1.0, totalTrades, "Expected 1 closed trade")
+	assert.Equal(t, 1.0, winningTrades, "Expected 1 winning trade")
+	assert.Equal(t, 100.0, totalPnL, "Expected $100 profit (10 * 10)")
 }

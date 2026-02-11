@@ -1,6 +1,7 @@
 package api
 
 import (
+	"encoding/json"
 	"net/http"
 
 	"github.com/alexherrero/sherwood/backend/config"
@@ -129,4 +130,44 @@ func generateConfigWarnings(cfg *config.Config, enabledCount int) []string {
 	}
 
 	return warnings
+}
+
+// UpdateSystemConfigHandler updates system configuration values.
+//
+// @Summary      Update System Configuration
+// @Description  Updates dynamic system configuration like initial_capital.
+// @Tags         config
+// @Accept       json
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Failure      400  {object}  ErrorResponse
+// @Failure      500  {object}  ErrorResponse
+// @Router       /config/system [patch]
+func (h *Handler) UpdateSystemConfigHandler(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		InitialCapital *float64 `json:"initial_capital"`
+	}
+
+	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request body")
+		return
+	}
+
+	// Persist Initial Capital if provided
+	if input.InitialCapital != nil {
+		if *input.InitialCapital <= 0 {
+			writeError(w, http.StatusBadRequest, "Initial capital must be positive")
+			return
+		}
+
+		if err := h.orderManager.SetInitialCapital(*input.InitialCapital); err != nil {
+			log.Error().Err(err).Msg("Failed to update initial capital")
+			writeError(w, http.StatusInternalServerError, "Failed to persist configuration")
+			return
+		}
+
+		log.Info().Float64("initial_capital", *input.InitialCapital).Msg("Updated system configuration")
+	}
+
+	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }

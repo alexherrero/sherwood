@@ -81,6 +81,12 @@ type OrderStore interface {
 	// Returns:
 	//   - error: Any error encountered during save
 	SaveTrade(trade models.Trade) error
+
+	// GetSystemConfig retrieves a system configuration value.
+	GetSystemConfig(key string) (string, error)
+
+	// SetSystemConfig sets a system configuration value.
+	SetSystemConfig(key, value string) error
 }
 
 // SQLOrderStore implements OrderStore using SQLite.
@@ -229,6 +235,27 @@ func (s *SQLOrderStore) SaveTrade(trade models.Trade) error {
 	)
 	if err != nil {
 		return fmt.Errorf("failed to save trade: %w", err)
+	}
+	return nil
+}
+
+// GetSystemConfig retrieves a system configuration value.
+func (s *SQLOrderStore) GetSystemConfig(key string) (string, error) {
+	var value string
+	query := `SELECT value FROM system_config WHERE key = ?`
+	err := s.db.Get(&value, query, key)
+	if err != nil {
+		return "", fmt.Errorf("failed to get config '%s': %w", key, err)
+	}
+	return value, nil
+}
+
+// SetSystemConfig sets a system configuration value.
+func (s *SQLOrderStore) SetSystemConfig(key, value string) error {
+	query := `INSERT OR REPLACE INTO system_config (key, value) VALUES (?, ?)`
+	_, err := s.db.Exec(query, key, value)
+	if err != nil {
+		return fmt.Errorf("failed to set config '%s': %w", key, err)
 	}
 	return nil
 }
