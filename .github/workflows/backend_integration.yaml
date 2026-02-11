@@ -35,7 +35,9 @@ jobs:
       shell: bash
       working-directory: ./
       run: |
-        # Start the backend in the background with API Key
+        set -o pipefail
+        {
+          # Start the backend in the background with API Key
         if [ "$RUNNER_OS" == "Windows" ]; then
           API_KEY=test-ci-key ./sherwood.exe &
         else
@@ -185,12 +187,15 @@ jobs:
         
         # Cleanup
         kill $SERVER_PID
+        } 2>&1 | tee integration_output.txt
 
     - name: Test Dynamic Configuration
       shell: bash
       working-directory: ./
       run: |
-        echo "========================================"
+        set -o pipefail
+        {
+          echo "========================================"
         echo "Testing Configuration           "
         echo "========================================"
         
@@ -291,3 +296,43 @@ jobs:
         echo "========================================"
         echo "All Configuration Tests Passed!         "
         echo "========================================"
+        } 2>&1 | tee config_test_output.txt
+
+    - name: Generate Test Summary
+      if: always()
+      shell: bash
+      run: |
+        echo "## Integration Test Summary" >> $GITHUB_STEP_SUMMARY
+        
+        # Function to process log file
+        process_log() {
+          local file=$1
+          local name=$2
+          
+          if [ -f "$file" ]; then
+            PASS_COUNT=$(grep -E -i "✓|✅|passed|functional" "$file" | wc -l)
+            FAIL_COUNT=$(grep -E -i "✗|failed" "$file" | wc -l)
+            TOTAL=$((PASS_COUNT + FAIL_COUNT))
+            
+            echo "### $name" >> $GITHUB_STEP_SUMMARY
+            echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "| :--- | :---: |" >> $GITHUB_STEP_SUMMARY
+            echo "| Total Checks | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "| Passed | $PASS_COUNT |" >> $GITHUB_STEP_SUMMARY
+            echo "| Failed | $FAIL_COUNT |" >> $GITHUB_STEP_SUMMARY
+            
+            if [ $FAIL_COUNT -gt 0 ]; then
+               echo "" >> $GITHUB_STEP_SUMMARY
+               echo "#### ❌ Failures" >> $GITHUB_STEP_SUMMARY
+               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+               grep -E -i "✗|failed" "$file" >> $GITHUB_STEP_SUMMARY || true
+               echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            fi
+          else
+            echo "### $name" >> $GITHUB_STEP_SUMMARY
+            echo "No output log found." >> $GITHUB_STEP_SUMMARY
+          fi
+        }
+        
+        process_log "integration_output.txt" "Order Persistence & API Tests"
+        process_log "config_test_output.txt" "Dynamic Configuration Tests"
