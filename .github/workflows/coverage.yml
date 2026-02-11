@@ -22,7 +22,19 @@ jobs:
         run: go mod download
 
       - name: Run Tests with Coverage
-        run: go test -v -coverprofile=coverage.out ./...
+        run: |
+          echo "mode: atomic" > coverage.out
+          # Get all packages except ignored ones (if any)
+          PACKAGES=$(go list ./...)
+          
+          # Run tests for each package
+          for pkg in $PACKAGES; do
+            go test -v -coverpkg=./... -covermode=atomic -coverprofile=profile.out $pkg
+            if [ -f profile.out ]; then
+              tail -n +2 profile.out >> coverage.out
+              rm profile.out
+            fi
+          done
 
       - name: Calculate Coverage
         run: |
