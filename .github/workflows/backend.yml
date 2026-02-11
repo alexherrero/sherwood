@@ -36,16 +36,18 @@ jobs:
         
         cat test_output.txt
         
-        TOTAL=$(grep -c "^=== RUN" test_output.txt || true)
-        PASS=$(grep -c "^--- PASS:" test_output.txt || true)
-        FAIL=$(grep -c "^--- FAIL:" test_output.txt || true)
+        TOTAL=$(grep -c -E "^\s*=== RUN" test_output.txt || true)
+        PASS=$(grep -c -E "^\s*--- PASS:" test_output.txt || true)
+        FAIL=$(grep -c -E "^\s*--- FAIL:" test_output.txt || true)
+        SKIP=$(grep -c -E "^\s*--- SKIP:" test_output.txt || true)
         
         echo "## Test Summary" >> $GITHUB_STEP_SUMMARY
-        echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+        echo "| Tests | Count |" >> $GITHUB_STEP_SUMMARY
         echo "| :--- | :---: |" >> $GITHUB_STEP_SUMMARY
         echo "| Total | $TOTAL |" >> $GITHUB_STEP_SUMMARY
         echo "| Passed | $PASS |" >> $GITHUB_STEP_SUMMARY
         echo "| Failed | $FAIL |" >> $GITHUB_STEP_SUMMARY
+        echo "| Skipped | $SKIP |" >> $GITHUB_STEP_SUMMARY
         
         if [ $TEST_EXIT_CODE -ne 0 ]; then
           echo "" >> $GITHUB_STEP_SUMMARY
