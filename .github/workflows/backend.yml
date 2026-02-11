@@ -27,7 +27,34 @@ jobs:
 
     - name: Run Tests
       working-directory: ./
-      run: go test -v ./...
+      shell: bash
+      run: |
+        set +e
+        go test -v ./... > test_output.txt 2>&1
+        TEST_EXIT_CODE=$?
+        set -e
+        
+        cat test_output.txt
+        
+        TOTAL=$(grep -c "^=== RUN" test_output.txt || true)
+        PASS=$(grep -c "^--- PASS:" test_output.txt || true)
+        FAIL=$(grep -c "^--- FAIL:" test_output.txt || true)
+        
+        echo "## Test Summary" >> $GITHUB_STEP_SUMMARY
+        echo "| Metric | Count |" >> $GITHUB_STEP_SUMMARY
+        echo "| :--- | :---: |" >> $GITHUB_STEP_SUMMARY
+        echo "| Total | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+        echo "| Passed | $PASS |" >> $GITHUB_STEP_SUMMARY
+        echo "| Failed | $FAIL |" >> $GITHUB_STEP_SUMMARY
+        
+        if [ $TEST_EXIT_CODE -ne 0 ]; then
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### ❌ Failures" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          grep -E "^--- FAIL:|FAIL|panic:|[a-zA-Z0-9_]+\.go:[0-9]+:" test_output.txt | grep -v "PASS:" || true >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          exit $TEST_EXIT_CODE
+        fi
 
     - name: Build
       working-directory: ./
