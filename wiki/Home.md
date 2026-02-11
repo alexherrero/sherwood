@@ -4,7 +4,7 @@ Sherwood is an automated trading engine and management dashboard. This wiki serv
 
 ## Overview
 
-The goal of Sherwood is to provide a robust, extensible platform for developing and executing algorithmic trading strategies.
+The goal of Sherwood is to provide a simple platform for developing and executing algorithmic trading strategies that doesn't require a deep understanding of programming.
 
 ## Key Sections
 
