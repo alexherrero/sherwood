@@ -19,6 +19,33 @@ jobs:
         with:
           fetch-depth: 0 # Important: Fetch all history for tags
 
+      - name: Code Statistics
+        run: |
+          sudo apt-get update && sudo apt-get install -y cloc
+          
+          # Run cloc, excluding vendor/generated dirs
+          cloc --json --out=cloc.json --exclude-dir=vendor,node_modules,.github .
+          
+          TOTAL_LOC=$(jq '.SUM.code' cloc.json)
+          TOTAL_FILES=$(jq '.SUM.nFiles' cloc.json)
+          
+          echo "## 📊 Code Statistics" >> $GITHUB_STEP_SUMMARY
+          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :---: |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total Lines of Code** | **$TOTAL_LOC** |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Total Files** | **$TOTAL_FILES** |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### Language Breakdown" >> $GITHUB_STEP_SUMMARY
+          echo '```mermaid' >> $GITHUB_STEP_SUMMARY
+          echo 'pie showData' >> $GITHUB_STEP_SUMMARY
+          echo '    title LOC by Language' >> $GITHUB_STEP_SUMMARY
+          
+          # Parse JSON: remove header/SUM, sort by LOC desc, take top 10, format for Mermaid
+          jq -r 'del(.header, .SUM) | to_entries | sort_by(.value.code) | reverse | .[:10] | .[] | "    \"\(.key)\" : \(.value.code)"' cloc.json >> $GITHUB_STEP_SUMMARY
+          
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
