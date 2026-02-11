@@ -33,9 +33,9 @@ jobs:
           
           echo "Total Coverage: $TOTAL_COVERAGE%"
           
-          # Check if coverage is below 70%
-          if awk "BEGIN {exit !($TOTAL_COVERAGE < 70)}"; then
-            echo "::error::Coverage is below 70% ($TOTAL_COVERAGE%)"
+          # Check if coverage is below 80%
+          if awk "BEGIN {exit !($TOTAL_COVERAGE < 80)}"; then
+            echo "::error::Coverage is below 80% ($TOTAL_COVERAGE%)"
             exit 1
           else
             echo "Coverage check passed ($TOTAL_COVERAGE%)"
