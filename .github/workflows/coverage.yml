@@ -36,19 +36,119 @@ jobs:
             fi
           done
 
-      - name: Calculate Coverage
+      - name: Calculate and Summarize Coverage
+        shell: python
+        env:
+          THRESHOLD: 80
         run: |
-          go tool cover -func=coverage.out
+          import os
+          import sys
+
+          coverage_file = "coverage.out"
+          if not os.path.exists(coverage_file):
+              print("No coverage file found")
+              sys.exit(1)
+
+          file_stats = {}
+          module_prefix = "github.com/alexherrero/sherwood/"
+
+          with open(coverage_file, 'r') as f:
+              for line in f:
+                  if line.startswith("mode:"):
+                      continue
+                  try:
+                      parts = line.split()
+                      if len(parts) < 3: continue
+                      path_range = parts[0]
+                      filename, _ = path_range.rsplit(':', 1)
+                      
+                      # Clean up filename for display
+                      if filename.startswith(module_prefix):
+                          filename = filename[len(module_prefix):]
+                          
+                      stmts = int(parts[1])
+                      count = int(parts[2])
+                      
+                      if filename not in file_stats:
+                          file_stats[filename] = {"total": 0, "covered": 0}
+                          
+                      file_stats[filename]["total"] += stmts
+                      if count > 0:
+                          file_stats[filename]["covered"] += stmts
+                  except Exception as e:
+                      print(f"Error parsing line: {line.strip()} - {e}")
+                      continue
+
+          if not file_stats:
+              print("No meaningful coverage data found")
+              # Create a failed summary
+              with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as f:
+                  f.write("# ❌ Code Coverage Failed\n\nNo coverage data found in coverage.out")
+              sys.exit(1)
+
+          file_percentages = []
+          total_stmts = 0
+          total_covered = 0
+
+          highest_cov = -1.0
+          highest_file = "N/A"
+          lowest_cov = 101.0
+          lowest_file = "N/A"
+
+          for fname, stats in file_stats.items():
+              tot = stats["total"]
+              cov = stats["covered"]
+              
+              if tot == 0:
+                  continue
+                  
+              pct = (cov / tot) * 100.0
+              file_percentages.append(pct)
+              
+              total_stmts += tot
+              total_covered += cov
+              
+              if pct > highest_cov:
+                  highest_cov = pct
+                  highest_file = fname
+              elif pct == highest_cov:
+                  # If tie, just keep one or could append? Keep simple.
+                  pass
+                  
+              if pct < lowest_cov:
+                  lowest_cov = pct
+                  lowest_file = fname
+
+          total_coverage_pct = (total_covered / total_stmts * 100.0) if total_stmts > 0 else 0.0
+          avg_file_coverage = sum(file_percentages) / len(file_percentages) if file_percentages else 0.0
           
-          # Extract total coverage percentage
-          TOTAL_COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
+          pass_threshold = float(os.environ.get("THRESHOLD", 80))
+          passed = total_coverage_pct >= pass_threshold
           
-          echo "Total Coverage: $TOTAL_COVERAGE%"
+          status_header = "✅ PASS" if passed else "❌ FAIL"
+          status_color = "green" if passed else "red"
+
+          summary_md = f"""
+          # Code Coverage Summary: {status_header}
+
+          | Metric | Value | File (if applicable) |
+          | :--- | :--- | :--- |
+          | **Total Coverage** | **{total_coverage_pct:.2f}%** | All Files |
+          | **Threshold** | {pass_threshold}% | Required |
+          | **Average File Coverage** | {avg_file_coverage:.2f}% | (Across {len(file_percentages)} files) |
+          | **Highest File Coverage** | {highest_cov:.2f}% | `{highest_file}` |
+          | **Lowest File Coverage** | {lowest_cov:.2f}% | `{lowest_file}` |
+
+          """
           
-          # Check if coverage is below 80%
-          if awk "BEGIN {exit !($TOTAL_COVERAGE < 80)}"; then
-            echo "::error::Coverage is below 80% ($TOTAL_COVERAGE%)"
-            exit 1
-          else
-            echo "Coverage check passed ($TOTAL_COVERAGE%)"
-          fi
+          # Write to GITHUB_STEP_SUMMARY
+          step_summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
+          if step_summary_file:
+              with open(step_summary_file, "a") as f:
+                  f.write(summary_md)
+
+          print(f"Total Coverage: {total_coverage_pct:.2f}%")
+          
+          if not passed:
+              print(f"::error::Coverage is below {pass_threshold}% ({total_coverage_pct:.2f}%)")
+              sys.exit(1)
