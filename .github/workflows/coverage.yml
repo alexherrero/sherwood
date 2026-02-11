@@ -61,79 +61,90 @@ jobs:
         run: |
           import os
           import sys
+          import subprocess
 
           coverage_file = "coverage.out"
           if not os.path.exists(coverage_file):
               print("No coverage file found")
-              sys.exit(0) # Exit gracefully if prior step failed
-
-          file_stats = {}
-          module_prefix = "github.com/alexherrero/sherwood/"
-
-          with open(coverage_file, 'r') as f:
-              for line in f:
-                  if line.startswith("mode:"):
-                      continue
-                  try:
-                      parts = line.split()
-                      if len(parts) < 3: continue
-                      path_range = parts[0]
-                      filename, _ = path_range.rsplit(':', 1)
-                      
-                      # Clean up filename for display
-                      if filename.startswith(module_prefix):
-                          filename = filename[len(module_prefix):]
-                          
-                      stmts = int(parts[1])
-                      count = int(parts[2])
-                      
-                      if filename not in file_stats:
-                          file_stats[filename] = {"total": 0, "covered": 0}
-                          
-                      file_stats[filename]["total"] += stmts
-                      if count > 0:
-                          file_stats[filename]["covered"] += stmts
-                  except Exception as e:
-                      # Ignore parsing errors for individual lines
-                      continue
-
-          if not file_stats:
-              print("No meaningful coverage data found")
               sys.exit(0)
 
-          file_percentages = []
-          total_stmts = 0
-          total_covered = 0
+          # Use go tool cover to get official metrics
+          try:
+              result = subprocess.run(
+                  ["go", "tool", "cover", "-func=coverage.out"],
+                  capture_output=True,
+                  text=True,
+                  check=True
+              )
+              output_lines = result.stdout.strip().splitlines()
+          except subprocess.CalledProcessError as e:
+              print(f"Error running go tool cover: {e}")
+              sys.exit(0)
 
+          if not output_lines:
+              print("No coverage data")
+              sys.exit(0)
+
+          total_line = output_lines[-1]
+          # Total line format: "total: (statements) 85.5%"
+          total_coverage_pct = 0.0
+          if "total:" in total_line:
+              try:
+                  pct_str = total_line.split()[-1].replace("%", "")
+                  total_coverage_pct = float(pct_str)
+              except ValueError:
+                  pass
+
+          # Parse individual file stats from output
+          # Line format: "github.com/alexherrero/sherwood/backend/file.go:10: FuncName 100.0%"
+          file_percentages = []
           highest_cov = -1.0
           highest_file = "N/A"
           lowest_cov = 101.0
           lowest_file = "N/A"
 
-          for fname, stats in file_stats.items():
-              tot = stats["total"]
-              cov = stats["covered"]
+          for line in output_lines[:-1]: # Skip total line
+              parts = line.split()
+              if len(parts) < 3: continue
               
-              if tot == 0:
-                  continue
+              # Last part is percentage
+              try:
+                  pct = float(parts[-1].replace("%", ""))
+                  file_path = parts[0]
+                  # Clean up path to show relative path
+                  if "github.com/alexherrero/sherwood/" in file_path:
+                      file_path = file_path.split("github.com/alexherrero/sherwood/")[-1]
+                  # remove function name details usually usually attached or clean up
+                  # output format is actually: package/file.go:line: function	pct%
+                  # let's just take the file path part before the colon
+                  filename = file_path.split(":")[0]
                   
-              pct = (cov / tot) * 100.0
-              file_percentages.append(pct)
+                  file_percentages.append((filename, pct))
+              except ValueError:
+                  continue
+          
+          # Aggregate by file since go tool cover outputs by function
+          file_map = {}
+          for fname, pct in file_percentages:
+              if fname not in file_map:
+                  file_map[fname] = []
+              file_map[fname].append(pct)
+          
+          # Calculate per-file averages
+          final_file_stats = []
+          for fname, pcts in file_map.items():
+              avg = sum(pcts) / len(pcts)
+              final_file_stats.append((fname, avg))
               
-              total_stmts += tot
-              total_covered += cov
-              
-              if pct > highest_cov:
-                  highest_cov = pct
+              if avg > highest_cov:
+                  highest_cov = avg
                   highest_file = fname
-              
-              if pct < lowest_cov:
-                  lowest_cov = pct
+              if avg < lowest_cov:
+                  lowest_cov = avg
                   lowest_file = fname
 
-          total_coverage_pct = (total_covered / total_stmts * 100.0) if total_stmts > 0 else 0.0
-          avg_file_coverage = sum(file_percentages) / len(file_percentages) if file_percentages else 0.0
-          
+          avg_file_coverage = sum(stat[1] for stat in final_file_stats) / len(final_file_stats) if final_file_stats else 0.0
+
           pass_threshold = float(os.environ.get("THRESHOLD", 80))
           passed = total_coverage_pct >= pass_threshold
           
@@ -144,14 +155,13 @@ jobs:
 
           | Metric | Value | File (if applicable) |
           | :--- | :--- | :--- |
-          | **Total Coverage** | **{total_coverage_pct:.2f}%** | All Files |
+          | **Total Coverage** | **{total_coverage_pct:.1f}%** | All Files |
           | **Threshold** | {pass_threshold}% | Required |
-          | **Average File Coverage** | {avg_file_coverage:.2f}% | (Across {len(file_percentages)} files) |
-          | **Highest File Coverage** | {highest_cov:.2f}% | `{highest_file}` |
-          | **Lowest File Coverage** | {lowest_cov:.2f}% | `{lowest_file}` |
+          | **Average File Coverage** | {avg_file_coverage:.1f}% | (Across {len(final_file_stats)} files) |
+          | **Highest File Coverage** | {highest_cov:.1f}% | `{highest_file}` |
+          | **Lowest File Coverage** | {lowest_cov:.1f}% | `{lowest_file}` |
           """
           
-          # Write to GITHUB_STEP_SUMMARY
           step_summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
           if step_summary_file:
               with open(step_summary_file, "a") as f:
