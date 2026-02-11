@@ -62,18 +62,32 @@ jobs:
           echo "Calculated new tag: $NEW_TAG"
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
 
-      # Create Release with auto-generated notes
-      # Note: For a custom LLM-based AI summary, you would typically use an action like 'release-drafter' 
-      # or a specific OpenAI-connected action which requires an API key secret. 
-      # GitHub's standard 'generate_release_notes' provides a categorized changelog automatically.
+      - name: Generate Changelog
+        id: changelog
+        run: |
+          # Get the latest tag securely (suppress error if no tags exist)
+          PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          
+          if [ -z "$PREV_TAG" ]; then
+            echo "## Initial Release" > release_notes.md
+            git log --pretty=format:"- %s (%h)" >> release_notes.md
+          else
+            echo "## Changes since $PREV_TAG" > release_notes.md
+            git log --pretty=format:"- %s (%h)" "$PREV_TAG..HEAD" >> release_notes.md
+          fi
+          
+          # Cat the file to output for debugging
+          cat release_notes.md
+
+      # Create Release with auto-generated notes and custom changelog
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
           name: AutoRelease ${{ steps.version.outputs.tag }}
           tag_name: ${{ steps.version.outputs.tag }}
+          body_path: release_notes.md
           files: |
             sherwood-linux-amd64
             sherwood-windows-amd64.exe
-          generate_release_notes: true
           draft: false
           prerelease: false
