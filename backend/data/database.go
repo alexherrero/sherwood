@@ -107,6 +107,11 @@ func (db *DB) Migrate() error {
 		average_cost REAL NOT NULL,
 		updated_at DATETIME NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS system_config (
+		key TEXT PRIMARY KEY,
+		value TEXT NOT NULL
+	);
 	`
 
 	_, err := db.Exec(schema)
