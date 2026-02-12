@@ -171,3 +171,32 @@ func (h *Handler) UpdateSystemConfigHandler(w http.ResponseWriter, r *http.Reque
 
 	writeJSON(w, http.StatusOK, map[string]string{"status": "updated"})
 }
+
+// ReloadConfigHandler hot-reloads configuration from .env and environment variables.
+// Only safe-to-change fields (log level, shutdown settings, CORS, credentials) are
+// applied immediately. Structural changes (port, mode, provider, strategies) are
+// detected and reported but require a restart to take effect.
+//
+// @Summary      Hot-Reload Configuration
+// @Description  Re-reads .env file and environment variables, applying safe changes live.
+// @Tags         config
+// @Produce      json
+// @Success      200  {object}  config.ReloadResult
+// @Failure      400  {object}  ErrorResponse  "New config failed validation"
+// @Failure      500  {object}  ErrorResponse  "Reload failed"
+// @Router       /config/reload [post]
+func (h *Handler) ReloadConfigHandler(w http.ResponseWriter, r *http.Request) {
+	result, err := h.config.Reload()
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error(), "INVALID_CONFIG")
+		log.Error().Err(err).Msg("Config reload failed validation")
+		return
+	}
+
+	// Notify engine of configuration changes if it is running
+	if h.engine != nil {
+		h.engine.UpdateConfig(h.config.CloseOnShutdown)
+	}
+
+	writeJSON(w, http.StatusOK, result)
+}

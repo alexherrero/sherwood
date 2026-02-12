@@ -147,7 +147,11 @@ The backend exposes a RESTful API for frontend integration. All `/api/v1/*` endp
 
 - `GET /api/v1/config` - Current configuration (sanitized)
 - `GET /api/v1/config/validation` - Detail configuration validation
+- `PATCH /api/v1/config/system` - Update system configuration (e.g., initial capital)
 - `POST /api/v1/config/rotate-key` - Rotate the API authentication key
+- `POST /api/v1/config/reload` - Hot-reload configuration from `.env` / environment
+  - Hot-reloadable (applied immediately): `LOG_LEVEL`, `CLOSE_ON_SHUTDOWN`, `SHUTDOWN_TIMEOUT`, `ALLOWED_ORIGINS`, API credentials
+  - Restart-required (detected, not applied): `PORT`, `HOST`, `TRADING_MODE`, `DATA_PROVIDER`, `ENABLED_STRATEGIES`, `DATABASE_PATH`
 
 ### Notifications
 

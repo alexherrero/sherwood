@@ -456,3 +456,42 @@ Implemented full graceful shutdown for the trading engine, ensuring safe state t
 - `backend/execution/order_manager.go` (modified - SaveOrders(), CancelAllPendingOrders())
 - `backend/config/config.go` (modified - CloseOnShutdown, ShutdownTimeout, getEnvDuration())
 - `backend/main.go` (modified - reordered shutdown: engine → server)
+
+---
+
+## Configuration Hot-Reload
+
+**Complexity:** Medium
+**Completed:** 2026-02-12
+**Source:** Pending Features #8
+
+**Description:**
+Implemented configuration hot-reload via `POST /api/v1/config/reload`. The endpoint re-reads the `.env` file and environment variables, applies safe changes immediately, and reports structural changes that require a restart. This enables operators to update log levels, shutdown settings, CORS configuration, and API credentials without downtime.
+
+**What Was Implemented:**
+
+- `Config.Reload() (*ReloadResult, error)` method that:
+  - Re-reads `.env` using `godotenv.Overload()` (overwrites currently set env vars)
+  - Builds a fresh config and validates it before applying anything
+  - Compares all fields, categorizing changes as hot-reloadable or restart-required
+  - Applies hot-reloadable changes under mutex protection
+  - Returns a detailed `ReloadResult` with per-field change tracking
+- `ReloadChange` struct with `Field`, `OldValue`, `NewValue`, `Applied` fields
+- `ReloadResult` struct with `Changes`, `RequiresRestart`, `RestartReasons` fields
+- Hot-reloadable fields: `LogLevel` (also sets zerolog global level), `CloseOnShutdown`, `ShutdownTimeout`, `AllowedOrigins`, `TiingoAPIKey`, `BinanceAPIKey`, `BinanceAPISecret`
+- Restart-required detection: `ServerPort`, `ServerHost`, `TradingMode`, `DataProvider`, `EnabledStrategies`, `DatabasePath`
+- Credential values are redacted in change output (shown as `[redacted]`)
+- Thread-safe: `sync.RWMutex` added to `Config` struct for concurrent access
+- `TradingEngine.UpdateConfig(closeOnShutdown bool)` for engine notification
+- `POST /api/v1/config/reload` API endpoint registered in router
+- Handler calls engine `UpdateConfig()` after successful reload
+- 7 new config tests + 2 handler tests covering: no changes, hot-reload changes, restart detection, strategy change detection, invalid config rejection, credential redaction, and stringSlicesEqual helper
+
+**Key Files:**
+
+- `backend/config/config.go` (modified - Reload(), ReloadResult, ReloadChange, detectRestartChange(), stringSlicesEqual(), sync.RWMutex)
+- `backend/config/config_test.go` (modified - 7 new reload tests + stringSlicesEqual tests)
+- `backend/api/handlers_config.go` (modified - ReloadConfigHandler)
+- `backend/api/handlers_test.go` (modified - 2 new ReloadConfigHandler tests)
+- `backend/api/router.go` (modified - POST /config/reload route)
+- `backend/engine/trading_engine.go` (modified - UpdateConfig method)

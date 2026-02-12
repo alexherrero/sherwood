@@ -798,3 +798,83 @@ func TestGetConfigValidationHandler(t *testing.T) {
 	assert.Equal(t, "yahoo", provider["name"])
 	assert.Equal(t, "connected", provider["status"])
 }
+
+// TestReloadConfigHandler tests the config hot-reload endpoint.
+func TestReloadConfigHandler(t *testing.T) {
+	t.Run("Success", func(t *testing.T) {
+		cfg := &config.Config{
+			ServerPort:        8099,
+			ServerHost:        "0.0.0.0",
+			TradingMode:       config.ModeDryRun,
+			DatabasePath:      "./data/sherwood.db",
+			LogLevel:          "info",
+			DataProvider:      "yahoo",
+			EnabledStrategies: []string{"ma_crossover"},
+			AllowedOrigins:    []string{"http://localhost:3000", "http://localhost:8080"},
+			EnvFile:           ".env.nonexistent_test",
+		}
+		handler := NewHandler(nil, nil, cfg, nil, nil, nil, nil)
+
+		// Set environment for reload (change log level)
+		t.Setenv("TRADING_MODE", "dry_run")
+		t.Setenv("DATABASE_PATH", "./data/sherwood.db")
+		t.Setenv("DATA_PROVIDER", "yahoo")
+		t.Setenv("ENABLED_STRATEGIES", "ma_crossover")
+		t.Setenv("HOST", "0.0.0.0")
+		t.Setenv("PORT", "8099")
+		t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")
+		t.Setenv("LOG_LEVEL", "debug") // changed
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/config/reload", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ReloadConfigHandler(rec, req)
+		assert.Equal(t, http.StatusOK, rec.Code)
+
+		var result config.ReloadResult
+		err := json.Unmarshal(rec.Body.Bytes(), &result)
+		require.NoError(t, err)
+		assert.Greater(t, len(result.Changes), 0)
+		assert.False(t, result.RequiresRestart)
+
+		// Verify log level was applied
+		assert.Equal(t, "debug", cfg.LogLevel)
+	})
+
+	t.Run("ValidationFailure", func(t *testing.T) {
+		cfg := &config.Config{
+			ServerPort:        8099,
+			ServerHost:        "0.0.0.0",
+			TradingMode:       config.ModeDryRun,
+			DatabasePath:      "./data/sherwood.db",
+			LogLevel:          "info",
+			DataProvider:      "yahoo",
+			EnabledStrategies: []string{"ma_crossover"},
+			EnvFile:           ".env.nonexistent_test",
+		}
+		handler := NewHandler(nil, nil, cfg, nil, nil, nil, nil)
+
+		// Set invalid log level
+		t.Setenv("LOG_LEVEL", "ultra_verbose")
+		t.Setenv("TRADING_MODE", "dry_run")
+		t.Setenv("DATABASE_PATH", "./data/sherwood.db")
+		t.Setenv("DATA_PROVIDER", "yahoo")
+		t.Setenv("ENABLED_STRATEGIES", "ma_crossover")
+		t.Setenv("HOST", "0.0.0.0")
+		t.Setenv("PORT", "8099")
+
+		req := httptest.NewRequest(http.MethodPost, "/api/v1/config/reload", nil)
+		rec := httptest.NewRecorder()
+
+		handler.ReloadConfigHandler(rec, req)
+		assert.Equal(t, http.StatusBadRequest, rec.Code)
+
+		var resp APIError
+		err := json.Unmarshal(rec.Body.Bytes(), &resp)
+		require.NoError(t, err)
+		assert.Equal(t, "INVALID_CONFIG", resp.Code)
+
+		// Config should remain unchanged
+		assert.Equal(t, "info", cfg.LogLevel)
+	})
+}

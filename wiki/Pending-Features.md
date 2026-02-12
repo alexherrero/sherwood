@@ -243,25 +243,3 @@ func TestBacktest_BalanceNeverNegative(t *testing.T) {
     properties.TestingRun(t)
 }
 ```
-
----
-
-## 8. Configuration Hot-Reload
-
-**Complexity:** Medium
-
-**Description:**
-Allow updating the application configuration without a full server restart.
-
-**Implementation Requirements:**
-
-1. Add `POST /api/v1/config/reload` endpoint (Admin-only)
-2. Implement `config.Reload()` method to re-read `.env` or config sources
-3. Notify components (Engine, Data Provider) of configuration changes
-4. Handle safe transitions (e.g., don't swap data provider while fetching data)
-
-**Files to Modify:**
-
-- `backend/config/config.go`
-- `backend/api/handlers.go`
-- `backend/engine/trading_engine.go`
