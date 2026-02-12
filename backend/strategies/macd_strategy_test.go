@@ -34,15 +34,9 @@ func TestMACDStrategy(t *testing.T) {
 		}
 	}
 
-	// With strong uptrend, Fast EMA > Slow EMA -> MACD > 0.
-	// Signal follows MACD.
-	// Uptrend continues -> MACD keeps rising or stays high -> MACD > Signal.
-	// This usually means NO crossover if it's consistently up.
-	// We need a CROSSOVER.
-
-	// Create a crossover scenario.
-	// 1. Trend Down (MACD < Signal)
-	// 2. Trend Up (MACD Crosses Above Signal)
+	// Create a crossover scenario:
+	// 1. Initial downtrend where MACD < Signal.
+	// 2. Followed by a sharp uptrend to trigger a MACD crossover above Signal.
 
 	dataCross := make([]models.OHLCV, 0)
 	// Phase 1: Flat/Down to establish negative momentum
@@ -62,22 +56,14 @@ func TestMACDStrategy(t *testing.T) {
 		})
 	}
 
-	// At the inflection point, MACD should cross up.
-	// Let's test the LAST point.
+	// Expect a Buy or Hold signal depending on exact crossover timing.
+	// Since OnData processes the last candle, the crossover must have occurred
+	// or be sustained at the end of the sequence.
 	signal := strategy.OnData(dataCross)
 	t.Logf("Signal from MACD crossover: %+v", signal)
-
-	// It's hard to guarantee exact crossover at the very last candle without precise math,
-	// but directionally it should be Buy or Hold (if crossover happened earlier).
-	// Let's print data if it fails to debug, or check logic.
-
-	// Easier test: Mock the indicator? We can't easily mock the internal call.
-	// We trust the `indicators` package (tested separately).
-	// We test the LOGIC of handling the crossover values.
-
-	// But `OnData` calculates indicators internally.
-	// Let's look for *any* signal in the sequence?
-	// `OnData` only returns signal for the LAST candle.
+	if signal.Type == "" {
+		t.Error("Expected valid signal type")
+	}
 
 	// Let's try to verify via "Not enough data" first.
 	shortData := data[:5]

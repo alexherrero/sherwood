@@ -144,15 +144,8 @@ func TestMACD(t *testing.T) {
 		t.Fatalf("Expected length %d, got %d", len(data), len(macdLine))
 	}
 
-	// First 25 (slowPeriod-1) should be NaN for MACD line?
-	// Usually libraries implementation vary. Assuming standard behavior (Wait for slow period).
-	// Actually typical implementation:
-	// EMA(12) starts at 12th bar.
-	// EMA(26) starts at 26th bar.
-	// MACD = EMA12 - EMA26. So valid from 26th bar.
-
-	// Index 25 (26th element) should be valid MACD?
-	// Depends on implementation of EMA (if it needs previous EMA, creates lag).
+	// MACD calculation requires enough data points for the slow EMA period.
+	// The MACD line (EMA12 - EMA26) becomes valid from the 26th bar onwards.
 
 	// We check for No Panic and Length consistency mostly, and non-NaN at end.
 	lastIndex := len(data) - 1
