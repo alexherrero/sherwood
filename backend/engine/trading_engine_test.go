@@ -212,3 +212,65 @@ func TestTradingEngine_ProviderError(t *testing.T) {
 	// Ensure strategy was NOT called due to provider error
 	mockStrategy.AssertNotCalled(t, "OnData")
 }
+
+func TestTradingEngine_LimitOrder(t *testing.T) {
+	// Setup Mocks
+	mockProvider := new(MockProvider)
+	mockStrategy := new(MockStrategy)
+	mockBroker := new(MockBroker)
+
+	// Setup Strategy Registry
+	registry := strategies.NewRegistry()
+	registry.Register(mockStrategy)
+
+	// Setup Order Manager
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+
+	// Setup Engine
+	engine := NewTradingEngine(
+		mockProvider,
+		registry,
+		orderManager,
+		nil,
+		[]string{"MSFT"},
+		10*time.Millisecond,
+		24*time.Hour,
+	)
+
+	// Expectation: GetHistoricalData called
+	mockProvider.On("GetHistoricalData", "MSFT", mock.Anything, mock.Anything, "1d").
+		Return([]models.OHLCV{{Close: 300.0}}, nil)
+
+	// Expectation: Strategy OnData called -> Returns Buy Signal with Price (Limit Order)
+	mockStrategy.On("OnData", mock.Anything).Return(models.Signal{
+		Type:         models.SignalBuy,
+		Symbol:       "MSFT",
+		Quantity:     5,
+		Price:        295.0, // Limit Price
+		StrategyName: "MockStrategy",
+	})
+
+	// Expectation: Broker PlaceOrder called for LIMIT order
+	mockBroker.On("PlaceOrder", mock.MatchedBy(func(o models.Order) bool {
+		return o.Symbol == "MSFT" &&
+			o.Side == models.OrderSideBuy &&
+			o.Quantity == 5 &&
+			o.Type == models.OrderTypeLimit &&
+			o.Price == 295.0
+	})).Return(&models.Order{ID: "order-2", Status: models.OrderStatusSubmitted}, nil)
+
+	// Run Engine
+	ctx, cancel := context.WithCancel(context.Background())
+	engine.Start(ctx)
+
+	// Let it tick
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop
+	cancel()
+	engine.Stop()
+
+	// Verify
+	mockProvider.AssertExpectations(t)
+	mockBroker.AssertExpectations(t)
+}
