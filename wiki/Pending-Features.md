@@ -36,27 +36,7 @@ frontend/
 
 ---
 
-## 2. Enhanced Configuration Validation
-
-**Complexity:** Medium
-
-**Description:**
-Add rigorous validation of configuration on startup with fail-fast behavior. Ensure required API keys and credentials are present for the selected trading mode and data provider.
-
-**Current State:**
-Basic config validation exists. Config validation endpoint shows warnings, but doesn't enforce requirements.
-
-**Implementation Requirements:**
-
-1. Add `config.Validate() error` method called during startup
-2. Mode-specific validation (live requires broker credentials, paper requires API keys)
-3. Provider-specific validation (Tiingo requires API key, Binance requires key+secret)
-4. Helpful error messages with fix suggestions
-5. Return detailed errors for missing required fields
-
----
-
-## 3. Graceful Shutdown for Trading Engine
+## 2. Graceful Shutdown for Trading Engine
 
 **Complexity:** Medium
 
@@ -77,7 +57,7 @@ Extend graceful shutdown beyond HTTP server to include the trading engine. Ensur
 
 ---
 
-## 4. Hot-Swapping Strategies
+## 3. Hot-Swapping Strategies
 
 **Complexity:** Medium-High
 
@@ -104,7 +84,7 @@ Strategies are loaded once at startup from `ENABLED_STRATEGIES` environment vari
 
 ---
 
-## 5. Deployment Configuration (Docker)
+## 4. Deployment Configuration (Docker)
 
 **Complexity:** High
 
@@ -129,7 +109,7 @@ Create Dockerfiles and docker-compose configuration to containerize the applicat
 
 ---
 
-## 6. Benchmark Tests for Performance Monitoring
+## 5. Benchmark Tests for Performance Monitoring
 
 **Complexity:** Medium
 
@@ -171,7 +151,7 @@ func BenchmarkBacktest_LargeDataset(b *testing.B) {
 
 ---
 
-## 7. Concurrent Operation Tests
+## 6. Concurrent Operation Tests
 
 **Complexity:** Medium-High
 
@@ -214,7 +194,7 @@ func TestConcurrentOrderPlacement(t *testing.T) {
 
 ---
 
-## 8. Edge Case Test Coverage
+## 7. Edge Case Test Coverage
 
 **Complexity:** Low-Medium
 
@@ -251,7 +231,7 @@ Add table-driven tests for validation edge cases, integration tests for error re
 
 ---
 
-## 9. Property-Based Testing
+## 8. Property-Based Testing
 
 **Complexity:** High
 
@@ -287,7 +267,7 @@ func TestBacktest_BalanceNeverNegative(t *testing.T) {
 
 ---
 
-## 10. Configuration Hot-Reload
+## 9. Configuration Hot-Reload
 
 **Complexity:** Medium
 

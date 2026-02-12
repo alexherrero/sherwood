@@ -392,3 +392,31 @@ Added correlation/trace IDs to all critical log paths (API requests, engine tick
 - `backend/engine/trading_engine.go` (modified - trace IDs per tick, context propagation)
 - `backend/execution/order_manager.go` (modified - tracing.Logger(ctx) in all operations)
 - `backend/execution/audit_context.go` (modified - added NewEngineContextWithTrace)
+
+---
+
+## Enhanced Configuration Validation
+
+**Complexity:** Medium
+**Completed:** 2026-02-12
+**Source:** Pending Features #2
+
+**Description:**
+Added rigorous fail-fast configuration validation at startup. The `config.Validate()` method now performs comprehensive checks on data provider credentials, trading mode requirements, strategy names, log level, and database path. All errors are aggregated into a `ValidationError` with helpful fix suggestions so operators can resolve everything in one pass.
+
+**What Was Implemented:**
+
+- `ValidationError` type that aggregates multiple config issues into a single error with formatted multi-line output
+- Provider-specific credential validation: Tiingo requires `TIINGO_API_KEY`, Binance requires both `BINANCE_API_KEY` and `BINANCE_API_SECRET`
+- Mode-specific validation: live mode requires `API_KEY`, `RH_USERNAME`, and `RH_PASSWORD`
+- Strategy name validation against known set (5 strategies)
+- Log level validation against zerolog's accepted levels
+- Data provider name validation (yahoo, tiingo, binance)
+- Database path non-empty check
+- All error messages include the environment variable name and actionable fix suggestion (e.g., URL to get API key)
+- 22 new test cases covering every validation rule, multi-error aggregation, and boundary conditions
+
+**Key Files:**
+
+- `backend/config/config.go` (modified - comprehensive Validate(), validateProvider(), validateStrategies(), validateMode(), ValidationError type)
+- `backend/config/config_test.go` (modified - 22 new validation test cases)

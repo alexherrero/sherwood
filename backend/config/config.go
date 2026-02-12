@@ -23,6 +23,40 @@ const (
 	ModeLive TradingMode = "live"
 )
 
+// validLogLevels is the set of accepted zerolog log levels.
+var validLogLevels = map[string]bool{
+	"trace": true, "debug": true, "info": true,
+	"warn": true, "error": true, "fatal": true,
+	"panic": true, "disabled": true,
+}
+
+// validProviders is the set of accepted data provider names.
+var validProviders = map[string]bool{
+	"yahoo": true, "tiingo": true, "binance": true,
+}
+
+// validStrategies is the set of accepted strategy names.
+var validStrategies = map[string]bool{
+	"ma_crossover":        true,
+	"rsi_momentum":        true,
+	"bb_mean_reversion":   true,
+	"macd_trend_follower": true,
+	"nyc_close_open":      true,
+}
+
+// ValidationError holds multiple configuration validation errors.
+// It aggregates all issues so operators can fix everything in one pass.
+type ValidationError struct {
+	// Errors is the list of individual validation error messages.
+	Errors []string
+}
+
+// Error returns a formatted multi-line error message listing all issues.
+func (ve *ValidationError) Error() string {
+	return fmt.Sprintf("%d configuration error(s):\n  - %s",
+		len(ve.Errors), strings.Join(ve.Errors, "\n  - "))
+}
+
 // Config holds all configuration for the Sherwood application.
 type Config struct {
 	// Server settings
@@ -114,24 +148,144 @@ func Load() (*Config, error) {
 	return config, nil
 }
 
-// Validate checks that the configuration is valid.
+// Validate performs comprehensive configuration validation with fail-fast behavior.
+// It checks trading mode, server port, data provider credentials, strategy names,
+// log level, and mode-specific requirements. All errors are aggregated and returned
+// as a single ValidationError so operators can fix everything in one pass.
+//
+// Validation rules:
+//   - Trading mode must be "dry_run" or "live"
+//   - Server port must be 1-65535
+//   - Log level must be a valid zerolog level
+//   - Data provider must be "yahoo", "tiingo", or "binance"
+//   - Tiingo requires TIINGO_API_KEY
+//   - Binance requires BINANCE_API_KEY and BINANCE_API_SECRET
+//   - Live mode requires API_KEY and broker credentials (RH_USERNAME, RH_PASSWORD)
+//   - All enabled strategies must be recognized names
+//   - Database path must not be empty
 //
 // Returns:
-//   - error: Validation error if any required fields are invalid
+//   - error: ValidationError if any checks fail, nil otherwise
 func (c *Config) Validate() error {
+	var errs []string
+
+	// --- Core settings ---
 	if c.TradingMode != ModeDryRun && c.TradingMode != ModeLive {
-		return fmt.Errorf("invalid trading mode: %s (must be 'dry_run' or 'live')", c.TradingMode)
+		errs = append(errs,
+			fmt.Sprintf("invalid TRADING_MODE '%s': must be 'dry_run' or 'live'", c.TradingMode))
 	}
 
 	if c.ServerPort < 1 || c.ServerPort > 65535 {
-		return fmt.Errorf("invalid server port: %d", c.ServerPort)
+		errs = append(errs,
+			fmt.Sprintf("invalid PORT %d: must be between 1 and 65535", c.ServerPort))
 	}
 
-	if c.IsLive() && c.APIKey == "" {
-		fmt.Println("WARNING: Running in LIVE mode without an API_KEY set. This is insecure!")
+	if c.DatabasePath == "" {
+		errs = append(errs,
+			"DATABASE_PATH is empty: set DATABASE_PATH in .env (e.g., DATABASE_PATH=./data/sherwood.db)")
+	}
+
+	// --- Log level ---
+	if !validLogLevels[strings.ToLower(c.LogLevel)] {
+		errs = append(errs,
+			fmt.Sprintf("invalid LOG_LEVEL '%s': must be one of trace, debug, info, warn, error, fatal, panic, disabled", c.LogLevel))
+	}
+
+	// --- Data provider validation ---
+	if !validProviders[c.DataProvider] {
+		errs = append(errs,
+			fmt.Sprintf("invalid DATA_PROVIDER '%s': must be one of yahoo, tiingo, binance", c.DataProvider))
+	} else {
+		errs = append(errs, c.validateProvider()...)
+	}
+
+	// --- Strategy validation ---
+	errs = append(errs, c.validateStrategies()...)
+
+	// --- Mode-specific validation ---
+	errs = append(errs, c.validateMode()...)
+
+	if len(errs) > 0 {
+		return &ValidationError{Errors: errs}
 	}
 
 	return nil
+}
+
+// validateProvider checks that provider-specific credentials are present.
+// Called only after the provider name itself has been validated.
+//
+// Returns:
+//   - []string: List of error messages (empty if valid)
+func (c *Config) validateProvider() []string {
+	var errs []string
+
+	switch c.DataProvider {
+	case "tiingo":
+		if c.TiingoAPIKey == "" {
+			errs = append(errs,
+				"Tiingo provider requires TIINGO_API_KEY: get a free key at https://www.tiingo.com and set TIINGO_API_KEY in .env")
+		}
+	case "binance":
+		if c.BinanceAPIKey == "" {
+			errs = append(errs,
+				"Binance provider requires BINANCE_API_KEY: set BINANCE_API_KEY in .env")
+		}
+		if c.BinanceAPISecret == "" {
+			errs = append(errs,
+				"Binance provider requires BINANCE_API_SECRET: set BINANCE_API_SECRET in .env")
+		}
+	}
+	// yahoo requires no credentials
+
+	return errs
+}
+
+// validateStrategies checks that all enabled strategy names are recognized.
+//
+// Returns:
+//   - []string: List of error messages (empty if valid)
+func (c *Config) validateStrategies() []string {
+	var errs []string
+
+	for _, name := range c.EnabledStrategies {
+		if !validStrategies[name] {
+			available := make([]string, 0, len(validStrategies))
+			for k := range validStrategies {
+				available = append(available, k)
+			}
+			errs = append(errs,
+				fmt.Sprintf("unknown strategy '%s' in ENABLED_STRATEGIES: available strategies are %v", name, available))
+		}
+	}
+
+	return errs
+}
+
+// validateMode checks mode-specific requirements.
+// Live mode requires authentication and broker credentials.
+//
+// Returns:
+//   - []string: List of error messages (empty if valid)
+func (c *Config) validateMode() []string {
+	var errs []string
+
+	if c.IsLive() {
+		if c.APIKey == "" {
+			errs = append(errs,
+				"live mode requires API_KEY for authentication: generate one with the /api/v1/config/rotate-key endpoint or set API_KEY in .env")
+		}
+		if c.RobinhoodUsername == "" {
+			errs = append(errs,
+				"live mode requires RH_USERNAME: set your Robinhood username in .env")
+		}
+		if c.RobinhoodPassword == "" {
+			errs = append(errs,
+				"live mode requires RH_PASSWORD: set your Robinhood password in .env")
+		}
+	}
+
+	return errs
 }
 
 // IsDryRun returns true if the engine is in paper trading mode.
