@@ -262,3 +262,74 @@ Established the structure for the project's GitHub Wiki and implemented an autom
 - `.github/workflows/deploy_wiki.yml`
 - `docs/MAINTENANCE.md`
 - `.agent/rules/prompt.md`
+
+---
+
+## Database Persistence for Orders
+
+**Complexity:** Low-Medium
+**Completed:** 2026-02-11
+**Source:** Pending Features #3
+
+**Description:**
+Implemented persistent storage for orders using SQLite, ensuring order state survives application restarts.
+
+**What Was Implemented:**
+
+- `OrderStore` interface and `SQLOrderStore` implementation in `backend/data`
+- Integration of `OrderStore` into `OrderManager` and `main.go` initialization
+- Automatic saving of new and modified orders to `orders` table
+- Loading of existing orders from database on application startup
+
+**Key Files:**
+
+- `backend/data/order_store.go`
+- `backend/execution/order_manager.go`
+- `backend/main.go`
+
+---
+
+## Engine Optimization (Parallel Execution)
+
+**Complexity:** Medium
+**Completed:** 2026-02-11
+**Source:** Audit Report (Serial Execution)
+
+**Description:**
+Optimized the core trading loop to process multiple symbols concurrently, significantly reducing the tick duration for large symbol sets.
+
+**What Was Implemented:**
+
+- Refactored `TradingEngine.loop` to use `sync.WaitGroup`
+- Converted serial `processSymbol` calls to parallel goroutines
+- Added thread-safe execution of strategy logic per symbol
+- Verified with concurrent execution unit tests
+
+**Key Files:**
+
+- `backend/engine/trading_engine.go`
+- `backend/engine/trading_engine_test.go`
+
+---
+
+## Advanced Backend Endpoints (Phase 2 - Partial)
+
+**Complexity:** Medium
+**Completed:** 2026-02-11
+**Source:** Pending Features #12
+
+**Description:**
+Implemented 4 out of 5 planned advanced API endpoints to support frontend data requirements.
+
+**What Was Implemented:**
+
+- `GET /api/v1/execution/trades`: List trade executions (`GetTradesHandler`)
+- `PATCH /api/v1/execution/orders/{id}`: Modify open orders (`ModifyOrderHandler`)
+- `GET /api/v1/portfolio/performance`: Portfolio metrics (`GetPortfolioPerformanceHandler`)
+- `GET /api/v1/strategies/{name}/backtest`: Backtest results (`GetBacktestResultHandler`)
+
+**Key Files:**
+
+- `backend/api/handlers_orders.go`
+- `backend/api/handlers_portfolio.go`
+- `backend/api/handlers_backtest.go`
