@@ -47,6 +47,7 @@ type MockStrategy struct {
 
 func (m *MockStrategy) Name() string        { return "MockStrategy" }
 func (m *MockStrategy) Description() string { return "Mock Strategy for Testing" }
+func (m *MockStrategy) Timeframe() string   { return "1d" }
 func (m *MockStrategy) OnData(data []models.OHLCV) models.Signal {
 	args := m.Called(data)
 	return args.Get(0).(models.Signal)

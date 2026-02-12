@@ -40,6 +40,9 @@ type Strategy interface {
 	//   - error: Any validation error
 	Validate() error
 
+	// Timeframe returns the data interval required by the strategy (e.g., "1d", "1h", "15m").
+	Timeframe() string
+
 	// GetParameters returns the strategy's configurable parameters.
 	//
 	// Returns:
@@ -87,6 +90,11 @@ func (s *BaseStrategy) Name() string {
 // Description returns the strategy description.
 func (s *BaseStrategy) Description() string {
 	return s.description
+}
+
+// Timeframe returns the data interval required by the strategy (e.g., "1d", "1h", "15m").
+func (s *BaseStrategy) Timeframe() string {
+	return "1d"
 }
 
 // Init initializes the base strategy.

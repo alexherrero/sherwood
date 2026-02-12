@@ -166,7 +166,7 @@ func TestWriteValidationError(t *testing.T) {
 	recorder := httptest.NewRecorder()
 	writeValidationError(recorder, err)
 
-	assert.Equal(t, http.StatusBadRequest, recorder.Code)
+	assert.Equal(t, http.StatusUnprocessableEntity, recorder.Code)
 	assert.Equal(t, "application/json", recorder.Header().Get("Content-Type"))
 
 	var resp APIError
