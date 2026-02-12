@@ -104,7 +104,6 @@ func main() {
 
 	// Restore orders from database
 	if err := orderManager.LoadOrders(); err != nil {
-
 		log.Warn().Err(err).Msg("Failed to load orders from database")
 	}
 
@@ -131,7 +130,6 @@ func main() {
 		log.Fatal().Err(err).Msg("Failed to start trading engine")
 	}
 
-	// Create API router with WebSocket Manager
 	// Create API router with WebSocket Manager
 	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine, wsManager, notifManager)
 
