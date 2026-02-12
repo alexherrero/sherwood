@@ -5,12 +5,15 @@ go 1.25.7
 require (
 	github.com/adshao/go-binance/v2 v2.8.10
 	github.com/go-chi/chi/v5 v5.2.5
+	github.com/go-chi/httprate v0.15.0
+	github.com/go-playground/validator/v10 v10.30.1
+	github.com/gorilla/websocket v1.5.3
 	github.com/jmoiron/sqlx v1.4.0
 	github.com/joho/godotenv v1.5.1
 	github.com/piquette/finance-go v1.1.0
 	github.com/rs/zerolog v1.34.0
 	github.com/stretchr/testify v1.11.1
-	modernc.org/sqlite v1.44.3
+	modernc.org/sqlite v1.45.0
 )
 
 require (
@@ -18,12 +21,9 @@ require (
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
-	github.com/go-chi/httprate v0.15.0 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.30.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/gorilla/websocket v1.5.3 // indirect
 	github.com/jpillora/backoff v1.0.0 // indirect
 	github.com/klauspost/cpuid/v2 v2.2.10 // indirect
 	github.com/kr/text v0.2.0 // indirect
