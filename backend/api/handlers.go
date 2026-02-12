@@ -11,6 +11,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/data"
 	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
+	"github.com/alexherrero/sherwood/backend/notifications"
 	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/rs/zerolog/log"
@@ -18,13 +19,14 @@ import (
 
 // Handler holds the HTTP handlers for the API.
 type Handler struct {
-	registry     *strategies.Registry
-	provider     data.DataProvider
-	config       *config.Config
-	orderManager *execution.OrderManager
-	engine       *engine.TradingEngine
-	wsManager    *realtime.WebSocketManager
-	startTime    time.Time
+	registry            *strategies.Registry
+	provider            data.DataProvider
+	config              *config.Config
+	orderManager        *execution.OrderManager
+	engine              *engine.TradingEngine
+	wsManager           *realtime.WebSocketManager
+	notificationManager *notifications.Manager
+	startTime           time.Time
 
 	// In-memory store for backtest results
 	// In production, this should be a persistent database
@@ -41,6 +43,7 @@ type Handler struct {
 //   - orderManager: Order manager for execution data
 //   - engine: Trading engine instance (optional)
 //   - wsManager: WebSocket manager for real-time updates
+//   - notificationManager: Notification manager for alerts
 //
 // Returns:
 //   - *Handler: The handler instance
@@ -51,16 +54,18 @@ func NewHandler(
 	orderManager *execution.OrderManager,
 	engine *engine.TradingEngine,
 	wsManager *realtime.WebSocketManager,
+	notificationManager *notifications.Manager,
 ) *Handler {
 	return &Handler{
-		registry:     registry,
-		provider:     provider,
-		config:       cfg,
-		orderManager: orderManager,
-		engine:       engine,
-		wsManager:    wsManager,
-		startTime:    time.Now(),
-		results:      make(map[string]*backtesting.BacktestResult),
+		registry:            registry,
+		provider:            provider,
+		config:              cfg,
+		orderManager:        orderManager,
+		engine:              engine,
+		wsManager:           wsManager,
+		notificationManager: notificationManager,
+		startTime:           time.Now(),
+		results:             make(map[string]*backtesting.BacktestResult),
 	}
 }
 

@@ -112,6 +112,18 @@ func (db *DB) Migrate() error {
 		key TEXT PRIMARY KEY,
 		value TEXT NOT NULL
 	);
+
+	CREATE TABLE IF NOT EXISTS notifications (
+		id TEXT PRIMARY KEY,
+		type TEXT NOT NULL,
+		title TEXT NOT NULL,
+		message TEXT NOT NULL,
+		created_at DATETIME NOT NULL,
+		is_read BOOLEAN DEFAULT FALSE,
+		metadata TEXT DEFAULT '{}'
+	);
+	
+	CREATE INDEX IF NOT EXISTS idx_notifications_created_at ON notifications(created_at);
 	`
 
 	_, err := db.Exec(schema)

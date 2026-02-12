@@ -10,6 +10,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/data"
 	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
+	"github.com/alexherrero/sherwood/backend/notifications"
 	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/go-chi/chi/v5"
@@ -37,6 +38,7 @@ func NewRouter(
 	orderManager *execution.OrderManager,
 	engine *engine.TradingEngine,
 	wsManager *realtime.WebSocketManager,
+	notificationManager *notifications.Manager,
 ) http.Handler {
 	r := chi.NewRouter()
 
@@ -79,7 +81,7 @@ func NewRouter(
 	r.Use(newCORSMiddleware(cfg))
 
 	// Initialize handler with dependencies
-	h := NewHandler(registry, provider, cfg, orderManager, engine, wsManager)
+	h := NewHandler(registry, provider, cfg, orderManager, engine, wsManager, notificationManager)
 
 	// Public routes
 	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
@@ -143,6 +145,13 @@ func NewRouter(
 		r.Route("/engine", func(r chi.Router) {
 			r.Post("/start", h.StartEngineHandler)
 			r.Post("/stop", h.StopEngineHandler)
+		})
+
+		// Notification routes
+		r.Route("/notifications", func(r chi.Router) {
+			r.Get("/", h.GetNotificationsHandler)
+			r.Put("/read-all", h.MarkAllReadHandler)
+			r.Put("/{id}/read", h.MarkNotificationReadHandler)
 		})
 
 		// Config routes
