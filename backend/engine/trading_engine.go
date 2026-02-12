@@ -203,13 +203,8 @@ func (e *TradingEngine) executeSignal(signal models.Signal) error {
 		return nil // Should be filtered already
 	}
 
-	// Create Market Order for simplicity
-	// Implementation Plan says "Simple Market Orders"
-	// But signal has Price, maybe Limit Order?
-	// Strategies usually emit "I want to buy NOW at market" or "Limit at X".
-	// Let's assume Market for now as it ensures execution.
-	// Or use Limit if signal.Price is set?
-	// Let's stick to Market for Phase 1.
+	// Create Market Order standardizes execution for Phase 1.
+	// TODO: Support Limit Orders when signal.Price is set.
 
 	_, err := e.orderManager.CreateMarketOrder(execution.NewEngineContext(), signal.Symbol, side, quantity)
 	if err != nil {
