@@ -31,10 +31,31 @@ func auditKeyIDFromCtx(ctx context.Context) string {
 	return "unknown"
 }
 
-// NewEngineContext creates a context with audit fields for engine-initiated
-// operations, distinguishing automated orders from manual API orders.
+// NewEngineContext creates a context with audit fields and a trace ID
+// for engine-initiated operations, distinguishing automated orders
+// from manual API orders.
+//
+// Each engine context receives a unique trace ID so that all log entries
+// and downstream operations for the same engine action can be correlated.
 func NewEngineContext() context.Context {
 	ctx := context.Background()
+	ctx = context.WithValue(ctx, auditIPKey, "engine")
+	ctx = context.WithValue(ctx, auditKeyIDKey, "system")
+	return ctx
+}
+
+// NewEngineContextWithTrace creates a context with audit fields and
+// a pre-existing trace ID. Use this when the caller already has a
+// trace ID (e.g., from an engine tick) that should be propagated to
+// child operations.
+//
+// Args:
+//   - parentCtx: Parent context containing trace ID
+//
+// Returns:
+//   - context.Context: Context with engine audit fields and inherited trace ID
+func NewEngineContextWithTrace(parentCtx context.Context) context.Context {
+	ctx := parentCtx
 	ctx = context.WithValue(ctx, auditIPKey, "engine")
 	ctx = context.WithValue(ctx, auditKeyIDKey, "system")
 	return ctx

@@ -11,6 +11,7 @@ import (
 
 	"github.com/alexherrero/sherwood/backend/models"
 	"github.com/alexherrero/sherwood/backend/realtime"
+	"github.com/alexherrero/sherwood/backend/tracing"
 	"github.com/rs/zerolog/log"
 )
 
@@ -71,6 +72,8 @@ func NewOrderManager(
 //   - *models.Order: The submitted order
 //   - error: Any error encountered
 func (om *OrderManager) SubmitOrder(ctx context.Context, order models.Order) (*models.Order, error) {
+	logger := tracing.Logger(ctx)
+
 	// Validate order
 	if err := om.validateOrder(order); err != nil {
 		return nil, fmt.Errorf("order validation failed: %w", err)
@@ -97,12 +100,12 @@ func (om *OrderManager) SubmitOrder(ctx context.Context, order models.Order) (*m
 	// Persist to database
 	if om.store != nil {
 		if err := om.store.SaveOrder(*result); err != nil {
-			log.Error().Err(err).Str("order_id", result.ID).Msg("Failed to persist order")
+			logger.Error().Err(err).Str("order_id", result.ID).Msg("Failed to persist order")
 		}
 	}
 
-	// Audit log with requestor context
-	log.Info().
+	// Audit log with requestor and trace context
+	logger.Info().
 		Str("order_id", result.ID).
 		Str("symbol", result.Symbol).
 		Str("side", string(result.Side)).
@@ -175,7 +178,9 @@ func (om *OrderManager) LoadOrders() error {
 // Returns:
 //   - error: Any error encountered
 func (om *OrderManager) CancelOrder(ctx context.Context, orderID string) error {
-	log.Info().
+	logger := tracing.Logger(ctx)
+
+	logger.Info().
 		Str("order_id", orderID).
 		Str("user_ip", auditIPFromCtx(ctx)).
 		Str("api_key_id", auditKeyIDFromCtx(ctx)).
@@ -183,7 +188,7 @@ func (om *OrderManager) CancelOrder(ctx context.Context, orderID string) error {
 
 	err := om.broker.CancelOrder(orderID)
 	if err != nil {
-		log.Warn().
+		logger.Warn().
 			Str("order_id", orderID).
 			Err(err).
 			Msg("Order cancellation failed")
@@ -371,7 +376,9 @@ func (om *OrderManager) GetTrades() ([]models.Trade, error) {
 //   - *models.Order: The modified order
 //   - error: Any error encountered
 func (om *OrderManager) ModifyOrder(ctx context.Context, orderID string, newPrice, newQuantity float64) (*models.Order, error) {
-	log.Info().
+	logger := tracing.Logger(ctx)
+
+	logger.Info().
 		Str("order_id", orderID).
 		Float64("new_price", newPrice).
 		Float64("new_quantity", newQuantity).
@@ -381,7 +388,7 @@ func (om *OrderManager) ModifyOrder(ctx context.Context, orderID string, newPric
 
 	order, err := om.broker.ModifyOrder(orderID, newPrice, newQuantity)
 	if err != nil {
-		log.Warn().
+		logger.Warn().
 			Str("order_id", orderID).
 			Err(err).
 			Msg("Order modification failed")
@@ -396,7 +403,7 @@ func (om *OrderManager) ModifyOrder(ctx context.Context, orderID string, newPric
 	// Update persistence
 	if om.store != nil {
 		if err := om.store.SaveOrder(*order); err != nil {
-			log.Error().Err(err).Str("order_id", order.ID).Msg("Failed to persist modified order")
+			logger.Error().Err(err).Str("order_id", order.ID).Msg("Failed to persist modified order")
 		}
 	}
 

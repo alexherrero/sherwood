@@ -11,6 +11,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/models"
 	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
+	"github.com/alexherrero/sherwood/backend/tracing"
 	"github.com/rs/zerolog/log"
 )
 
@@ -122,24 +123,38 @@ func (e *TradingEngine) loop(ctx context.Context) {
 		case <-e.stopCh:
 			return
 		case <-ticker.C:
+			// Generate a unique trace ID for this tick
+			tickTraceID := tracing.NewTraceID()
+			tickCtx := tracing.WithTraceID(ctx, tickTraceID)
+			tickLogger := tracing.Logger(tickCtx)
+
+			tickLogger.Debug().
+				Int("symbols", len(e.symbols)).
+				Msg("Engine tick started")
+
 			// Process symbols concurrently
 			var wg sync.WaitGroup
 			for _, symbol := range e.symbols {
 				wg.Add(1)
 				go func(sym string) {
 					defer wg.Done()
-					if err := e.processSymbol(sym); err != nil {
-						log.Error().Err(err).Str("symbol", sym).Msg("Error processing symbol")
+					if err := e.processSymbol(tickCtx, sym); err != nil {
+						tickLogger.Error().Err(err).Str("symbol", sym).Msg("Error processing symbol")
 					}
 				}(symbol)
 			}
 			wg.Wait()
+
+			tickLogger.Debug().Msg("Engine tick completed")
 		}
 	}
 }
 
 // processSymbol handles data fetching and strategy execution for a single symbol.
-func (e *TradingEngine) processSymbol(symbol string) error {
+// The context carries the tick's trace ID for log correlation.
+func (e *TradingEngine) processSymbol(ctx context.Context, symbol string) error {
+	logger := tracing.Logger(ctx)
+
 	// 1. Fetch latest data
 	// Fetch enough candles for strategies
 	end := time.Now()
@@ -166,6 +181,11 @@ func (e *TradingEngine) processSymbol(symbol string) error {
 		return fmt.Errorf("no data returned")
 	}
 
+	logger.Debug().
+		Str("symbol", symbol).
+		Int("candles", len(candles)).
+		Msg("Data fetched for symbol")
+
 	// Broadcast latest candle
 	if e.wsManager != nil {
 		latest := candles[len(candles)-1]
@@ -182,8 +202,14 @@ func (e *TradingEngine) processSymbol(symbol string) error {
 
 		// 4. Handle Signal
 		if signal.Type != models.SignalHold {
-			if err := e.executeSignal(signal); err != nil {
-				log.Error().
+			logger.Info().
+				Str("strategy", strategy.Name()).
+				Str("symbol", symbol).
+				Str("signal", string(signal.Type)).
+				Msg("Strategy signal generated")
+
+			if err := e.executeSignal(ctx, signal); err != nil {
+				logger.Error().
 					Err(err).
 					Str("strategy", strategy.Name()).
 					Str("symbol", symbol).
@@ -196,13 +222,16 @@ func (e *TradingEngine) processSymbol(symbol string) error {
 }
 
 // executeSignal handles the execution of a trading signal.
-func (e *TradingEngine) executeSignal(signal models.Signal) error {
-	log.Info().
+// The context carries the tick's trace ID for log correlation.
+func (e *TradingEngine) executeSignal(ctx context.Context, signal models.Signal) error {
+	logger := tracing.Logger(ctx)
+
+	logger.Info().
 		Str("symbol", signal.Symbol).
 		Str("type", string(signal.Type)).
 		Float64("price", signal.Price).
 		Str("strategy", signal.StrategyName).
-		Msg("Signal generated")
+		Msg("Executing signal")
 
 	// Determine quantity
 	quantity := 1.0
@@ -219,12 +248,15 @@ func (e *TradingEngine) executeSignal(signal models.Signal) error {
 		return nil // Should be filtered already
 	}
 
+	// Create engine context that inherits the tick's trace ID
+	engineCtx := execution.NewEngineContextWithTrace(ctx)
+
 	var err error
 	// If price is specified, use Limit Order, otherwise Market Order
 	if signal.Price > 0 {
-		_, err = e.orderManager.CreateLimitOrder(execution.NewEngineContext(), signal.Symbol, side, quantity, signal.Price)
+		_, err = e.orderManager.CreateLimitOrder(engineCtx, signal.Symbol, side, quantity, signal.Price)
 	} else {
-		_, err = e.orderManager.CreateMarketOrder(execution.NewEngineContext(), signal.Symbol, side, quantity)
+		_, err = e.orderManager.CreateMarketOrder(engineCtx, signal.Symbol, side, quantity)
 	}
 
 	if err != nil {

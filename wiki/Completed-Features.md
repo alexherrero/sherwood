@@ -358,3 +358,37 @@ Implemented a comprehensive system for generating, storing, and retrieving user 
 - `backend/data/notification_store.go`
 - `backend/notifications/manager.go`
 - `backend/api/handlers_notifications.go`
+
+---
+
+## Structured Logging with Trace IDs
+
+**Complexity:** Low
+**Completed:** 2026-02-12
+**Source:** Pending Features #2
+
+**Description:**
+Added correlation/trace IDs to all critical log paths (API requests, engine ticks, order execution, strategy signals) to enable tracing logic flow across components.
+
+**What Was Implemented:**
+
+- Created `backend/tracing/` package with trace ID generation (crypto/rand, 16-char hex) and context propagation helpers
+- `TraceMiddleware` in API layer generates per-request trace IDs (reuses chi's RequestID when available)
+- `X-Trace-ID` response header set for client-side correlation
+- Engine tick loop generates per-tick trace IDs that propagate through symbol processing → strategy evaluation → signal execution → order placement
+- `tracing.Logger(ctx)` helper creates zerolog sub-loggers with `trace_id` field pre-attached
+- All order manager operations (SubmitOrder, CancelOrder, ModifyOrder) now include trace_id in logs
+- `NewEngineContextWithTrace()` preserves trace IDs across engine → order manager boundaries
+- HTTP request logs now include trace_id via updated `zerologLogger` middleware
+- Comprehensive test coverage for tracing package and middleware
+
+**Key Files:**
+
+- `backend/tracing/tracing.go` (new)
+- `backend/tracing/tracing_test.go` (new)
+- `backend/api/middleware_trace.go` (new)
+- `backend/api/middleware_trace_test.go` (new)
+- `backend/api/router.go` (modified - added TraceMiddleware, updated zerologLogger)
+- `backend/engine/trading_engine.go` (modified - trace IDs per tick, context propagation)
+- `backend/execution/order_manager.go` (modified - tracing.Logger(ctx) in all operations)
+- `backend/execution/audit_context.go` (modified - added NewEngineContextWithTrace)
