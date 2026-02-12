@@ -122,12 +122,18 @@ func (e *TradingEngine) loop(ctx context.Context) {
 		case <-e.stopCh:
 			return
 		case <-ticker.C:
-			// Iterate over symbols
+			// Process symbols concurrently
+			var wg sync.WaitGroup
 			for _, symbol := range e.symbols {
-				if err := e.processSymbol(symbol); err != nil {
-					log.Error().Err(err).Str("symbol", symbol).Msg("Error processing symbol")
-				}
+				wg.Add(1)
+				go func(sym string) {
+					defer wg.Done()
+					if err := e.processSymbol(sym); err != nil {
+						log.Error().Err(err).Str("symbol", sym).Msg("Error processing symbol")
+					}
+				}(symbol)
 			}
+			wg.Wait()
 		}
 	}
 }
@@ -203,10 +209,14 @@ func (e *TradingEngine) executeSignal(signal models.Signal) error {
 		return nil // Should be filtered already
 	}
 
-	// Create Market Order standardizes execution for Phase 1.
-	// TODO: Support Limit Orders when signal.Price is set.
+	var err error
+	// If price is specified, use Limit Order, otherwise Market Order
+	if signal.Price > 0 {
+		_, err = e.orderManager.CreateLimitOrder(execution.NewEngineContext(), signal.Symbol, side, quantity, signal.Price)
+	} else {
+		_, err = e.orderManager.CreateMarketOrder(execution.NewEngineContext(), signal.Symbol, side, quantity)
+	}
 
-	_, err := e.orderManager.CreateMarketOrder(execution.NewEngineContext(), signal.Symbol, side, quantity)
 	if err != nil {
 		return fmt.Errorf("failed to submit order: %w", err)
 	}
