@@ -27,7 +27,7 @@ func TestGetHistoricalDataHandler(t *testing.T) {
 	}
 	mockProvider.On("GetHistoricalData", "AAPL", mock.Anything, mock.Anything, "1d").Return(expectedData, nil)
 
-	handler := NewHandler(nil, mockProvider, cfg, nil, nil, nil)
+	handler := NewHandler(nil, mockProvider, cfg, nil, nil, nil, nil)
 
 	t.Run("Success", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/market/history?symbol=AAPL&interval=1d", nil)

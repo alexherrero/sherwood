@@ -21,7 +21,7 @@ func TestRunBacktestHandler_Errors(t *testing.T) {
 	cfg := &config.Config{TradingMode: "test"}
 	registry := strategies.NewRegistry()
 	mockProvider := new(MockDataProvider)
-	handler := NewHandler(registry, mockProvider, cfg, nil, nil, nil)
+	handler := NewHandler(registry, mockProvider, cfg, nil, nil, nil, nil)
 
 	t.Run("InvalidJSON", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/backtests", nil) // Empty body
@@ -87,7 +87,7 @@ func TestGetOrderHandler_Errors(t *testing.T) {
 	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
 
 	// Use router to handle URL parameter parsing
-	router := NewRouter(cfg, nil, nil, orderManager, nil, nil)
+	router := NewRouter(cfg, nil, nil, orderManager, nil, nil, nil)
 
 	t.Run("OrderNotFound", func(t *testing.T) {
 		mockBroker.On("GetOrder", "missing").Return(nil, fmt.Errorf("order not found")).Once()

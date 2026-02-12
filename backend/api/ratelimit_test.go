@@ -18,7 +18,7 @@ func TestRateLimiting(t *testing.T) {
 	}
 
 	// Create a simple test router with rate limiting
-	router := NewRouter(cfg, nil, nil, nil, nil, nil)
+	router := NewRouter(cfg, nil, nil, nil, nil, nil, nil)
 
 	t.Run("burst_limit_enforcement", func(t *testing.T) {
 		// Test burst protection (20 req/sec)
