@@ -18,25 +18,31 @@ Sherwood is a proof-of-concept automated trading engine and management dashboard
 
 The following strategies are planned for implementation:
 
-### 1. RSI (Relative Strength Index) Momentum
+### 1. Moving Average Crossover
+
+- **Logic**: Buy when the short-term moving average crosses above the long-term moving average (Golden Cross); Sell when the short-term crosses below the long-term (Death Cross).
+- **Goal**: Capture significant trends early.
+- **Parameters**: Short Period (50), Long Period (200).
+
+### 2. RSI (Relative Strength Index) Momentum
 
 - **Logic**: Buy when the asset is oversold (RSI < 30) and sell when it is overbought (RSI > 70).
 - **Goal**: Capitalize on mean reversion in ranging markets.
 - **Parameters**: Period (default 14), Overbought Threshold (70), Oversold Threshold (30).
 
-### 2. Bollinger Bands Mean Reversion
+### 3. Bollinger Bands Mean Reversion
 
 - **Logic**: Buy when price touches or breaks below the lower band; Sell when price touches or breaks above the upper band.
 - **Goal**: Exploit price extremes assuming price will return to the mean.
 - **Parameters**: Period (20), Standard Deviation Multiplier (2).
 
-### 3. MACD (Moving Average Convergence Divergence) Trend Follower
+### 4. MACD (Moving Average Convergence Divergence) Trend Follower
 
 - **Logic**: Buy when the MACD line crosses above the Signal line (bullish crossover); Sell when the MACD line crosses below the Signal line (bearish crossover).
 - **Goal**: Identify and follow strong market trends.
 - **Parameters**: Fast Period (12), Slow Period (26), Signal Period (9).
 
-### 4. NYC Market Close/Open Strategy
+### 5. NYC Market Close/Open Strategy
 
 - **Logic**: Buy Bitcoin at NYC market close (4 PM ET), sell one hour before market open (8:30 AM ET).
 - **Goal**: Capitalize on overnight cryptocurrency volatility patterns.
@@ -241,6 +247,7 @@ sherwood/
 │   ├── docker/              # Dockerfiles
 │   └── k8s/                 # Kubernetes manifests (optional)
 ├── docs/                    # Documentation
+├── wiki/                    # GitHub Wiki content (Source of Truth for Features)
 ├── scripts/                 # Utility scripts
 ├── .github/                 # GitHub Actions workflows
 ├── .env.example             # Environment variables template
