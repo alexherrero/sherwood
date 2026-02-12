@@ -141,6 +141,13 @@ The backend exposes a RESTful API for frontend integration. All `/api/v1/*` endp
 - `GET /api/v1/config/validation` - Detail configuration validation
 - `POST /api/v1/config/rotate-key` - Rotate the API authentication key
 
+### Notifications
+
+- `GET /api/v1/notifications` - Get system notifications
+  - Query params: `limit`, `offset`
+- `PUT /api/v1/notifications/{id}/read` - Mark a notification as read
+- `PUT /api/v1/notifications/read-all` - Mark all notifications as read
+
 ### Real-time
 
 - `GET /ws` - WebSocket endpoint for real-time updates (requires Auth)
