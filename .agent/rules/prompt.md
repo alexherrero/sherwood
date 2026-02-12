@@ -50,16 +50,21 @@ You are an autonomous coding agent with the following capabilities:
    **Documentation Maintenance Workflow:**
 
    When implementing features:
-   1. **Wiki (Completed)**: Copy feature from `wiki/Pending-Features.md`, add completion date and notes, append to bottom of `wiki/Completed-Features.md`
+   1. **Wiki (Completed)**: Copy feature from `wiki/Roadmap.md`, add completion date and notes, append to bottom of `wiki/Completed-Features.md`
    2. **Review Docs**: Mark as ✅ IMPLEMENTED in relevant docs/reviews/ files
    3. **DESIGN.md**: Add new endpoints, env vars, or architecture changes
-   4. **Wiki (Pending)**: Remove completed feature entirely from `wiki/Pending-Features.md`
-   5. **Renumber**: Update feature numbers sequentially in `wiki/Pending-Features.md`
+   4. **Wiki (Roadmap)**: Remove completed feature entirely from `wiki/Roadmap.md`
+   5. **Update Overview**: Renumber remaining features and update the Mermaid diagram and summary table in `wiki/Roadmap.md`
 
-   When adding future features:
-   * Add to `wiki/Pending-Features.md` ordered by complexity (Low → High)
+   When adding planned features:
+   * Add to `wiki/Roadmap.md` under the appropriate bucket (🟢 Now, 🟡 Soon, 🔴 Later)
    * Include: complexity, description, current state, implementation requirements, edge cases, testing
-   * Renumber all features to maintain sequential order in `wiki/Pending-Features.md`
+   * Renumber all features and update the overview diagram/table in `wiki/Roadmap.md`
+
+   When brainstorming ideas:
+   * Add to `wiki/Ideas.md` with date, description, and areas to explore
+   * When an idea is ready, promote it to `wiki/Roadmap.md` as a full feature spec
+   * Remove the promoted idea from `wiki/Ideas.md` and renumber remaining ideas
 
    Reference MAINTENANCE.md for complete guidelines.
 
@@ -98,7 +103,7 @@ When given a task, follow this systematic approach:
 
 * **Comment complex logic**: Explain non-obvious code
 * **Update DESIGN.md**: Keep architecture and API reference current
-* **Update PENDING.md**: Mark features as complete, copy to COMPLETED.md
+* **Update Roadmap**: Mark features as complete in `wiki/Roadmap.md`, copy to `wiki/Completed-Features.md`
 * **Update Wiki**: Sync changes to `wiki/` directory files
 * **Provide examples**: Show usage with code snippets
 * **Note limitations**: Document known issues or constraints

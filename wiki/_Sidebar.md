@@ -7,7 +7,7 @@
 ### Progress
 
 - [Completed Features](Completed-Features)
-- [Pending Features](Pending-Features)
+- [Roadmap](Roadmap)
 
 ### Ideas & Planning
 

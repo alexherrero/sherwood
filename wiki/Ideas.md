@@ -1,6 +1,6 @@
 # Ideas
 
-A running list of ideas for Sherwood's future direction. These are brainstorms and explorations — not yet committed to the roadmap. When an idea is ready to move forward, it should be refined into a feature spec and added to [Pending Features](Pending-Features).
+A running list of ideas for Sherwood's future direction. These are brainstorms and explorations — not yet committed to the roadmap. When an idea is ready to move forward, it should be refined into a feature spec and added to the [Roadmap](Roadmap).
 
 ---
 
@@ -54,19 +54,3 @@ Expand exchange integration beyond the current provider(s) to include other majo
 - Unified broker interface abstraction
 - Exchange-specific order types and limitations
 - API rate limiting differences
-
----
-
-## 4. AI-Powered Strategy Creation & Adaptation
-
-**Added:** 2026-02-12
-
-Integrate an AI/ML feature that can **create new trading strategies** and **dynamically update them** based on changing market conditions.
-
-**Areas to explore:**
-
-- LLM-based strategy generation from natural language descriptions
-- Reinforcement learning for parameter tuning
-- Sentiment analysis from news and social media feeds
-- Automatic strategy backtesting and validation before deployment
-- Guardrails and human-in-the-loop approval for AI-generated strategies
