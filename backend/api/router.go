@@ -13,10 +13,10 @@ import (
 	"github.com/alexherrero/sherwood/backend/notifications"
 	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
+	"github.com/alexherrero/sherwood/backend/tracing"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/httprate"
-	"github.com/rs/zerolog/log"
 )
 
 // NewRouter creates and configures the main HTTP router.
@@ -44,6 +44,7 @@ func NewRouter(
 
 	// Middleware stack
 	r.Use(middleware.RequestID)
+	r.Use(TraceMiddleware)
 	r.Use(middleware.RealIP)
 	r.Use(zerologLogger)
 	r.Use(middleware.Recoverer)
@@ -180,12 +181,14 @@ func NewRouter(
 }
 
 // zerologLogger is middleware that logs requests using zerolog.
+// Includes the trace_id from context for request correlation.
 func zerologLogger(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
 		next.ServeHTTP(ww, r)
-		log.Info().
+		logger := tracing.Logger(r.Context())
+		logger.Info().
 			Str("method", r.Method).
 			Str("path", r.URL.Path).
 			Int("status", ww.Status()).

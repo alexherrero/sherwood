@@ -36,33 +36,7 @@ frontend/
 
 ---
 
-## 2. Structured Logging with Trace IDs
-
-**Complexity:** Low
-
-**Description:**
-Add correlation/trace IDs to all critical log paths (order execution, strategy signals) to enable tracing logic flow across components.
-
-**Current State:**
-`zerolog` is used for logging, but lacks trace context across distributed operations.
-
-**Implementation Requirements:**
-
-1. Add `trace_id` to request context in API middleware
-2. Generate unique IDs for engine operations (strategy evaluation, order placement)
-3. Propagate trace IDs through function calls via context
-4. Update critical log points: order execution, strategy signals, data provider calls, engine ticks
-5. Use `log.With().Str("trace_id", traceID)` pattern
-
-**Files to Modify:**
-
-- `backend/api/middleware.go` - Add trace ID middleware
-- `backend/engine/engine.go` - Generate trace IDs for ticks
-- `backend/execution/order_manager.go` - Include trace in orders
-
----
-
-## 3. Enhanced Configuration Validation
+## 2. Enhanced Configuration Validation
 
 **Complexity:** Medium
 
@@ -82,7 +56,7 @@ Basic config validation exists. Config validation endpoint shows warnings, but d
 
 ---
 
-## 4. Graceful Shutdown for Trading Engine
+## 3. Graceful Shutdown for Trading Engine
 
 **Complexity:** Medium
 
@@ -103,7 +77,7 @@ Extend graceful shutdown beyond HTTP server to include the trading engine. Ensur
 
 ---
 
-## 5. Hot-Swapping Strategies
+## 4. Hot-Swapping Strategies
 
 **Complexity:** Medium-High
 
@@ -130,7 +104,7 @@ Strategies are loaded once at startup from `ENABLED_STRATEGIES` environment vari
 
 ---
 
-## 6. Deployment Configuration (Docker)
+## 5. Deployment Configuration (Docker)
 
 **Complexity:** High
 
@@ -155,7 +129,7 @@ Create Dockerfiles and docker-compose configuration to containerize the applicat
 
 ---
 
-## 7. Benchmark Tests for Performance Monitoring
+## 6. Benchmark Tests for Performance Monitoring
 
 **Complexity:** Medium
 
@@ -197,7 +171,7 @@ func BenchmarkBacktest_LargeDataset(b *testing.B) {
 
 ---
 
-## 8. Concurrent Operation Tests
+## 7. Concurrent Operation Tests
 
 **Complexity:** Medium-High
 
@@ -240,7 +214,7 @@ func TestConcurrentOrderPlacement(t *testing.T) {
 
 ---
 
-## 9. Edge Case Test Coverage
+## 8. Edge Case Test Coverage
 
 **Complexity:** Low-Medium
 
@@ -277,7 +251,7 @@ Add table-driven tests for validation edge cases, integration tests for error re
 
 ---
 
-## 10. Property-Based Testing
+## 9. Property-Based Testing
 
 **Complexity:** High
 
@@ -313,7 +287,7 @@ func TestBacktest_BalanceNeverNegative(t *testing.T) {
 
 ---
 
-## 12. Configuration Hot-Reload
+## 10. Configuration Hot-Reload
 
 **Complexity:** Medium
 

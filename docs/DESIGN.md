@@ -231,8 +231,10 @@ sherwood/
 │   │   └── reports.go       # Report generation
 │   ├── api/                 # REST API
 │   │   ├── handlers_*.go    # HTTP Handlers (orders, backtesting, etc.)
-│   │   ├── middleware_*.go  # Auth, Audit, Rate Limiting, CORS
+│   │   ├── middleware_*.go  # Auth, Audit, Trace, Rate Limiting, CORS
 │   │   └── validation.go    # Input validation logic
+│   ├── tracing/             # Structured logging with trace IDs
+│   │   └── tracing.go       # Trace ID generation and context propagation
 │   ├── config/              # Configuration management
 │   ├── utils/               # Utility functions
 │   └── models/              # Shared domain models
