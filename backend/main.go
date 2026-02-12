@@ -122,6 +122,7 @@ func main() {
 		symbols,
 		1*time.Minute,    // Tick every minute
 		100*24*time.Hour, // Lookback 100 days
+		cfg.CloseOnShutdown,
 	)
 
 	// Start Trading Engine
@@ -155,19 +156,22 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
-	log.Info().Msg("Shutting down server...")
+	log.Info().Msg("Graceful shutdown initiated...")
 
-	// Stop Trading Engine
-	cancelEngine()
-	tradingEngine.Stop()
-
-	// Given outstanding requests 30 seconds to complete
-	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), 30*time.Second)
+	// Create shutdown context with configurable timeout
+	ctxShutdown, cancelShutdown := context.WithTimeout(context.Background(), cfg.ShutdownTimeout)
 	defer cancelShutdown()
 
+	// Step 1: Shutdown trading engine first (cancel pending orders, close positions, checkpoint)
+	cancelEngine()
+	if err := tradingEngine.Shutdown(ctxShutdown); err != nil {
+		log.Error().Err(err).Msg("Engine shutdown encountered errors")
+	}
+
+	// Step 2: Shutdown API server (drain in-flight HTTP requests)
 	if err := server.Shutdown(ctxShutdown); err != nil {
 		log.Fatal().Err(err).Msg("Server forced to shutdown")
 	}
 
-	log.Info().Msg("Server exited gracefully")
+	log.Info().Msg("Sherwood exited gracefully")
 }

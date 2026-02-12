@@ -686,7 +686,7 @@ func TestStartEngineHandler(t *testing.T) {
 		// Create a real engine for this test (won't actually start it)
 		mockBroker := new(MockBroker)
 		orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
-		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, nil, []string{"AAPL"}, time.Minute, 24*time.Hour)
+		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, nil, []string{"AAPL"}, time.Minute, 24*time.Hour, false)
 		handler := NewHandler(registry, mockProvider, cfg, nil, testEngine, nil, nil)
 
 		payload := map[string]bool{"confirm": false}
@@ -734,7 +734,7 @@ func TestStopEngineHandler(t *testing.T) {
 	t.Run("WithoutConfirmation", func(t *testing.T) {
 		mockBroker := new(MockBroker)
 		orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
-		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, nil, []string{"AAPL"}, time.Minute, 24*time.Hour)
+		testEngine := engine.NewTradingEngine(mockProvider, registry, orderManager, nil, []string{"AAPL"}, time.Minute, 24*time.Hour, false)
 		handler := NewHandler(registry, mockProvider, cfg, nil, testEngine, nil, nil)
 
 		payload := map[string]bool{"confirm": false}

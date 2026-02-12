@@ -236,6 +236,7 @@ func TestSystemFlow_EngineLifecycle(t *testing.T) {
 		[]string{"AAPL"},
 		10*time.Millisecond, // Fast tick for testing
 		365*24*time.Hour,    // Lookback
+		false,
 	)
 
 	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine, nil, nil)

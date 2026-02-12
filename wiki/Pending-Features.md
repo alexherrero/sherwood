@@ -36,28 +36,7 @@ frontend/
 
 ---
 
-## 2. Graceful Shutdown for Trading Engine
-
-**Complexity:** Medium
-
-**Description:**
-Extend graceful shutdown beyond HTTP server to include the trading engine. Ensure open positions can optionally be closed or state checkpointed before shutdown.
-
-**Current State:**
-`main.go` has graceful shutdown for HTTP server only.
-
-**Implementation Requirements:**
-
-1. Extend signal handler to coordinate with engine
-2. Add `engine.Shutdown(ctx context.Context) error` method
-3. Stop accepting new signals, wait for in-flight orders
-4. Configurable option to close all positions (CLOSE_ON_SHUTDOWN)
-5. Checkpoint state to database before exit
-6. Shutdown engine first, then API server
-
----
-
-## 3. Hot-Swapping Strategies
+## 2. Hot-Swapping Strategies
 
 **Complexity:** Medium-High
 
@@ -84,7 +63,7 @@ Strategies are loaded once at startup from `ENABLED_STRATEGIES` environment vari
 
 ---
 
-## 4. Deployment Configuration (Docker)
+## 3. Deployment Configuration (Docker)
 
 **Complexity:** High
 
@@ -109,7 +88,7 @@ Create Dockerfiles and docker-compose configuration to containerize the applicat
 
 ---
 
-## 5. Benchmark Tests for Performance Monitoring
+## 4. Benchmark Tests for Performance Monitoring
 
 **Complexity:** Medium
 
@@ -151,7 +130,7 @@ func BenchmarkBacktest_LargeDataset(b *testing.B) {
 
 ---
 
-## 6. Concurrent Operation Tests
+## 5. Concurrent Operation Tests
 
 **Complexity:** Medium-High
 
@@ -194,7 +173,7 @@ func TestConcurrentOrderPlacement(t *testing.T) {
 
 ---
 
-## 7. Edge Case Test Coverage
+## 6. Edge Case Test Coverage
 
 **Complexity:** Low-Medium
 
@@ -231,7 +210,7 @@ Add table-driven tests for validation edge cases, integration tests for error re
 
 ---
 
-## 8. Property-Based Testing
+## 7. Property-Based Testing
 
 **Complexity:** High
 
@@ -267,7 +246,7 @@ func TestBacktest_BalanceNeverNegative(t *testing.T) {
 
 ---
 
-## 9. Configuration Hot-Reload
+## 8. Configuration Hot-Reload
 
 **Complexity:** Medium
 
