@@ -9,7 +9,8 @@ The goal of Sherwood is to provide a simple platform for developing and executin
 ## Key Sections
 
 - **[Setup](Backend-Setup)**: Get started with setting up the Sherwood backend and environment.
-- **[Progress](Completed-Features)**: Track the development status, including completed features and pending tasks.
+- **[Roadmap](Roadmap)**: See what's planned — now, soon, and later.
+- **[Completed Features](Completed-Features)**: Chronological history of everything shipped.
 - **[Ideas](Ideas)**: Brainstorms and explorations for Sherwood's future direction.
 
 Please use the sidebar to navigate through the available documentation.
