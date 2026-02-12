@@ -148,7 +148,7 @@ type PlaceOrderRequest struct {
 	Side     string  `json:"side" validate:"required,oneof=buy sell"`
 	Type     string  `json:"type" validate:"required,oneof=market limit"`
 	Quantity float64 `json:"quantity" validate:"required,gt=0,lte=1000000"`
-	Price    float64 `json:"price" validate:"omitempty,gt=0"`
+	Price    float64 `json:"price" validate:"required_if=Type limit,omitempty,gt=0"`
 }
 
 // PlaceOrderHandler handles manual order placement.
@@ -189,10 +189,6 @@ func (h *Handler) PlaceOrderHandler(w http.ResponseWriter, r *http.Request) {
 	case "market":
 		order, err = h.orderManager.CreateMarketOrder(r.Context(), req.Symbol, side, req.Quantity)
 	case "limit":
-		if req.Price <= 0 {
-			writeError(w, http.StatusBadRequest, "Price must be positive for limit orders")
-			return
-		}
 		order, err = h.orderManager.CreateLimitOrder(r.Context(), req.Symbol, side, req.Quantity, req.Price)
 	default:
 		writeError(w, http.StatusBadRequest, "Invalid type: must be 'market' or 'limit'")

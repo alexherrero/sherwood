@@ -82,7 +82,7 @@ func TestPlaceOrder_Errors(t *testing.T) {
 		rec := httptest.NewRecorder()
 
 		handler.PlaceOrderHandler(rec, req)
-		assert.Equal(t, http.StatusBadRequest, rec.Code) // Validation fails "oneof=buy sell"
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code) // Validation fails "oneof=buy sell"
 	})
 
 	t.Run("LimitOrderNoPrice", func(t *testing.T) {
@@ -98,7 +98,7 @@ func TestPlaceOrder_Errors(t *testing.T) {
 		rec := httptest.NewRecorder()
 
 		handler.PlaceOrderHandler(rec, req)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }
 

@@ -38,7 +38,7 @@ func TestRunBacktestHandler_Errors(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/backtests", bytes.NewReader(body))
 		rec := httptest.NewRecorder()
 		handler.RunBacktestHandler(rec, req)
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 		assert.Contains(t, rec.Body.String(), "Validation failed")
 	})
 

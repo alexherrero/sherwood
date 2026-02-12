@@ -506,7 +506,7 @@ func TestPlaceOrderHandler(t *testing.T) {
 
 		handler.PlaceOrderHandler(rec, req)
 
-		assert.Equal(t, http.StatusBadRequest, rec.Code)
+		assert.Equal(t, http.StatusUnprocessableEntity, rec.Code)
 	})
 }
 

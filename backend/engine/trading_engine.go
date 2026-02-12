@@ -145,9 +145,19 @@ func (e *TradingEngine) processSymbol(symbol string) error {
 	end := time.Now()
 	start := end.Add(-e.lookback)
 
+	// 2. Iterate over strategies, grouping by timeframe would be ideal, but for now we assume a primary timeframe derived from the first available strategy or default to "1d"
+	timeframe := "1d"
+	strategiesList := e.registry.All()
+	if len(strategiesList) > 0 {
+		for _, s := range strategiesList {
+			timeframe = s.Timeframe()
+			break // Use the first strategy's timeframe for now
+		}
+	}
+
 	// Assume generic timeframe (Daily) for now.
 	// In a real system, we'd need to handle multiple timeframes.
-	candles, err := e.provider.GetHistoricalData(symbol, start, end, "1d")
+	candles, err := e.provider.GetHistoricalData(symbol, start, end, timeframe)
 	if err != nil {
 		return fmt.Errorf("failed to fetch data: %w", err)
 	}

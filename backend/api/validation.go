@@ -91,7 +91,7 @@ func validateStruct(s interface{}) *ValidationError {
 //   - err: Validation error
 func writeValidationError(w http.ResponseWriter, err *ValidationError) {
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusBadRequest)
+	w.WriteHeader(http.StatusUnprocessableEntity)
 	// APIError can wrap ValidationError content
 	resp := APIError{
 		Error:   err.Error,
