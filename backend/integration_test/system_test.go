@@ -94,7 +94,7 @@ func TestSystemFlow_HealthEndpoint(t *testing.T) {
 	}
 	registry := strategies.NewRegistry()
 	provider := &TestableDataProvider{priceData: map[string][]models.OHLCV{}}
-	router := api.NewRouter(cfg, registry, provider, nil, nil, nil)
+	router := api.NewRouter(cfg, registry, provider, nil, nil, nil, nil)
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -118,7 +118,7 @@ func TestSystemFlow_StrategyList(t *testing.T) {
 	registry.Register(strategies.NewMACrossover())
 
 	provider := &TestableDataProvider{priceData: map[string][]models.OHLCV{}}
-	router := api.NewRouter(cfg, registry, provider, nil, nil, nil)
+	router := api.NewRouter(cfg, registry, provider, nil, nil, nil, nil)
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -157,7 +157,7 @@ func TestSystemFlow_OrderPlacement(t *testing.T) {
 
 	// PaperBroker requires a price set for market orders
 	broker.SetPrice("AAPL", 150.0)
-	router := api.NewRouter(cfg, registry, provider, orderManager, nil, nil)
+	router := api.NewRouter(cfg, registry, provider, orderManager, nil, nil, nil)
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -238,7 +238,7 @@ func TestSystemFlow_EngineLifecycle(t *testing.T) {
 		365*24*time.Hour,    // Lookback
 	)
 
-	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine, nil)
+	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine, nil, nil)
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -295,7 +295,7 @@ func TestSystemFlow_BacktestEndToEnd(t *testing.T) {
 		},
 	}
 
-	router := api.NewRouter(cfg, registry, provider, nil, nil, nil)
+	router := api.NewRouter(cfg, registry, provider, nil, nil, nil, nil)
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -347,7 +347,7 @@ func TestSystemFlow_PortfolioSummary(t *testing.T) {
 	registry := strategies.NewRegistry()
 	provider := &TestableDataProvider{priceData: map[string][]models.OHLCV{}}
 
-	router := api.NewRouter(cfg, registry, provider, orderManager, nil, nil)
+	router := api.NewRouter(cfg, registry, provider, orderManager, nil, nil, nil)
 	server := httptest.NewServer(router)
 	defer server.Close()
 
@@ -382,7 +382,7 @@ func TestSystemFlow_PerformanceMetrics(t *testing.T) {
 	registry := strategies.NewRegistry()
 	provider := &TestableDataProvider{priceData: map[string][]models.OHLCV{}}
 
-	router := api.NewRouter(cfg, registry, provider, orderManager, nil, nil)
+	router := api.NewRouter(cfg, registry, provider, orderManager, nil, nil, nil)
 	server := httptest.NewServer(router)
 	defer server.Close()
 
