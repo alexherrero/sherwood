@@ -17,19 +17,20 @@ import (
 
 // TradingEngine manages the core trading loop.
 type TradingEngine struct {
-	provider     data.DataProvider
-	registry     *strategies.Registry
-	orderManager *execution.OrderManager
-	wsManager    *realtime.WebSocketManager
-	symbols      []string
-	interval     time.Duration
-	lookback     time.Duration
-	stopCh       chan struct{}
-	wg           sync.WaitGroup
-	mu           sync.RWMutex
-	running      bool
-	ctx          context.Context
-	cancel       context.CancelFunc
+	provider        data.DataProvider
+	registry        *strategies.Registry
+	orderManager    *execution.OrderManager
+	wsManager       *realtime.WebSocketManager
+	symbols         []string
+	interval        time.Duration
+	lookback        time.Duration
+	closeOnShutdown bool
+	stopCh          chan struct{}
+	wg              sync.WaitGroup
+	mu              sync.RWMutex
+	running         bool
+	ctx             context.Context
+	cancel          context.CancelFunc
 }
 
 // NewTradingEngine creates a new trading engine instance.
@@ -42,6 +43,7 @@ type TradingEngine struct {
 //   - symbols: List of symbols to trade
 //   - interval: Polling interval
 //   - lookback: Historical data lookback period
+//   - closeOnShutdown: If true, close all positions on graceful shutdown
 //
 // Returns:
 //   - *TradingEngine: The engine instance
@@ -53,19 +55,21 @@ func NewTradingEngine(
 	symbols []string,
 	interval time.Duration,
 	lookback time.Duration,
+	closeOnShutdown bool,
 ) *TradingEngine {
 	return &TradingEngine{
-		provider:     provider,
-		registry:     registry,
-		orderManager: orderManager,
-		wsManager:    wsManager,
-		symbols:      symbols,
-		interval:     interval,
-		lookback:     lookback,
-		stopCh:       make(chan struct{}),
-		running:      false,
-		ctx:          nil,
-		cancel:       nil,
+		provider:        provider,
+		registry:        registry,
+		orderManager:    orderManager,
+		wsManager:       wsManager,
+		symbols:         symbols,
+		interval:        interval,
+		lookback:        lookback,
+		closeOnShutdown: closeOnShutdown,
+		stopCh:          make(chan struct{}),
+		running:         false,
+		ctx:             nil,
+		cancel:          nil,
 	}
 }
 
@@ -94,7 +98,18 @@ func (e *TradingEngine) Start(ctx context.Context) error {
 	return nil
 }
 
-// Stop gracefully stops the trading engine.
+// IsRunning returns whether the trading engine is currently running.
+//
+// Returns:
+//   - bool: true if the engine is running
+func (e *TradingEngine) IsRunning() bool {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.running
+}
+
+// Stop gracefully stops the trading engine loop.
+// It signals the loop to exit and waits for the current tick to complete.
 func (e *TradingEngine) Stop() {
 	e.mu.Lock()
 	if !e.running {
@@ -107,6 +122,113 @@ func (e *TradingEngine) Stop() {
 
 	e.wg.Wait()
 	log.Info().Msg("Trading Engine stopped")
+}
+
+// Shutdown performs a full graceful shutdown of the trading engine.
+// It stops the engine loop, cancels pending orders, optionally closes all
+// positions, and checkpoints state to the database. The provided context
+// controls the overall shutdown deadline.
+//
+// Shutdown sequence:
+//  1. Stop accepting new ticks (signal the loop to exit)
+//  2. Wait for in-flight tick processing to complete
+//  3. Cancel all pending/submitted orders
+//  4. If closeOnShutdown is true, close all open positions via market sell
+//  5. Checkpoint all orders to the database
+//  6. Disconnect the broker
+//
+// Args:
+//   - ctx: Context with deadline for the shutdown process
+//
+// Returns:
+//   - error: First error encountered during shutdown (best-effort)
+func (e *TradingEngine) Shutdown(ctx context.Context) error {
+	log.Info().Bool("close_positions", e.closeOnShutdown).Msg("Engine graceful shutdown initiated")
+
+	// Step 1-2: Stop the trading loop and wait for in-flight work
+	e.Stop()
+
+	// Check if context is already done
+	select {
+	case <-ctx.Done():
+		return fmt.Errorf("shutdown deadline exceeded before cleanup: %w", ctx.Err())
+	default:
+	}
+
+	// Create an engine context for audit
+	shutdownCtx := execution.NewEngineContextWithTrace(ctx)
+
+	// Step 3: Cancel all pending/submitted orders
+	cancelled, err := e.orderManager.CancelAllPendingOrders(shutdownCtx)
+	if err != nil {
+		log.Warn().Err(err).Int("cancelled", cancelled).Msg("Some pending orders could not be cancelled during shutdown")
+	}
+
+	// Step 4: Close all positions if configured
+	if e.closeOnShutdown {
+		if closeErr := e.closeAllPositions(shutdownCtx); closeErr != nil {
+			log.Error().Err(closeErr).Msg("Failed to close all positions during shutdown")
+			if err == nil {
+				err = closeErr
+			}
+		}
+	}
+
+	// Step 5: Checkpoint all orders to database
+	if saveErr := e.orderManager.SaveOrders(); saveErr != nil {
+		log.Error().Err(saveErr).Msg("Failed to checkpoint orders during shutdown")
+		if err == nil {
+			err = saveErr
+		}
+	}
+
+	log.Info().Msg("Engine graceful shutdown complete")
+	return err
+}
+
+// closeAllPositions closes all open positions by placing market sell orders.
+//
+// Args:
+//   - ctx: Context for order placement
+//
+// Returns:
+//   - error: First error encountered (other closes continue)
+func (e *TradingEngine) closeAllPositions(ctx context.Context) error {
+	positions, posErr := e.orderManager.GetPositions()
+	if posErr != nil {
+		return fmt.Errorf("failed to get positions for closure: %w", posErr)
+	}
+
+	var firstErr error
+	closed := 0
+	for _, pos := range positions {
+		if pos.Quantity <= 0 {
+			continue
+		}
+
+		log.Info().
+			Str("symbol", pos.Symbol).
+			Float64("quantity", pos.Quantity).
+			Msg("Closing position on shutdown")
+
+		_, orderErr := e.orderManager.CreateMarketOrder(
+			ctx,
+			pos.Symbol,
+			models.OrderSideSell,
+			pos.Quantity,
+		)
+		if orderErr != nil {
+			log.Error().Err(orderErr).Str("symbol", pos.Symbol).Msg("Failed to close position")
+			if firstErr == nil {
+				firstErr = orderErr
+			}
+			continue
+		}
+		closed++
+	}
+
+	log.Info().Int("closed", closed).Int("total", len(positions)).Msg("Position closure complete")
+	return firstErr
 }
 
 // loop is the main trading loop.

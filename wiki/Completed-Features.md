@@ -420,3 +420,39 @@ Added rigorous fail-fast configuration validation at startup. The `config.Valida
 
 - `backend/config/config.go` (modified - comprehensive Validate(), validateProvider(), validateStrategies(), validateMode(), ValidationError type)
 - `backend/config/config_test.go` (modified - 22 new validation test cases)
+
+---
+
+## Graceful Engine Shutdown
+
+**Complexity:** Medium
+**Completed:** 2026-02-12
+**Source:** Pending Features #2
+
+**Description:**
+Implemented full graceful shutdown for the trading engine, ensuring safe state transitions when the application receives a termination signal. The shutdown sequence now follows the correct order: engine first (cancel orders, close positions, checkpoint), then API server.
+
+**What Was Implemented:**
+
+- `TradingEngine.Shutdown(ctx context.Context) error` method with 5-step shutdown sequence:
+  1. Stop accepting new ticks (signal loop exit)
+  2. Wait for in-flight tick processing to complete
+  3. Cancel all pending/submitted orders via `OrderManager.CancelAllPendingOrders()`
+  4. Optionally close all open positions via market sell orders (configurable via `CLOSE_ON_SHUTDOWN`)
+  5. Checkpoint all in-memory orders to database via `OrderManager.SaveOrders()`
+- `TradingEngine.IsRunning()` method for thread-safe state inspection
+- `TradingEngine.closeAllPositions()` helper that iterates positions and places market sell orders
+- `OrderManager.SaveOrders()` for checkpointing in-memory order state to database
+- `OrderManager.CancelAllPendingOrders()` for batch cancellation of open orders
+- `Config.CloseOnShutdown` (env: `CLOSE_ON_SHUTDOWN`, default: `false`) and `Config.ShutdownTimeout` (env: `SHUTDOWN_TIMEOUT`, default: `30s`)
+- `getEnvDuration()` config helper for parsing duration strings from environment
+- Updated `main.go` shutdown flow: engine shuts down before API server, uses configurable timeout
+- 4 new tests: basic shutdown, shutdown with position closure, expired context, idempotency
+
+**Key Files:**
+
+- `backend/engine/trading_engine.go` (modified - Shutdown(), IsRunning(), closeAllPositions(), closeOnShutdown field)
+- `backend/engine/trading_engine_test.go` (modified - 4 new shutdown tests with ShutdownMockBroker)
+- `backend/execution/order_manager.go` (modified - SaveOrders(), CancelAllPendingOrders())
+- `backend/config/config.go` (modified - CloseOnShutdown, ShutdownTimeout, getEnvDuration())
+- `backend/main.go` (modified - reordered shutdown: engine → server)

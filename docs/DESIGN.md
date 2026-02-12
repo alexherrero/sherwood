@@ -75,6 +75,12 @@ Sherwood uses environment variables for runtime configuration, making it Docker-
 - `BINANCE_API_KEY` - Binance API key (required if using Binance provider)
 - `BINANCE_API_SECRET` - Binance API secret (required if using Binance provider)
 
+**Shutdown Settings:**
+
+- `CLOSE_ON_SHUTDOWN` - If "true", close all open positions on graceful shutdown (default: "false")
+- `SHUTDOWN_TIMEOUT` - Maximum time for graceful shutdown as Go duration string (default: "30s")
+- `ALLOWED_ORIGINS` - Comma-separated list of allowed CORS origins (default: "<http://localhost:3000,http://localhost:8080>")
+
 **Example:**
 
 ```bash
@@ -82,6 +88,8 @@ Sherwood uses environment variables for runtime configuration, making it Docker-
 DATA_PROVIDER=yahoo
 ENABLED_STRATEGIES=ma_crossover,rsi_momentum,bb_mean_reversion
 TRADING_MODE=dry_run
+CLOSE_ON_SHUTDOWN=false
+SHUTDOWN_TIMEOUT=30s
 ```
 
 ## API Endpoints

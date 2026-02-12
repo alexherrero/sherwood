@@ -410,6 +410,72 @@ func (om *OrderManager) ModifyOrder(ctx context.Context, orderID string, newPric
 	return order, nil
 }
 
+// SaveOrders persists all in-memory orders to the database.
+// This is used during graceful shutdown to checkpoint state.
+//
+// Returns:
+//   - error: Any error encountered during save
+func (om *OrderManager) SaveOrders() error {
+	if om.store == nil {
+		return nil // No persistence configured
+	}
+
+	om.mu.RLock()
+	defer om.mu.RUnlock()
+
+	var firstErr error
+	saved := 0
+	for _, order := range om.orders {
+		if err := om.store.SaveOrder(order); err != nil {
+			log.Error().Err(err).Str("order_id", order.ID).Msg("Failed to save order during checkpoint")
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		saved++
+	}
+
+	log.Info().Int("saved", saved).Int("total", len(om.orders)).Msg("Checkpointed orders to database")
+	return firstErr
+}
+
+// CancelAllPendingOrders cancels all orders with pending or submitted status.
+// This is used during graceful shutdown to clean up open orders.
+//
+// Args:
+//   - ctx: Context for audit logging
+//
+// Returns:
+//   - int: Number of orders cancelled
+//   - error: First error encountered (other cancellations continue)
+func (om *OrderManager) CancelAllPendingOrders(ctx context.Context) (int, error) {
+	om.mu.RLock()
+	var pendingIDs []string
+	for id, order := range om.orders {
+		if order.Status == models.OrderStatusPending || order.Status == models.OrderStatusSubmitted {
+			pendingIDs = append(pendingIDs, id)
+		}
+	}
+	om.mu.RUnlock()
+
+	var firstErr error
+	cancelled := 0
+	for _, id := range pendingIDs {
+		if err := om.CancelOrder(ctx, id); err != nil {
+			log.Error().Err(err).Str("order_id", id).Msg("Failed to cancel pending order during shutdown")
+			if firstErr == nil {
+				firstErr = err
+			}
+			continue
+		}
+		cancelled++
+	}
+
+	log.Info().Int("cancelled", cancelled).Int("pending", len(pendingIDs)).Msg("Cancelled pending orders during shutdown")
+	return cancelled, firstErr
+}
+
 // GetInitialCapital retrieves the initial capital from configuration.
 func (om *OrderManager) GetInitialCapital() (float64, error) {
 	if om.store == nil {

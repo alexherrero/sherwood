@@ -8,7 +8,9 @@ import (
 	"github.com/alexherrero/sherwood/backend/execution"
 	"github.com/alexherrero/sherwood/backend/models"
 	"github.com/alexherrero/sherwood/backend/strategies"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 )
 
 // MockProvider
@@ -108,6 +110,7 @@ func TestTradingEngine_RunLoop(t *testing.T) {
 		[]string{"AAPL"},
 		10*time.Millisecond,
 		24*time.Hour,
+		false,
 	)
 
 	// Expectation: GetHistoricalData called
@@ -157,6 +160,7 @@ func TestTradingEngine_StopIdempotency(t *testing.T) {
 		[]string{"AAPL"},
 		10*time.Millisecond,
 		24*time.Hour,
+		false,
 	)
 
 	// Expectation: Provider might be called
@@ -193,6 +197,7 @@ func TestTradingEngine_ProviderError(t *testing.T) {
 		[]string{"AAPL"},
 		10*time.Millisecond,
 		24*time.Hour,
+		false,
 	)
 
 	// Expectation: Provider returns error
@@ -236,6 +241,7 @@ func TestTradingEngine_LimitOrder(t *testing.T) {
 		[]string{"MSFT"},
 		10*time.Millisecond,
 		24*time.Hour,
+		false,
 	)
 
 	// Expectation: GetHistoricalData called
@@ -299,6 +305,7 @@ func TestTradingEngine_ConcurrentExecution(t *testing.T) {
 		symbols,
 		10*time.Millisecond,
 		24*time.Hour,
+		false,
 	)
 
 	// Expectation: GetHistoricalData called for ALL symbols
@@ -327,4 +334,235 @@ func TestTradingEngine_ConcurrentExecution(t *testing.T) {
 	// Verify
 	mockProvider.AssertExpectations(t)
 	// mockBroker not called because signal is Hold
+}
+
+// ShutdownMockBroker is a full-featured mock broker for shutdown tests.
+type ShutdownMockBroker struct {
+	mock.Mock
+}
+
+func (m *ShutdownMockBroker) Name() string      { return "ShutdownMockBroker" }
+func (m *ShutdownMockBroker) Connect() error    { return nil }
+func (m *ShutdownMockBroker) Disconnect() error { return nil }
+func (m *ShutdownMockBroker) IsConnected() bool { return true }
+
+func (m *ShutdownMockBroker) PlaceOrder(order models.Order) (*models.Order, error) {
+	args := m.Called(order)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Order), args.Error(1)
+}
+
+func (m *ShutdownMockBroker) CancelOrder(id string) error {
+	args := m.Called(id)
+	return args.Error(0)
+}
+
+func (m *ShutdownMockBroker) GetOrder(id string) (*models.Order, error) {
+	args := m.Called(id)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Order), args.Error(1)
+}
+
+func (m *ShutdownMockBroker) GetPositions() ([]models.Position, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Position), args.Error(1)
+}
+
+func (m *ShutdownMockBroker) GetPosition(symbol string) (*models.Position, error) {
+	args := m.Called(symbol)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Position), args.Error(1)
+}
+
+func (m *ShutdownMockBroker) GetBalance() (*models.Balance, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Balance), args.Error(1)
+}
+
+func (m *ShutdownMockBroker) GetTrades() ([]models.Trade, error) {
+	args := m.Called()
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).([]models.Trade), args.Error(1)
+}
+
+func (m *ShutdownMockBroker) ModifyOrder(id string, p, q float64) (*models.Order, error) {
+	args := m.Called(id, p, q)
+	if args.Get(0) == nil {
+		return nil, args.Error(1)
+	}
+	return args.Get(0).(*models.Order), args.Error(1)
+}
+
+// TestTradingEngine_ShutdownBasic tests that Shutdown stops the engine and checkpoints orders.
+func TestTradingEngine_ShutdownBasic(t *testing.T) {
+	mockProvider := new(MockProvider)
+	mockBroker := new(ShutdownMockBroker)
+	registry := strategies.NewRegistry()
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+
+	eng := NewTradingEngine(
+		mockProvider,
+		registry,
+		orderManager,
+		nil,
+		[]string{"AAPL"},
+		10*time.Millisecond,
+		24*time.Hour,
+		false, // closeOnShutdown = false
+	)
+
+	mockProvider.On("GetHistoricalData", mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return([]models.OHLCV{}, nil).Maybe()
+
+	// No positions since closeOnShutdown=false, but GetPositions won't be called
+	// No pending orders in a fresh OrderManager
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err := eng.Start(ctx)
+	require.NoError(t, err)
+
+	time.Sleep(30 * time.Millisecond)
+	cancel()
+
+	// Shutdown should complete without error
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	err = eng.Shutdown(shutdownCtx)
+	require.NoError(t, err)
+
+	// Engine should no longer be running
+	assert.False(t, eng.IsRunning())
+}
+
+// TestTradingEngine_ShutdownWithPositionClosure tests that Shutdown closes positions when configured.
+func TestTradingEngine_ShutdownWithPositionClosure(t *testing.T) {
+	mockProvider := new(MockProvider)
+	mockBroker := new(ShutdownMockBroker)
+	registry := strategies.NewRegistry()
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+
+	eng := NewTradingEngine(
+		mockProvider,
+		registry,
+		orderManager,
+		nil,
+		[]string{"AAPL", "MSFT"},
+		1*time.Hour, // Long interval so no tick fires during test
+		24*time.Hour,
+		true, // closeOnShutdown = true
+	)
+
+	// Setup: broker returns positions with positive quantity
+	mockBroker.On("GetPositions").Return([]models.Position{
+		{Symbol: "AAPL", Quantity: 10},
+		{Symbol: "MSFT", Quantity: 5},
+	}, nil)
+
+	// Expect market sell orders to close positions
+	mockBroker.On("PlaceOrder", mock.MatchedBy(func(o models.Order) bool {
+		return o.Symbol == "AAPL" && o.Side == models.OrderSideSell && o.Quantity == 10
+	})).Return(&models.Order{ID: "close-aapl", Status: models.OrderStatusFilled}, nil)
+
+	mockBroker.On("PlaceOrder", mock.MatchedBy(func(o models.Order) bool {
+		return o.Symbol == "MSFT" && o.Side == models.OrderSideSell && o.Quantity == 5
+	})).Return(&models.Order{ID: "close-msft", Status: models.OrderStatusFilled}, nil)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err := eng.Start(ctx)
+	require.NoError(t, err)
+
+	cancel()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	err = eng.Shutdown(shutdownCtx)
+	require.NoError(t, err)
+
+	// Verify position closure orders were placed
+	mockBroker.AssertExpectations(t)
+}
+
+// TestTradingEngine_ShutdownContextExpired tests shutdown with an already-expired context.
+func TestTradingEngine_ShutdownContextExpired(t *testing.T) {
+	mockProvider := new(MockProvider)
+	mockBroker := new(ShutdownMockBroker)
+	registry := strategies.NewRegistry()
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+
+	eng := NewTradingEngine(
+		mockProvider,
+		registry,
+		orderManager,
+		nil,
+		[]string{"AAPL"},
+		1*time.Hour,
+		24*time.Hour,
+		false,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err := eng.Start(ctx)
+	require.NoError(t, err)
+
+	cancel()
+	// Give Stop() time to complete
+	time.Sleep(10 * time.Millisecond)
+
+	// Use an already-expired context
+	expiredCtx, expiredCancel := context.WithDeadline(context.Background(), time.Now().Add(-1*time.Second))
+	defer expiredCancel()
+
+	err = eng.Shutdown(expiredCtx)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "shutdown deadline exceeded")
+}
+
+// TestTradingEngine_ShutdownIdempotent tests that calling Shutdown twice is safe.
+func TestTradingEngine_ShutdownIdempotent(t *testing.T) {
+	mockProvider := new(MockProvider)
+	mockBroker := new(ShutdownMockBroker)
+	registry := strategies.NewRegistry()
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+
+	eng := NewTradingEngine(
+		mockProvider,
+		registry,
+		orderManager,
+		nil,
+		[]string{"AAPL"},
+		1*time.Hour,
+		24*time.Hour,
+		false,
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	err := eng.Start(ctx)
+	require.NoError(t, err)
+
+	cancel()
+
+	shutdownCtx := context.Background()
+
+	err = eng.Shutdown(shutdownCtx)
+	require.NoError(t, err)
+
+	// Second shutdown should also succeed (Stop is idempotent)
+	err = eng.Shutdown(shutdownCtx)
+	require.NoError(t, err)
 }

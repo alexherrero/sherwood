@@ -9,6 +9,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/joho/godotenv"
 )
@@ -95,6 +96,10 @@ type Config struct {
 	DataProvider      string   // Selected data provider (yahoo, tiingo, binance)
 	EnabledStrategies []string // List of enabled strategy names
 
+	// Shutdown settings
+	CloseOnShutdown bool          // If true, close all positions on graceful shutdown
+	ShutdownTimeout time.Duration // Maximum time for graceful shutdown (default: 30s)
+
 	// Internal settings
 	EnvFile string // Path to .env file (default: .env)
 }
@@ -139,6 +144,10 @@ func Load() (*Config, error) {
 		EnabledStrategies: parseStrategies(getEnv("ENABLED_STRATEGIES", "ma_crossover")),
 
 		EnvFile: ".env",
+
+		// Shutdown settings
+		CloseOnShutdown: getEnv("CLOSE_ON_SHUTDOWN", "false") == "true",
+		ShutdownTimeout: getEnvDuration("SHUTDOWN_TIMEOUT", 30*time.Second),
 	}
 
 	if err := config.Validate(); err != nil {
@@ -311,6 +320,17 @@ func getEnvInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intVal, err := strconv.Atoi(value); err == nil {
 			return intVal
+		}
+	}
+	return defaultValue
+}
+
+// getEnvDuration retrieves an environment variable as a time.Duration or returns a default.
+// The value should be a Go duration string (e.g., "30s", "5m", "1h").
+func getEnvDuration(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if d, err := time.ParseDuration(value); err == nil {
+			return d
 		}
 	}
 	return defaultValue
