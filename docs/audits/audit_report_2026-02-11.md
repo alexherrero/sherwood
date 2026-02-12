@@ -18,14 +18,14 @@ The Sherwood backend is well-structured, adhering to Clean Architecture principl
 * **Impact**: The system is currently an API-only application.
 * **Recommendation**: Initialize the React application immediately.
 
-### 2. Serial Execution in Trading Loop
+### 2. Serial Execution in Trading Loop (RESOLVED)
 
 **Severity: High (Performance)**
 
 * **Location**: `backend/engine/trading_engine.go`, lines 118-132 (`loop` function).
 * **Observation**: The engine iterates through `e.symbols` and calls `processSymbol` sequentially. `processSymbol` performs a blocking network call (`GetHistoricalData`).
-* **Impact**: If tracking 50 symbols with 200ms latency each, one tick takes 10 seconds. This effectively breaks the strategy interval.
-* **Recommendation**: Refactor `processSymbol` to run in a Goroutine (`go e.processSymbol(symbol)`) with a `sync.WaitGroup` to handle concurrency within the tick.
+* **Status**: ✅ **RESOLVED**. The trading loop now uses `sync.WaitGroup` to execute `processSymbol` for all symbols concurrently.
+* **Verification**: `TestTradingEngine_RunLoop` passes with concurrent execution.
 
 ### 3. Incomplete Order Type Support in Engine (RESOLVED)
 
@@ -64,6 +64,6 @@ The Sherwood backend is well-structured, adhering to Clean Architecture principl
 
 ## Next Steps
 
-1. **Initialize Frontend**: Create the React/Vite project.
-2. **Optimize Engine**: Parallelize the trading loop.
+1. **Initialize Frontend**: Create the React/Vite project. (deferred to `wiki/Pending-Features.md` #1)
+2. **Optimize Engine**: Parallelize the trading loop. (✅ COMPLETED)
 3. **Enhance Engine**: Add Limit Order support to `executeSignal`. (✅ COMPLETED)
