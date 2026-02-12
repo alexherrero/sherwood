@@ -28,7 +28,7 @@ func TestRotateAPIKeyHandler(t *testing.T) {
 		EnvFile:           tmpEnv,
 	}
 
-	handler := NewHandler(nil, nil, cfg, nil, nil, nil)
+	handler := NewHandler(nil, nil, cfg, nil, nil, nil, nil)
 
 	// Create Request
 	req := httptest.NewRequest("POST", "/api/v1/config/rotate-key", nil)
@@ -130,7 +130,7 @@ func TestGetConfigHandler(t *testing.T) {
 		LogLevel:    "info",
 		APIKey:      "secret-key",
 	}
-	handler := NewHandler(nil, nil, cfg, nil, nil, nil)
+	handler := NewHandler(nil, nil, cfg, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/config", nil)
 	rec := httptest.NewRecorder()

@@ -313,26 +313,7 @@ func TestBacktest_BalanceNeverNegative(t *testing.T) {
 
 ---
 
-## 12. Notification System (Remaining Advanced Endpoint)
-
-**Complexity:** Low
-
-**Description:**
-Implement the final missing API endpoint identified during the backend review. Other advanced endpoints (Trades, Order modification, Performance, Backtest results) are completed.
-
-**Missing Endpoint:**
-
-1. `GET /api/v1/notifications` - System alerts and notifications
-
-**Implementation Requirements:**
-
-- Create `NotificationManager` or similar service
-- Store notifications in database/memory
-- Implement handler in `backend/api/handlers_notifications.go`
-
----
-
-## 13. Configuration Hot-Reload
+## 12. Configuration Hot-Reload
 
 **Complexity:** Medium
 

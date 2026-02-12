@@ -17,6 +17,7 @@ import (
 	"github.com/alexherrero/sherwood/backend/data/providers"
 	"github.com/alexherrero/sherwood/backend/engine"
 	"github.com/alexherrero/sherwood/backend/execution"
+	"github.com/alexherrero/sherwood/backend/notifications"
 	"github.com/alexherrero/sherwood/backend/realtime"
 	"github.com/alexherrero/sherwood/backend/strategies"
 	"github.com/rs/zerolog"
@@ -103,8 +104,13 @@ func main() {
 
 	// Restore orders from database
 	if err := orderManager.LoadOrders(); err != nil {
+
 		log.Warn().Err(err).Msg("Failed to load orders from database")
 	}
+
+	// Initialize Notification System
+	notifStore := data.NewNotificationStore(db)
+	notifManager := notifications.NewManager(notifStore, wsManager)
 
 	// Initialize Trading Engine
 	// Hardcoded symbols for now
@@ -126,7 +132,8 @@ func main() {
 	}
 
 	// Create API router with WebSocket Manager
-	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine, wsManager)
+	// Create API router with WebSocket Manager
+	router := api.NewRouter(cfg, registry, provider, orderManager, tradingEngine, wsManager, notifManager)
 
 	// Create HTTP server
 	server := &http.Server{

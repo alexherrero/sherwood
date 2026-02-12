@@ -16,7 +16,7 @@ import (
 func TestGetOrderHistoryHandler(t *testing.T) {
 	mockBroker := new(MockBroker)
 	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
-	handler := NewHandler(nil, nil, &config.Config{}, orderManager, nil, nil)
+	handler := NewHandler(nil, nil, &config.Config{}, orderManager, nil, nil, nil)
 
 	t.Run("Success", func(t *testing.T) {
 		// Mock GetOrders call (via OrderManager loop/pass-through)
@@ -47,7 +47,7 @@ func TestGetOrderHistoryHandler(t *testing.T) {
 	})
 
 	t.Run("ServiceUnavailable", func(t *testing.T) {
-		nilHandler := NewHandler(nil, nil, nil, nil, nil, nil)
+		nilHandler := NewHandler(nil, nil, nil, nil, nil, nil, nil)
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/orders/history", nil)
 		rec := httptest.NewRecorder()
 
@@ -60,7 +60,7 @@ func TestGetOrderHistoryHandler(t *testing.T) {
 func TestPlaceOrder_Errors(t *testing.T) {
 	mockBroker := new(MockBroker)
 	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
-	handler := NewHandler(nil, nil, &config.Config{}, orderManager, nil, nil)
+	handler := NewHandler(nil, nil, &config.Config{}, orderManager, nil, nil, nil)
 
 	t.Run("InvalidJSON", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/v1/orders", nil) // Empty body
@@ -105,7 +105,7 @@ func TestPlaceOrder_Errors(t *testing.T) {
 func TestModifyOrder_Errors(t *testing.T) {
 	mockBroker := new(MockBroker)
 	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
-	handler := NewHandler(nil, nil, &config.Config{}, orderManager, nil, nil)
+	handler := NewHandler(nil, nil, &config.Config{}, orderManager, nil, nil, nil)
 
 	t.Run("InvalidJSON", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPatch, "/api/v1/orders/1", nil)

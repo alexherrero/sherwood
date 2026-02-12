@@ -333,3 +333,28 @@ Implemented 4 out of 5 planned advanced API endpoints to support frontend data r
 - `backend/api/handlers_orders.go`
 - `backend/api/handlers_portfolio.go`
 - `backend/api/handlers_backtest.go`
+
+---
+
+## Notification System
+
+**Complexity:** Low
+**Completed:** 2026-02-11
+**Source:** Pending Features #12
+
+**Description:**
+Implemented a comprehensive system for generating, storing, and retrieving user notifications and alerts. Includes persistent storage and WebSocket broadcasting.
+
+**What Was Implemented:**
+
+- `Notification` model and `NotificationStore` (SQLite)
+- `NotificationManager` service for managing lifecycle and broadcasts
+- APIs: `GET /notifications`, `PUT /notifications/{id}/read`, `PUT /notifications/read-all`
+- Integration with `TradingEngine` and `OrderManager` (via `main.go` wiring, ready for use)
+
+**Key Files:**
+
+- `backend/models/notification.go`
+- `backend/data/notification_store.go`
+- `backend/notifications/manager.go`
+- `backend/api/handlers_notifications.go`

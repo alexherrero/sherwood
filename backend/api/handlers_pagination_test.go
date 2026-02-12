@@ -55,7 +55,7 @@ func TestGetOrdersPaginationAndFiltering(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil, nil)
+	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil, nil, nil)
 
 	t.Run("Pagination_Page1", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/execution/orders?limit=3&page=1", nil)
@@ -123,7 +123,7 @@ func TestGetOrderHandler(t *testing.T) {
 
 	// Since NewRouter creates its own handler, we test Handler method directly or use Router
 	// Let's use Router to test URL param parsing
-	router := NewRouter(cfg, registry, mockProvider, orderManager, nil, nil)
+	router := NewRouter(cfg, registry, mockProvider, orderManager, nil, nil, nil)
 
 	t.Run("Approves_Valid_ID", func(t *testing.T) {
 		req := httptest.NewRequest(http.MethodGet, "/api/v1/execution/orders/test-id-1", nil)
@@ -149,7 +149,7 @@ func TestPerformanceSummary(t *testing.T) {
 	mockProvider := new(MockDataProvider)
 	mockBroker := new(MockBroker)
 	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
-	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil, nil)
+	handler := NewHandler(registry, mockProvider, cfg, orderManager, nil, nil, nil)
 
 	mockBroker.On("GetBalance").Return(&models.Balance{Cash: 50000, Equity: 60000}, nil)
 	mockBroker.On("GetPositions").Return([]models.Position{
