@@ -62,29 +62,6 @@ Add correlation/trace IDs to all critical log paths (order execution, strategy s
 
 ---
 
-## 2. Database Persistence for Orders
-
-**Complexity:** Low-Medium
-
-**Description:**
-Verify and ensure that `OrderManager` persists orders and positions to SQLite so state survives application restarts.
-
-**Implementation Requirements:**
-
-1. Review `execution/order_manager.go` to check if orders are persisted or in-memory only
-2. If missing, implement `SaveOrder(order *Order) error` in order store
-3. Load pending orders on startup
-4. Persist position updates with transaction support
-5. Handle database write failures gracefully
-
-**Schema Needed:**
-
-- Orders table (id, symbol, side, type, quantity, price, status, timestamps)
-- Positions table (symbol, quantity, avg_price, unrealized_pnl)
-- Trade history table
-
----
-
 ## 3. Enhanced Configuration Validation
 
 **Complexity:** Medium
@@ -336,26 +313,22 @@ func TestBacktest_BalanceNeverNegative(t *testing.T) {
 
 ---
 
-## 12. Advanced Backend Endpoints (Phase 2 Completion)
+## 12. Notification System (Remaining Advanced Endpoint)
 
-**Complexity:** Medium
+**Complexity:** Low
 
 **Description:**
-Implement the remaining API endpoints identified during the backend review to support full frontend functionality.
+Implement the final missing API endpoint identified during the backend review. Other advanced endpoints (Trades, Order modification, Performance, Backtest results) are completed.
 
-**Missing Endpoints:**
+**Missing Endpoint:**
 
-1. `GET /api/v1/execution/trades` - List individual trade executions
-2. `PATCH /api/v1/execution/orders/{id}` - Modify open orders (price/quantity)
-3. `GET /api/v1/portfolio/performance` - Portfolio performance metrics (P&L, Sharpe, etc.)
-4. `GET /api/v1/notifications` - System alerts and notifications
-5. `GET /api/v1/strategies/{name}/backtest` - Retrieve pre-calculated backtest results
+1. `GET /api/v1/notifications` - System alerts and notifications
 
 **Implementation Requirements:**
 
-- Create new handlers in `backend/api/handlers.go`
-- Update `backend/execution/order_manager.go` to support order modification
-- Implement performance calculation logic in `backend/models` or `backend/analysis` package
+- Create `NotificationManager` or similar service
+- Store notifications in database/memory
+- Implement handler in `backend/api/handlers_notifications.go`
 
 ---
 
