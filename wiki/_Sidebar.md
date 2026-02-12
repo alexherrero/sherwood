@@ -8,3 +8,7 @@
 
 - [Completed Features](Completed-Features)
 - [Pending Features](Pending-Features)
+
+### Ideas & Planning
+
+- [Ideas](Ideas)
