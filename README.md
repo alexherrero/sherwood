@@ -1,33 +1,50 @@
 # Sherwood 📈
 
-A modular, proof-of-concept automated trading engine and management dashboard. This project provides a foundation for executing algorithmic trades, performing regression testing against historical data, and managing bot configurations via a React-based web interface.
+A simple, self-hosted trading platform that's easy to use and doesn't require coding experience. Sherwood covers everything from historical data analysis and strategy backtesting to paper trading and live execution — all managed through a clean API with a web dashboard on the way.
 
 ## Build and Test Status
 
 [![Backend](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml/badge.svg)](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml) [![Backend Integration](https://github.com/alexherrero/sherwood/actions/workflows/backend_integration.yaml/badge.svg)](https://github.com/alexherrero/sherwood/actions/workflows/backend_integration.yaml)
 
-## 🚀 Overview
-
-`Sherwood` is designed for those who want a simple, basic trading bot without the complexities of scripts or code. It covers all the basics, historical data and modeling for stocks and crypto, basic trading plans / rules, backtesting and **paper trading (dry run)** or **Live** functionality.
-
 ## ⚠️ In Development
 
-Sherwood is experimental. It is not expected to work nor should you consider it reliable for any purpose. Code here is intended to demonstrate the potential of AI-assisted software development and should not be used for any real-world trading. Use at your own risk.
+Sherwood is a proof of concept under active development. Features may be incomplete, unstable, or change without notice. It is currently intended for paper trading and simulations only — not for production use with real funds. See the [Disclaimer](#%EF%B8%8F-disclaimer) for more details.
+
+---
+
+## ✨ Notable Features
+
+- **Multiple Trading Strategies** — 5 built-in strategies (MA Crossover, RSI Momentum, Bollinger Band Mean Reversion, MACD Trend Follower, NYC Close-Open) with runtime configuration
+- **Backtesting Engine** — Test strategies against historical data before risking capital
+- **Multiple Data Providers** — Yahoo Finance, Tiingo, Binance, and Binance.US with automatic fallback
+- **Paper & Live Trading** — Dry-run, paper, or live modes with a single config change
+- **Full REST API** — Manage strategies, orders, backtests, portfolio performance, and notifications via API
+- **Persistent Order Storage** — SQLite-backed order state that survives restarts
+- **Notification System** — In-app alerts with WebSocket broadcasting for real-time updates
+- **Configuration Hot-Reload** — Update log levels, credentials, and settings without downtime
+- **Graceful Shutdown** — Safe engine shutdown with order cancellation, position closure, and state checkpointing
+- **Structured Logging & Tracing** — Correlation trace IDs across every request, engine tick, and trade execution
+- **Input Validation & Security** — Request body limits, API key authentication, and audit logging
+- **Automated Releases** — Weekly cross-platform builds via GitHub Actions
+
+### 🗺️ What's Next
+
+See the **[Roadmap](https://github.com/alexherrero/sherwood/wiki/Roadmap)** for what's planned — including concurrent testing, strategy hot-swapping, Docker deployment, a React dashboard, and AI-powered strategy creation.
 
 ---
 
 ## 🛠 Tech Stack
 
-* **Core Engine:** Go (Golang)
-* **API Framework:** go-chi
-* **Database:** SQLite (sqlx)
-* **Dashboard:** React & TypeScript (planned)
-* **Deployment:** Docker & Docker Compose
+- **Core Engine:** Go (Golang)
+- **API Framework:** go-chi
+- **Database:** SQLite (sqlx)
+- **Dashboard:** React & TypeScript (planned)
+- **Deployment:** Docker & Docker Compose (planned)
 
 ### Data Providers
 
 | Provider | Asset Type | API Key Required |
-|----------|------------|------------------|
+| -------- | ---------- | ---------------- |
 | Yahoo Finance | Stocks, ETFs, Crypto | No |
 | Tiingo | Stocks, ETFs | Yes (free at tiingo.com) |
 | Binance | Crypto | Optional |
@@ -39,9 +56,9 @@ Sherwood is experimental. It is not expected to work nor should you consider it 
 
 ### 1. Prerequisites
 
-* [Go 1.21+](https://go.dev/dl/) installed
-* [Docker](https://www.docker.com/get-started) (optional, for containerized deployment)
-* API credentials for your exchange provider
+- [Go 1.21+](https://go.dev/dl/) installed
+- [Docker](https://www.docker.com/get-started) (optional, for containerized deployment)
+- API credentials for your exchange provider
 
 ### 2. Configuration
 
@@ -93,7 +110,7 @@ go test ./... -v
 
 ## 📁 Project Structure
 
-```
+```plaintext
 sherwood/
 ├── backend/
 │   ├── main.go              # Application entry point
@@ -103,8 +120,11 @@ sherwood/
 │   ├── models/              # Shared domain models
 │   ├── strategies/          # Trading strategies
 │   ├── execution/           # Trade execution and order management
+│   ├── engine/              # Core trading engine
+│   ├── notifications/       # Notification system
+│   ├── tracing/             # Request tracing and correlation
 │   └── backtesting/         # Backtesting framework
-├── frontend/                # React dashboard (planned)
+├── wiki/                    # Project wiki (auto-published)
 ├── docs/                    # Documentation
 ├── .env.example             # Environment template
 └── go.mod                   # Go module definition
@@ -118,9 +138,10 @@ GNU General Public License v3.0 - see LICENSE file for details.
 
 ## ⚠️ Disclaimer
 
-This is experimental software for educational purposes only.
+Sherwood is provided **as-is** for educational and simulation purposes only.
 
-* Not financial advice
-* Not guaranteed to work or be profitable
-* Trading involves substantial risk of loss
-* Paper trade extensively before considering live trading
+- **Not a financial company.** Sherwood is an open-source project. We do not provide financial advice, financial services, or investment recommendations of any kind.
+- **Paper trading and simulations only.** This platform is not intended for use beyond paper trading and backtesting simulations. Any use in live trading environments is entirely at the user's own discretion and risk.
+- **No guarantees.** We make no guarantees regarding the functionality, reliability, accuracy, or performance of this software. It may contain bugs, produce incorrect results, or fail without warning.
+- **Use at your own risk.** By using Sherwood, you accept full responsibility for any outcomes. The authors and contributors are not liable for any losses, damages, or consequences arising from the use of this software.
+- **Trading involves risk.** Trading financial instruments carries substantial risk of loss. Past performance — real or simulated — is not indicative of future results.
