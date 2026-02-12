@@ -6,7 +6,37 @@ Features are ordered by complexity from least to most complex.
 
 ---
 
-## 1. Structured Logging with Trace IDs
+## 1. Frontend Implementation
+
+**Complexity:** High
+
+**Description:**
+Build the React-based web dashboard for Sherwood as specified in DESIGN.md.
+
+**Implementation Requirements:**
+
+1. **Scaffolding:** Initialize Vite + React + TypeScript project
+2. **Core Pages:** Dashboard, Strategies, Backtesting, Orders, Settings
+3. **API Integration:** axios client with react-query for data fetching
+4. **State Management:** Redux for global state, React Query for server state
+5. **Visualization:** Recharts for equity curves and performance metrics
+6. **Responsive Design:** Material-UI components, mobile-friendly, dark mode
+
+**Directory Structure:**
+
+```plaintext
+frontend/
+├── src/
+│   ├── components/
+│   ├── pages/
+│   ├── services/    # API client
+│   ├── hooks/
+│   └── store/       # Redux
+```
+
+---
+
+## 2. Structured Logging with Trace IDs
 
 **Complexity:** Low
 
@@ -302,36 +332,6 @@ func TestBacktest_BalanceNeverNegative(t *testing.T) {
     
     properties.TestingRun(t)
 }
-```
-
----
-
-## 11. Frontend Implementation
-
-**Complexity:** High
-
-**Description:**
-Build the React-based web dashboard for Sherwood as specified in DESIGN.md.
-
-**Implementation Requirements:**
-
-1. **Scaffolding:** Initialize Vite + React + TypeScript project
-2. **Core Pages:** Dashboard, Strategies, Backtesting, Orders, Settings
-3. **API Integration:** axios client with react-query for data fetching
-4. **State Management:** Redux for global state, React Query for server state
-5. **Visualization:** Recharts for equity curves and performance metrics
-6. **Responsive Design:** Material-UI components, mobile-friendly, dark mode
-
-**Directory Structure:**
-
-```plaintext
-frontend/
-├── src/
-│   ├── components/
-│   ├── pages/
-│   ├── services/    # API client
-│   ├── hooks/
-│   └── store/       # Redux
 ```
 
 ---

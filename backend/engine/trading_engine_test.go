@@ -274,3 +274,56 @@ func TestTradingEngine_LimitOrder(t *testing.T) {
 	mockProvider.AssertExpectations(t)
 	mockBroker.AssertExpectations(t)
 }
+
+func TestTradingEngine_ConcurrentExecution(t *testing.T) {
+	// Setup Mocks
+	mockProvider := new(MockProvider)
+	mockStrategy := new(MockStrategy)
+	mockBroker := new(MockBroker)
+
+	// Setup Strategy Registry
+	registry := strategies.NewRegistry()
+	registry.Register(mockStrategy)
+
+	// Setup Order Manager
+	orderManager := execution.NewOrderManager(mockBroker, nil, nil, nil)
+
+	// Setup Engine with MULTIPLE symbols
+	symbols := []string{"AAPL", "GOOG", "TSLA"}
+	engine := NewTradingEngine(
+		mockProvider,
+		registry,
+		orderManager,
+		nil,
+		symbols,
+		10*time.Millisecond,
+		24*time.Hour,
+	)
+
+	// Expectation: GetHistoricalData called for ALL symbols
+	// We can't guarantee order, so we setup expectations for each.
+	for _, sym := range symbols {
+		mockProvider.On("GetHistoricalData", sym, mock.Anything, mock.Anything, "1d").
+			Return([]models.OHLCV{{Close: 100.0}}, nil)
+	}
+
+	// Expectation: Strategy OnData called for ALL symbols -> Returns Hold (simplify)
+	mockStrategy.On("OnData", mock.Anything).Return(models.Signal{
+		Type: models.SignalHold,
+	})
+
+	// Run Engine
+	ctx, cancel := context.WithCancel(context.Background())
+	engine.Start(ctx)
+
+	// Let it tick at least once
+	time.Sleep(50 * time.Millisecond)
+
+	// Stop
+	cancel()
+	engine.Stop()
+
+	// Verify
+	mockProvider.AssertExpectations(t)
+	// mockBroker not called because signal is Hold
+}

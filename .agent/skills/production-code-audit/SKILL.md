@@ -76,7 +76,7 @@ This skill enables the agent to autonomously analyze the Sherwood codebase (Gola
 ### Phase 3: Reporting
 
 1. **Generate Report**:
-    - Create a new file in `docs/reviews/audit_report_YYYY-MM-DD.md`.
+    - Create a new file in `docs/audits/audit_report_YYYY-MM-DD.md`.
     - Summarize findings by category (Critical, High, Medium, Low).
     - Provide specific file paths and line numbers for issues.
 2. **Action Plan**:
@@ -131,5 +131,5 @@ This skill enables the agent to autonomously analyze the Sherwood codebase (Gola
 2. Checks `go.mod` and validation logic.
 3. Identifies missing error checks in `backend/api/handlers.go`.
 4. Flags a potential N+1 query in `backend/services/order_service.go`.
-5. Creates `docs/reviews/audit_report_2023-10-27.md` with findings.
+5. Creates `docs/audits/audit_report_2023-10-27.md` with findings.
 6. Asks user: "I found 3 critical issues. Should I fix the missing error checks first?"
