@@ -72,6 +72,7 @@ This skill enables the agent to autonomously analyze the Sherwood codebase (Gola
 - **Documentation**: Ensure `README.md`, `DESIGN.md`, and API docs are up-to-date.
 - **Health Checks**: Check for the existence of `/health` or `/status` endpoints.
 - **Graceful Shutdown**: Ensure the application handles termination signals (SIGINT, SIGTERM) gracefully.
+- **Dependabot**: Verify `.github/dependabot.yml` exists and only includes packages relevant to the repo (e.g., `gomod`, `github-actions`).
 
 ### Phase 3: Reporting
 
@@ -120,6 +121,7 @@ This skill enables the agent to autonomously analyze the Sherwood codebase (Gola
 - [ ] Graceful shutdown logic in place.
 - [ ] Health check endpoint exists.
 - [ ] CI/CD pipeline runs tests on every push.
+- [ ] Dependabot configured accurately for active ecosystems (no unused checks).
 
 ## Example Usage
 
