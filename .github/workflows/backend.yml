@@ -255,11 +255,11 @@ jobs:
           local name=$2
           
           if [ -f "$file" ]; then
-            PASS_COUNT=$(grep -E -i "✓|✅|passed|functional" "$file" | wc -l)
+            PASS_COUNT=$(grep -E -i "✓|✅|passed|functional" "$file" | wc -l || true)
             
             # Failures that match 'ignoring' are counted as Ignored, not Failed
-            FAIL_COUNT=$(grep -E -i "✗|failed" "$file" | grep -v -i "ignoring" | wc -l)
-            IGNORED_COUNT=$(grep -E -i "failed" "$file" | grep -i "ignoring" | wc -l)
+            FAIL_COUNT=$(grep -E -i "✗|failed" "$file" | grep -v -i "ignoring" | wc -l || true)
+            IGNORED_COUNT=$(grep -E -i "failed" "$file" | grep -i "ignoring" | wc -l || true)
             
             TOTAL=$((PASS_COUNT + FAIL_COUNT + IGNORED_COUNT))
             
