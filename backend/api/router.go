@@ -162,6 +162,7 @@ func NewRouter(
 			r.Get("/validation", h.GetConfigValidationHandler)
 			r.Patch("/system", h.UpdateSystemConfigHandler)
 			r.Post("/rotate-key", h.RotateAPIKeyHandler)
+			r.Post("/reload", h.ReloadConfigHandler)
 		})
 
 		// Status endpoint

@@ -523,3 +523,218 @@ func TestValidate_EmptyStrategiesOK(t *testing.T) {
 	}
 	require.NoError(t, cfg.Validate())
 }
+
+// --- Hot-Reload Tests ---
+
+// newTestConfig returns a valid Config struct suitable for reload tests.
+func newTestConfig() *Config {
+	return &Config{
+		ServerPort:        8099,
+		ServerHost:        "0.0.0.0",
+		TradingMode:       ModeDryRun,
+		DatabasePath:      "./data/sherwood.db",
+		LogLevel:          "info",
+		DataProvider:      "yahoo",
+		EnabledStrategies: []string{"ma_crossover"},
+		CloseOnShutdown:   false,
+		ShutdownTimeout:   30 * 1000000000, // 30s in nanoseconds
+		AllowedOrigins:    []string{"http://localhost:3000", "http://localhost:8080"},
+		EnvFile:           ".env.nonexistent_for_test", // prevent reading real .env
+	}
+}
+
+// TestReload_NoChanges tests that reload with unchanged env vars returns no changes.
+func TestReload_NoChanges(t *testing.T) {
+	cfg := newTestConfig()
+
+	// Set env vars matching the config defaults
+	t.Setenv("TRADING_MODE", "dry_run")
+	t.Setenv("DATABASE_PATH", "./data/sherwood.db")
+	t.Setenv("LOG_LEVEL", "info")
+	t.Setenv("DATA_PROVIDER", "yahoo")
+	t.Setenv("ENABLED_STRATEGIES", "ma_crossover")
+	t.Setenv("CLOSE_ON_SHUTDOWN", "false")
+	t.Setenv("SHUTDOWN_TIMEOUT", "30s")
+	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("PORT", "8099")
+
+	result, err := cfg.Reload()
+	require.NoError(t, err)
+	assert.Empty(t, result.Changes, "Expected no changes when env matches config")
+	assert.False(t, result.RequiresRestart)
+}
+
+// TestReload_HotReloadableChanges tests that hot-reloadable fields are applied.
+func TestReload_HotReloadableChanges(t *testing.T) {
+	cfg := newTestConfig()
+
+	// Set env vars with changed hot-reloadable values
+	t.Setenv("TRADING_MODE", "dry_run")
+	t.Setenv("DATABASE_PATH", "./data/sherwood.db")
+	t.Setenv("DATA_PROVIDER", "yahoo")
+	t.Setenv("ENABLED_STRATEGIES", "ma_crossover")
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("PORT", "8099")
+
+	// Hot-reloadable changes
+	t.Setenv("LOG_LEVEL", "debug")
+	t.Setenv("CLOSE_ON_SHUTDOWN", "true")
+	t.Setenv("SHUTDOWN_TIMEOUT", "60s")
+	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:5173")
+
+	result, err := cfg.Reload()
+	require.NoError(t, err)
+	assert.False(t, result.RequiresRestart, "Hot-reload-only changes should not require restart")
+
+	// Verify changes were applied
+	assert.Equal(t, "debug", cfg.LogLevel)
+	assert.True(t, cfg.CloseOnShutdown)
+	assert.Equal(t, 60*1000000000, int(cfg.ShutdownTimeout))
+	assert.Equal(t, []string{"http://localhost:3000", "http://localhost:5173"}, cfg.AllowedOrigins)
+
+	// Verify changes are reported
+	assert.Greater(t, len(result.Changes), 0)
+	for _, change := range result.Changes {
+		assert.True(t, change.Applied, "Hot-reloadable change %s should be Applied=true", change.Field)
+	}
+}
+
+// TestReload_RestartRequired tests that structural changes are detected but not applied.
+func TestReload_RestartRequired(t *testing.T) {
+	cfg := newTestConfig()
+
+	// Set env vars with structural changes that require restart
+	t.Setenv("LOG_LEVEL", "info")
+	t.Setenv("CLOSE_ON_SHUTDOWN", "false")
+	t.Setenv("SHUTDOWN_TIMEOUT", "30s")
+	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("DATABASE_PATH", "./data/sherwood.db")
+	t.Setenv("DATA_PROVIDER", "yahoo")
+	t.Setenv("ENABLED_STRATEGIES", "ma_crossover")
+
+	// Structural changes
+	t.Setenv("PORT", "9090")
+	t.Setenv("TRADING_MODE", "dry_run") // same to avoid validation issue
+
+	result, err := cfg.Reload()
+	require.NoError(t, err)
+	assert.True(t, result.RequiresRestart)
+	assert.NotEmpty(t, result.RestartReasons)
+
+	// Verify the structural field was NOT applied
+	assert.Equal(t, 8099, cfg.ServerPort, "ServerPort should NOT be updated by hot-reload")
+}
+
+// TestReload_StrategyChangeDetected tests that changing enabled strategies is detected.
+func TestReload_StrategyChangeDetected(t *testing.T) {
+	cfg := newTestConfig()
+
+	t.Setenv("LOG_LEVEL", "info")
+	t.Setenv("CLOSE_ON_SHUTDOWN", "false")
+	t.Setenv("SHUTDOWN_TIMEOUT", "30s")
+	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("PORT", "8099")
+	t.Setenv("DATABASE_PATH", "./data/sherwood.db")
+	t.Setenv("DATA_PROVIDER", "yahoo")
+	t.Setenv("TRADING_MODE", "dry_run")
+
+	// Change strategies
+	t.Setenv("ENABLED_STRATEGIES", "ma_crossover,rsi_momentum")
+
+	result, err := cfg.Reload()
+	require.NoError(t, err)
+	assert.True(t, result.RequiresRestart)
+
+	// Find the strategy change
+	found := false
+	for _, ch := range result.Changes {
+		if ch.Field == "EnabledStrategies" {
+			found = true
+			assert.False(t, ch.Applied, "Strategy changes should not be applied")
+		}
+	}
+	assert.True(t, found, "Expected EnabledStrategies change to be detected")
+
+	// Original strategies should be unchanged
+	assert.Equal(t, []string{"ma_crossover"}, cfg.EnabledStrategies)
+}
+
+// TestReload_InvalidConfigRejected tests that invalid config after reload is rejected.
+func TestReload_InvalidConfigRejected(t *testing.T) {
+	cfg := newTestConfig()
+
+	// Set an invalid log level to trigger validation failure
+	t.Setenv("LOG_LEVEL", "ultra_verbose")
+	t.Setenv("TRADING_MODE", "dry_run")
+	t.Setenv("DATABASE_PATH", "./data/sherwood.db")
+	t.Setenv("DATA_PROVIDER", "yahoo")
+	t.Setenv("ENABLED_STRATEGIES", "ma_crossover")
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("PORT", "8099")
+
+	result, err := cfg.Reload()
+	require.Error(t, err, "Invalid config should fail reload")
+	assert.Nil(t, result)
+	assert.Contains(t, err.Error(), "validation failed")
+
+	// Config should remain unchanged
+	assert.Equal(t, "info", cfg.LogLevel)
+}
+
+// TestReload_CredentialChangesRedacted tests that credential changes are redacted in output.
+func TestReload_CredentialChangesRedacted(t *testing.T) {
+	cfg := newTestConfig()
+	cfg.TiingoAPIKey = "old-key"
+
+	t.Setenv("LOG_LEVEL", "info")
+	t.Setenv("CLOSE_ON_SHUTDOWN", "false")
+	t.Setenv("SHUTDOWN_TIMEOUT", "30s")
+	t.Setenv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")
+	t.Setenv("HOST", "0.0.0.0")
+	t.Setenv("PORT", "8099")
+	t.Setenv("DATABASE_PATH", "./data/sherwood.db")
+	t.Setenv("DATA_PROVIDER", "yahoo")
+	t.Setenv("TRADING_MODE", "dry_run")
+	t.Setenv("ENABLED_STRATEGIES", "ma_crossover")
+	t.Setenv("TIINGO_API_KEY", "new-key")
+
+	result, err := cfg.Reload()
+	require.NoError(t, err)
+
+	// Find the credential change
+	for _, ch := range result.Changes {
+		if ch.Field == "TiingoAPIKey" {
+			assert.Equal(t, "[redacted]", ch.OldValue)
+			assert.Equal(t, "[redacted]", ch.NewValue)
+			assert.True(t, ch.Applied)
+		}
+	}
+
+	// New key should be applied
+	assert.Equal(t, "new-key", cfg.TiingoAPIKey)
+}
+
+// TestStringSlicesEqual tests the stringSlicesEqual helper function.
+func TestStringSlicesEqual(t *testing.T) {
+	tests := []struct {
+		name     string
+		a, b     []string
+		expected bool
+	}{
+		{"both nil", nil, nil, true},
+		{"both empty", []string{}, []string{}, true},
+		{"equal", []string{"a", "b"}, []string{"a", "b"}, true},
+		{"different length", []string{"a"}, []string{"a", "b"}, false},
+		{"different content", []string{"a", "b"}, []string{"a", "c"}, false},
+		{"different order", []string{"a", "b"}, []string{"b", "a"}, false},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, stringSlicesEqual(tt.a, tt.b))
+		})
+	}
+}

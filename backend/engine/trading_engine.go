@@ -108,6 +108,18 @@ func (e *TradingEngine) IsRunning() bool {
 	return e.running
 }
 
+// UpdateConfig applies hot-reloaded configuration changes to the engine.
+// Currently supports updating the closeOnShutdown flag.
+//
+// Args:
+//   - closeOnShutdown: whether to close all positions on graceful shutdown
+func (e *TradingEngine) UpdateConfig(closeOnShutdown bool) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.closeOnShutdown = closeOnShutdown
+	log.Info().Bool("close_on_shutdown", closeOnShutdown).Msg("Engine config updated via hot-reload")
+}
+
 // Stop gracefully stops the trading engine loop.
 // It signals the loop to exit and waits for the current tick to complete.
 func (e *TradingEngine) Stop() {

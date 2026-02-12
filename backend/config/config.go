@@ -9,9 +9,12 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/joho/godotenv"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 )
 
 // TradingMode represents the operating mode of the trading engine.
@@ -58,8 +61,32 @@ func (ve *ValidationError) Error() string {
 		len(ve.Errors), strings.Join(ve.Errors, "\n  - "))
 }
 
+// ReloadChange describes a single configuration change detected during hot-reload.
+type ReloadChange struct {
+	// Field is the name of the configuration field that changed.
+	Field string `json:"field"`
+	// OldValue is the previous value (may be redacted for secrets).
+	OldValue interface{} `json:"old_value"`
+	// NewValue is the updated value (may be redacted for secrets).
+	NewValue interface{} `json:"new_value"`
+	// Applied indicates whether the change was applied (false if restart required).
+	Applied bool `json:"applied"`
+}
+
+// ReloadResult summarizes what happened during a configuration hot-reload.
+type ReloadResult struct {
+	// Changes is the list of detected field changes.
+	Changes []ReloadChange `json:"changes"`
+	// RequiresRestart is true if any non-hot-reloadable field changed.
+	RequiresRestart bool `json:"requires_restart"`
+	// RestartReasons lists the fields that require a restart to take effect.
+	RestartReasons []string `json:"restart_reasons,omitempty"`
+}
+
 // Config holds all configuration for the Sherwood application.
 type Config struct {
+	mu sync.RWMutex // protects hot-reloadable fields during concurrent access
+
 	// Server settings
 	ServerPort int
 	ServerHost string
@@ -305,6 +332,176 @@ func (c *Config) IsDryRun() bool {
 // IsLive returns true if the engine is in live trading mode.
 func (c *Config) IsLive() bool {
 	return c.TradingMode == ModeLive
+}
+
+// Reload re-reads configuration from environment variables and .env files,
+// applying only hot-reloadable fields to the live config. Structural fields
+// (server port, trading mode, data provider, enabled strategies, database path)
+// are detected but NOT applied — the caller receives a RestartRequired advisory.
+//
+// Hot-reloadable fields:
+//   - LogLevel (also sets zerolog global level)
+//   - CloseOnShutdown
+//   - ShutdownTimeout
+//   - AllowedOrigins
+//   - TiingoAPIKey, BinanceAPIKey, BinanceAPISecret
+//
+// Returns:
+//   - *ReloadResult: Summary of changes and whether a restart is needed
+//   - error: Validation error if the new config is invalid
+func (c *Config) Reload() (*ReloadResult, error) {
+	// Re-read .env file
+	envFile := c.EnvFile
+	if envFile == "" {
+		envFile = ".env"
+	}
+	_ = godotenv.Overload(envFile)
+
+	// Build a fresh config from current environment
+	newCfg := &Config{
+		ServerPort:        getEnvInt("PORT", 8099),
+		ServerHost:        getEnv("HOST", "0.0.0.0"),
+		APIKey:            os.Getenv("API_KEY"),
+		TradingMode:       TradingMode(getEnv("TRADING_MODE", "dry_run")),
+		DatabasePath:      getEnv("DATABASE_PATH", "./data/sherwood.db"),
+		RedisURL:          getEnv("REDIS_URL", ""),
+		LogLevel:          getEnv("LOG_LEVEL", "info"),
+		AllowedOrigins:    parseStrategies(getEnv("ALLOWED_ORIGINS", "http://localhost:3000,http://localhost:8080")),
+		RobinhoodUsername: os.Getenv("RH_USERNAME"),
+		RobinhoodPassword: os.Getenv("RH_PASSWORD"),
+		RobinhoodMFACode:  os.Getenv("RH_MFA_CODE"),
+		BinanceAPIKey:     os.Getenv("BINANCE_API_KEY"),
+		BinanceAPISecret:  os.Getenv("BINANCE_API_SECRET"),
+		UseBinanceUS:      getEnv("BINANCE_USE_US", "true") == "true",
+		TiingoAPIKey:      os.Getenv("TIINGO_API_KEY"),
+		DataProvider:      getEnv("DATA_PROVIDER", "yahoo"),
+		EnabledStrategies: parseStrategies(getEnv("ENABLED_STRATEGIES", "ma_crossover")),
+		CloseOnShutdown:   getEnv("CLOSE_ON_SHUTDOWN", "false") == "true",
+		ShutdownTimeout:   getEnvDuration("SHUTDOWN_TIMEOUT", 30*time.Second),
+		EnvFile:           envFile,
+	}
+
+	// Validate the new configuration before applying anything
+	if err := newCfg.Validate(); err != nil {
+		return nil, fmt.Errorf("reloaded config validation failed: %w", err)
+	}
+
+	result := &ReloadResult{
+		Changes: make([]ReloadChange, 0),
+	}
+
+	// Lock for safe field mutation
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	// --- Detect restart-only changes (not applied) ---
+	c.detectRestartChange(result, "ServerPort", c.ServerPort, newCfg.ServerPort)
+	c.detectRestartChange(result, "ServerHost", c.ServerHost, newCfg.ServerHost)
+	c.detectRestartChange(result, "TradingMode", string(c.TradingMode), string(newCfg.TradingMode))
+	c.detectRestartChange(result, "DataProvider", c.DataProvider, newCfg.DataProvider)
+	c.detectRestartChange(result, "DatabasePath", c.DatabasePath, newCfg.DatabasePath)
+	if !stringSlicesEqual(c.EnabledStrategies, newCfg.EnabledStrategies) {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field:    "EnabledStrategies",
+			OldValue: c.EnabledStrategies,
+			NewValue: newCfg.EnabledStrategies,
+			Applied:  false,
+		})
+		result.RequiresRestart = true
+		result.RestartReasons = append(result.RestartReasons, "EnabledStrategies changed")
+	}
+
+	// --- Apply hot-reloadable changes ---
+
+	// LogLevel — also update zerolog global level
+	if c.LogLevel != newCfg.LogLevel {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field: "LogLevel", OldValue: c.LogLevel, NewValue: newCfg.LogLevel, Applied: true,
+		})
+		c.LogLevel = newCfg.LogLevel
+		if lvl, err := zerolog.ParseLevel(newCfg.LogLevel); err == nil {
+			zerolog.SetGlobalLevel(lvl)
+		}
+	}
+
+	// CloseOnShutdown
+	if c.CloseOnShutdown != newCfg.CloseOnShutdown {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field: "CloseOnShutdown", OldValue: c.CloseOnShutdown, NewValue: newCfg.CloseOnShutdown, Applied: true,
+		})
+		c.CloseOnShutdown = newCfg.CloseOnShutdown
+	}
+
+	// ShutdownTimeout
+	if c.ShutdownTimeout != newCfg.ShutdownTimeout {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field: "ShutdownTimeout", OldValue: c.ShutdownTimeout.String(), NewValue: newCfg.ShutdownTimeout.String(), Applied: true,
+		})
+		c.ShutdownTimeout = newCfg.ShutdownTimeout
+	}
+
+	// AllowedOrigins
+	if !stringSlicesEqual(c.AllowedOrigins, newCfg.AllowedOrigins) {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field: "AllowedOrigins", OldValue: c.AllowedOrigins, NewValue: newCfg.AllowedOrigins, Applied: true,
+		})
+		c.AllowedOrigins = newCfg.AllowedOrigins
+	}
+
+	// Credentials (redacted in output)
+	if c.TiingoAPIKey != newCfg.TiingoAPIKey {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field: "TiingoAPIKey", OldValue: "[redacted]", NewValue: "[redacted]", Applied: true,
+		})
+		c.TiingoAPIKey = newCfg.TiingoAPIKey
+	}
+	if c.BinanceAPIKey != newCfg.BinanceAPIKey {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field: "BinanceAPIKey", OldValue: "[redacted]", NewValue: "[redacted]", Applied: true,
+		})
+		c.BinanceAPIKey = newCfg.BinanceAPIKey
+	}
+	if c.BinanceAPISecret != newCfg.BinanceAPISecret {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field: "BinanceAPISecret", OldValue: "[redacted]", NewValue: "[redacted]", Applied: true,
+		})
+		c.BinanceAPISecret = newCfg.BinanceAPISecret
+	}
+
+	log.Info().
+		Int("total_changes", len(result.Changes)).
+		Bool("requires_restart", result.RequiresRestart).
+		Msg("Configuration reloaded")
+
+	return result, nil
+}
+
+// detectRestartChange checks if a field value changed and records it as a
+// restart-required change (not applied to the live config).
+func (c *Config) detectRestartChange(result *ReloadResult, field string, oldVal, newVal interface{}) {
+	if fmt.Sprintf("%v", oldVal) != fmt.Sprintf("%v", newVal) {
+		result.Changes = append(result.Changes, ReloadChange{
+			Field:    field,
+			OldValue: oldVal,
+			NewValue: newVal,
+			Applied:  false,
+		})
+		result.RequiresRestart = true
+		result.RestartReasons = append(result.RestartReasons, field+" changed")
+	}
+}
+
+// stringSlicesEqual returns true if two string slices have identical contents.
+func stringSlicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
 }
 
 // getEnv retrieves an environment variable or returns a default value.
