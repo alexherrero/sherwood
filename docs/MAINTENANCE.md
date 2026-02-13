@@ -32,7 +32,9 @@ The roadmap (`wiki/Roadmap.md`) is the primary backlog for Sherwood. Features ar
    - Implementation requirements (detailed steps)
    - Edge cases to handle (if applicable)
    - Testing requirements
-4. **Update the Overview:** Update the Mermaid diagram and summary table at the top of the Roadmap
+4. **Update the Overview:** Update the Mermaid timeline at the top of the Roadmap
+   - Add the feature to the appropriate section (`Now`, `Soon`, `Later`) in the timeline
+   - Format: `Feature Name` inside the correct visual block
 5. **Renumber:** Renumber all features after insertion to maintain sequential order
 
 ### When Promoting Ideas to the Roadmap
@@ -40,7 +42,8 @@ The roadmap (`wiki/Roadmap.md`) is the primary backlog for Sherwood. Features ar
 1. **Refine the idea** into a full feature spec (see Required Sections above)
 2. **Choose a bucket** based on complexity and readiness
 3. **Add to `wiki/Roadmap.md`** under the appropriate bucket section
-4. **Optionally note** in `wiki/Ideas.md` that the idea has been promoted
+4. **Update the Mermaid timeline** to include the new feature
+5. **Optionally note** in `wiki/Ideas.md` that the idea has been promoted
 
 ### When Implementing Features
 
@@ -51,15 +54,16 @@ The roadmap (`wiki/Roadmap.md`) is the primary backlog for Sherwood. Features ar
 2. **Update Review Docs:** If the feature was identified in a codebase review, mark it as implemented in `docs/reviews/`
 3. **Update DESIGN.md:** Add new endpoints, configuration options, or architecture changes to DESIGN.md
 4. **Remove from Roadmap:** Delete the completed feature entirely from `wiki/Roadmap.md`
-5. **Renumber & Update Overview:** Renumber remaining features and update the Mermaid diagram and summary table
+5. **Update the Mermaid timeline:** Remove the feature from the timeline visualization
+6. **Renumber:** Renumber remaining features in `wiki/Roadmap.md`
 
 ### When Re-prioritizing Features
 
 Features can be moved between buckets as priorities shift:
 
 1. **Move** the feature section to the new bucket in `wiki/Roadmap.md`
-2. **Renumber** all features to maintain sequential order
-3. **Update** the Mermaid diagram and summary table at the top
+2. **Update the Mermaid timeline:** Move the feature string to the new section (`Now`, `Soon`, `Later`)
+3. **Renumber** all features to maintain sequential order
 
 ### Example Workflow
 
