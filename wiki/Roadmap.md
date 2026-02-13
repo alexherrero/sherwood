@@ -9,24 +9,16 @@ For early-stage brainstorms not yet on the roadmap, see [Ideas](Ideas).
 ## Overview
 
 ```mermaid
-gantt
+    timeline
     title Sherwood Roadmap
-    dateFormat YYYY-MM-DD
-    axisFormat %b %Y
-
-    section Now (Backend)
-    Edge Case Test Coverage           :active, now1, 2026-02-12, 14d
-    Benchmark Tests                   :active, now2, 2026-02-12, 21d
-    Concurrent Operation Tests        :now3, 2026-02-12, 21d
-    Hot-Swapping Strategies           :now4, after now1, 30d
-    Property-Based Testing            :now5, after now2, 30d
-
-    section Soon
-    Deployment Configuration (Docker) :soon1, after now3, 30d
-    Frontend Implementation           :soon2, after now4, 60d
-
-    section Later
-    AI-Powered Strategy Creation      :later1, after soon2, 90d
+        Now   : Edge Case Test Coverage
+              : Benchmark Tests
+              : Concurrent Operation Tests
+              : Hot-Swapping Strategies
+              : Property-Based Testing
+        Soon  : Deployment Configuration (Docker)
+              : Frontend Implementation
+        Later : AI-Powered Strategy Creation
 ```
 
 | Bucket | Feature | Complexity | Type |
