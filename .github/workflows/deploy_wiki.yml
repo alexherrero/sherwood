@@ -5,13 +5,8 @@ on:
     branches:
       - main
     paths:
-      - 'wiki/**'
-      - '.github/workflows/deploy_wiki.yml'
-  pull_request:
-    types: [opened, synchronize, reopened]
-    paths:
-      - 'wiki/**'
-      - '.github/workflows/deploy_wiki.yml'
+      - "wiki/**"
+      - ".github/workflows/deploy_wiki.yml"
 
 jobs:
   deploy-wiki:
@@ -24,9 +19,7 @@ jobs:
         uses: Andrew-Chen-Wang/github-wiki-action@v5
         with:
           # The folder in your repo that contains the wiki content
-          wiki-src-path: 'wiki'
-          # The destination path in the wiki repo (root by default)
-          wiki-dest-path: ''
+          path: "wiki"
           # Strategy 'clone' is robust for full sync
           strategy: clone
         env:
