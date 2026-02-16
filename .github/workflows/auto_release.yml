@@ -22,7 +22,7 @@ jobs:
         run: |
           # Find the latest successful run of 'backend.yml' on 'main'
           # We search for the most recent run with status='success'
-          LAST_GREEN_SHA=$(gh run list --workflow backend.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha')
+          LAST_GREEN_SHA=$(gh run list --workflow backend.yml --repo ${{ github.repository }} --branch main --status success --limit 1 --json headSha --jq '.[0].headSha')
 
           if [ -z "$LAST_GREEN_SHA" ] || [ "$LAST_GREEN_SHA" == "null" ]; then
             echo "::error::No successful backend runs found. Exiting."
