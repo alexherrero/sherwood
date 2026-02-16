@@ -4,7 +4,7 @@ A simple, self-hosted trading platform that's easy to use and doesn't require co
 
 ## Build and Test Status
 
-[![Backend](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml/badge.svg)](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml) [![Backend Integration](https://github.com/alexherrero/sherwood/actions/workflows/backend_integration.yaml/badge.svg)](https://github.com/alexherrero/sherwood/actions/workflows/backend_integration.yaml)
+[![Backend](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml/badge.svg)](https://github.com/alexherrero/sherwood/actions/workflows/backend.yml)
 
 ## ⚠️ In Development
 
