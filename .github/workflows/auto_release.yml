@@ -3,7 +3,7 @@ name: Auto Release
 on:
   schedule:
     # Runs at 16:00 UTC every Monday (08:00 AM PST / 09:00 AM PDT)
-    - cron: '0 16 * * 1'
+    - cron: "0 16 * * 1"
   workflow_dispatch:
 
 jobs:
@@ -12,44 +12,80 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+      actions: read # Required to list workflow runs
 
     steps:
+      - name: Find Last Green Backend Commit
+        id: green_commit
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Find the latest successful run of 'backend.yml' on 'main'
+          # We search for the most recent run with status='success'
+          LAST_GREEN_SHA=$(gh run list --workflow backend.yml --branch main --status success --limit 1 --json headSha --jq '.[0].headSha')
+
+          if [ -z "$LAST_GREEN_SHA" ] || [ "$LAST_GREEN_SHA" == "null" ]; then
+            echo "::error::No successful backend runs found. Exiting."
+            exit 1
+          fi
+
+          echo "Found last green commit: $LAST_GREEN_SHA"
+          echo "sha=$LAST_GREEN_SHA" >> $GITHUB_OUTPUT
+
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          ref: ${{ steps.green_commit.outputs.sha }}
           fetch-depth: 0 # Important: Fetch all history for tags
+
+      - name: Commit Details
+        run: |
+          echo "## 🚀 Release Commit" >> $GITHUB_STEP_SUMMARY
+
+          COMMIT_HASH=$(git log -1 --format="%h")
+          COMMIT_DATE=$(git log -1 --format="%cd" --date=format:'%Y-%m-%d %H:%M:%S')
+          COMMIT_MSG=$(git log -1 --format="%s")
+          COMMIT_AUTHOR=$(git log -1 --format="%an")
+
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "| :--- | :--- |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Commit** | \`$COMMIT_HASH\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Date** | $COMMIT_DATE |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Author** | $COMMIT_AUTHOR |" >> $GITHUB_STEP_SUMMARY
+          echo "| **Message** | $COMMIT_MSG |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
       - name: Code Statistics
         run: |
           sudo apt-get update && sudo apt-get install -y cloc
-          
+
           # Run cloc, excluding vendor/generated dirs
           cloc --json --out=cloc.json --exclude-dir=vendor,node_modules,.github .
-          
+
           TOTAL_LOC=$(jq '.SUM.code' cloc.json)
           TOTAL_FILES=$(jq '.SUM.nFiles' cloc.json)
-          
+
           echo "## 📊 Code Statistics" >> $GITHUB_STEP_SUMMARY
           echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
           echo "| :--- | :---: |" >> $GITHUB_STEP_SUMMARY
           echo "| **Total Lines of Code** | **$TOTAL_LOC** |" >> $GITHUB_STEP_SUMMARY
           echo "| **Total Files** | **$TOTAL_FILES** |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          
+
           echo "### Language Breakdown" >> $GITHUB_STEP_SUMMARY
           echo '```mermaid' >> $GITHUB_STEP_SUMMARY
           echo 'pie showData' >> $GITHUB_STEP_SUMMARY
           echo '    title LOC by Language' >> $GITHUB_STEP_SUMMARY
-          
+
           # Parse JSON: remove header/SUM, sort by LOC desc, take top 10, format for Mermaid
           jq -r 'del(.header, .SUM) | to_entries | sort_by(.value.code) | reverse | .[:10] | .[] | "    \"\(.key)\" : \(.value.code)"' cloc.json >> $GITHUB_STEP_SUMMARY
-          
+
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Set up Go
         uses: actions/setup-go@v6
         with:
-          go-version-file: 'go.mod'
+          go-version-file: "go.mod"
           cache: true
 
       - name: Install dependencies
@@ -74,7 +110,7 @@ jobs:
           # List tags matching today's date pattern: YYYY.MM.DD-*
           # Note: If no tags exist, grep might fail, so we handle it gracefully or check variable
           EXISTING_TAGS=$(git tag --list "$DATE-*")
-          
+
           if [ -z "$EXISTING_TAGS" ]; then
             NEXT_NUM=1
           else
@@ -84,7 +120,7 @@ jobs:
             if [[ ! "$LAST_NUM" =~ ^[0-9]+$ ]]; then LAST_NUM=0; fi
             NEXT_NUM=$((LAST_NUM + 1))
           fi
-          
+
           NEW_TAG="$DATE-$NEXT_NUM"
           echo "Calculated new tag: $NEW_TAG"
           echo "tag=$NEW_TAG" >> $GITHUB_OUTPUT
@@ -94,7 +130,7 @@ jobs:
         run: |
           # Get the latest tag securely (suppress error if no tags exist)
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          
+
           if [ -z "$PREV_TAG" ]; then
             echo "## Initial Release" > release_notes.md
             git log --pretty=format:"- %s (%h)" >> release_notes.md
@@ -102,7 +138,7 @@ jobs:
             echo "## Changes since $PREV_TAG" > release_notes.md
             git log --pretty=format:"- %s (%h)" "$PREV_TAG..HEAD" >> release_notes.md
           fi
-          
+
           # Cat the file to output for debugging
           cat release_notes.md
 
