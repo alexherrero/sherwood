@@ -2,21 +2,28 @@ name: Test Coverage
 
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   pull_request:
-    branches: [ "**" ]
+    branches: ["**"]
+
+# Cancel in-progress runs for the same branch/PR
+concurrency:
+  group: coverage-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   coverage:
     name: Code Coverage
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
-          go-version: '1.25.7'
+          go-version: "1.25.7"
 
       - name: Install dependencies
         run: go mod download
@@ -26,7 +33,7 @@ jobs:
           echo "mode: atomic" > coverage.out
           # Get all packages except ignored ones (if any)
           PACKAGES=$(go list ./...)
-          
+
           # Run tests for each package
           for pkg in $PACKAGES; do
             go test -v -coverpkg=./... -covermode=atomic -coverprofile=profile.out $pkg
@@ -39,12 +46,12 @@ jobs:
       - name: Calculate Coverage
         run: |
           go tool cover -func=coverage.out
-          
+
           # Extract total coverage percentage
           TOTAL_COVERAGE=$(go tool cover -func=coverage.out | grep total | awk '{print substr($3, 1, length($3)-1)}')
-          
+
           echo "Total Coverage: $TOTAL_COVERAGE%"
-          
+
           # Check if coverage is below 80%
           if awk "BEGIN {exit !($TOTAL_COVERAGE < 80)}"; then
             echo "::error::Coverage is below 80% ($TOTAL_COVERAGE%)"
@@ -122,14 +129,14 @@ jobs:
                   file_percentages.append((filename, pct))
               except ValueError:
                   continue
-          
+
           # Aggregate by file since go tool cover outputs by function
           file_map = {}
           for fname, pct in file_percentages:
               if fname not in file_map:
                   file_map[fname] = []
               file_map[fname].append(pct)
-          
+
           # Calculate per-file averages
           final_file_stats = []
           for fname, pcts in file_map.items():
@@ -147,7 +154,7 @@ jobs:
 
           pass_threshold = float(os.environ.get("THRESHOLD", 80))
           passed = total_coverage_pct >= pass_threshold
-          
+
           status_header = "✅ PASS" if passed else "❌ FAIL"
 
           summary_md = f"""
@@ -161,7 +168,7 @@ jobs:
           | **Highest File Coverage** | {highest_cov:.1f}% | `{highest_file}` |
           | **Lowest File Coverage** | {lowest_cov:.1f}% | `{lowest_file}` |
           """
-          
+
           step_summary_file = os.environ.get("GITHUB_STEP_SUMMARY")
           if step_summary_file:
               with open(step_summary_file, "a") as f:

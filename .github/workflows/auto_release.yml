@@ -6,6 +6,11 @@ on:
     - cron: "0 16 * * 1"
   workflow_dispatch:
 
+# Prevent duplicate releases from overlapping runs
+concurrency:
+  group: auto-release
+  cancel-in-progress: false
+
 jobs:
   build-and-release:
     name: Build & Release
@@ -19,10 +24,11 @@ jobs:
         id: green_commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPO: ${{ github.repository }}
         run: |
           # Find the latest successful run of 'backend.yml' on 'main'
           # We search for the most recent run with status='success'
-          LAST_GREEN_SHA=$(gh run list --workflow backend.yml --repo ${{ github.repository }} --branch main --status success --limit 1 --json headSha --jq '.[0].headSha')
+          LAST_GREEN_SHA=$(gh run list --workflow backend.yml --repo "$REPO" --branch main --status success --limit 1 --json headSha --jq '.[0].headSha')
 
           if [ -z "$LAST_GREEN_SHA" ] || [ "$LAST_GREEN_SHA" == "null" ]; then
             echo "::error::No successful backend runs found. Exiting."
@@ -33,7 +39,7 @@ jobs:
           echo "sha=$LAST_GREEN_SHA" >> $GITHUB_OUTPUT
 
       - name: Checkout repository
-        uses: actions/checkout@v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.green_commit.outputs.sha }}
           fetch-depth: 0 # Important: Fetch all history for tags
@@ -83,7 +89,7 @@ jobs:
           echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Set up Go
-        uses: actions/setup-go@v6
+        uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version-file: "go.mod"
           cache: true
@@ -144,7 +150,7 @@ jobs:
 
       # Create Release with auto-generated notes and custom changelog
       - name: Create Release
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:
           name: AutoRelease ${{ steps.version.outputs.tag }}
           tag_name: ${{ steps.version.outputs.tag }}
