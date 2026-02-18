@@ -112,8 +112,7 @@ jobs:
         run: |
           set -o pipefail
           {
-            # Use secret API key, fall back to default for local testing
-            TEST_KEY="${CI_API_KEY:-test-key-12345}"
+            TEST_KEY="$CI_API_KEY"
 
             # Create test config
             cat > .env << EOF
@@ -232,8 +231,7 @@ jobs:
         run: |
           set -o pipefail
           {
-            # Use secret API key, fall back to default for local testing
-            TEST_KEY="${CI_API_KEY:-test-ci-key}"
+            TEST_KEY="$CI_API_KEY"
 
             # Start with API key
             API_KEY="$TEST_KEY" ./sherwood &
