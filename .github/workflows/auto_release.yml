@@ -1,4 +1,4 @@
-name: Auto Release
+name: "[R] Auto Release"
 
 on:
   schedule:
@@ -15,34 +15,34 @@ jobs:
   build-and-release:
     name: Build & Release
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
       contents: write
       actions: read # Required to list workflow runs
 
     steps:
-      - name: Find Last Green Backend Commit
+      - name: Find Last Green Test Pipeline Commit
         id: green_commit
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           REPO: ${{ github.repository }}
         run: |
-          # Find the latest successful run of 'backend.yml' on 'main'
-          # We search for the most recent run with status='success'
-          LAST_GREEN_SHA=$(gh run list --workflow backend.yml --repo "$REPO" --branch main --status success --limit 1 --json headSha --jq '.[0].headSha')
+          # Find the latest successful run of '[T] Test Pipeline' on 'main'
+          LAST_GREEN_SHA=$(gh run list --workflow test-pipeline.yml --repo "$REPO" --branch main --status success --limit 1 --json headSha --jq '.[0].headSha')
 
           if [ -z "$LAST_GREEN_SHA" ] || [ "$LAST_GREEN_SHA" == "null" ]; then
-            echo "::error::No successful backend runs found. Exiting."
+            echo "::error::No successful test pipeline runs found. Exiting."
             exit 1
           fi
 
           echo "Found last green commit: $LAST_GREEN_SHA"
           echo "sha=$LAST_GREEN_SHA" >> $GITHUB_OUTPUT
 
-      - name: Checkout repository
+      - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
         with:
           ref: ${{ steps.green_commit.outputs.sha }}
-          fetch-depth: 0 # Important: Fetch all history for tags
+          fetch-depth: 0
 
       - name: Commit Details
         run: |
@@ -65,7 +65,6 @@ jobs:
         run: |
           sudo apt-get update && sudo apt-get install -y cloc
 
-          # Run cloc, excluding vendor/generated dirs
           cloc --json --out=cloc.json --exclude-dir=vendor,node_modules,.github .
 
           TOTAL_LOC=$(jq '.SUM.code' cloc.json)
@@ -83,46 +82,37 @@ jobs:
           echo 'pie showData' >> $GITHUB_STEP_SUMMARY
           echo '    title LOC by Language' >> $GITHUB_STEP_SUMMARY
 
-          # Parse JSON: remove header/SUM, sort by LOC desc, take top 10, format for Mermaid
           jq -r 'del(.header, .SUM) | to_entries | sort_by(.value.code) | reverse | .[:10] | .[] | "    \"\(.key)\" : \(.value.code)"' cloc.json >> $GITHUB_STEP_SUMMARY
 
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Set up Go
+      - name: Setup Go
         uses: actions/setup-go@7a3fe6cf4cb3a834922a1244abfce67bcef6a0c5 # v6.2.0
         with:
           go-version-file: "go.mod"
           cache: true
 
-      - name: Install dependencies
+      - name: Install Dependencies
         run: go mod download
 
-      # Build Linux Binary
-      # Using CGO_ENABLED=0 for static binaries (modernc.org/sqlite supports this)
       - name: Build Linux Binary
         run: |
           CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-s -w" -o sherwood-linux-amd64 ./backend/main.go
 
-      # Build Windows Binary
       - name: Build Windows Binary
         run: |
           CGO_ENABLED=0 GOOS=windows GOARCH=amd64 go build -ldflags="-s -w" -o sherwood-windows-amd64.exe ./backend/main.go
 
       - name: Determine Version
         id: version
-        # Run bash logic to find the next release number for today
         run: |
           DATE=$(date +'%Y.%m.%d')
-          # List tags matching today's date pattern: YYYY.MM.DD-*
-          # Note: If no tags exist, grep might fail, so we handle it gracefully or check variable
           EXISTING_TAGS=$(git tag --list "$DATE-*")
 
           if [ -z "$EXISTING_TAGS" ]; then
             NEXT_NUM=1
           else
-            # Extract the suffix number, sort numerically descending, take the top one
             LAST_NUM=$(echo "$EXISTING_TAGS" | sed "s/^$DATE-//" | sort -rn | head -n 1)
-            # Check if LAST_NUM is a valid integer (in case of weird tags), default to 0 if empty
             if [[ ! "$LAST_NUM" =~ ^[0-9]+$ ]]; then LAST_NUM=0; fi
             NEXT_NUM=$((LAST_NUM + 1))
           fi
@@ -134,7 +124,6 @@ jobs:
       - name: Generate Changelog
         id: changelog
         run: |
-          # Get the latest tag securely (suppress error if no tags exist)
           PREV_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
 
           if [ -z "$PREV_TAG" ]; then
@@ -145,10 +134,8 @@ jobs:
             git log --pretty=format:"- %s (%h)" "$PREV_TAG..HEAD" >> release_notes.md
           fi
 
-          # Cat the file to output for debugging
           cat release_notes.md
 
-      # Create Release with auto-generated notes and custom changelog
       - name: Create Release
         uses: softprops/action-gh-release@a06a81a03ee405af7f2048a818ed3f03bbf83c7b # v2.5.0
         with:

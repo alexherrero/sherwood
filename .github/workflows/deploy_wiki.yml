@@ -1,4 +1,4 @@
-name: Deploy Wiki
+name: "[D] Deploy Wiki"
 
 on:
   push:
@@ -8,28 +8,24 @@ on:
       - "wiki/**"
       - ".github/workflows/deploy_wiki.yml"
 
-# Prevent overlapping wiki deployments
 concurrency:
-  group: deploy-wiki
+  group: deploy-wiki-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
   deploy-wiki:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
-      contents: write # Required to push to the wiki
+      contents: write
     steps:
-      - name: Checkout Code
+      - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
 
       - name: Deploy to GitHub Wiki
         uses: Andrew-Chen-Wang/github-wiki-action@6448478bd55f1f3f752c93af8ac03207eccc3213 # v5.0.3
         with:
-          # The folder in your repo that contains the wiki content
-          path: "wiki"
-          # Strategy 'clone' is robust for full sync
+          path: wiki/
           strategy: clone
         env:
-          # This token is automatically provided by GitHub Actions
-          # Ensure "Workflow permissions" are set to "Read and write permissions" in repo settings
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
