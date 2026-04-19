@@ -1,0 +1,36 @@
+# Placeholder CI — replace with the real test pipeline when v2 lands.
+# For now, build + vet on the archived v1 module so Dependabot has a real
+# (compilation-level) gate to wait on before auto-merging.
+
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: ["**"]
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Build (v1)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: v1
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: v1/go.mod
+          cache-dependency-path: v1/go.sum
+
+      - name: go build
+        run: go build ./...
+
+      - name: go vet
+        run: go vet ./...
