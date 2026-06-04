@@ -13,7 +13,37 @@ jobs:
     steps:
       - name: Fetch Dependabot metadata
         id: meta
-        uses: dependabot/fetch-metadata@v3
+        uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
+
+      # Defense in depth: explicitly require the CI "Build (v1)" check to pass
+      # before merging. `gh pr merge --auto` only waits when the check is a
+      # required status check in branch protection; if it is not, --auto would
+      # merge immediately. This gate makes the merge safe either way. Filtered
+      # to the single check by name so it never waits on this job's own run.
+      - name: Wait for CI to pass
+        if: steps.meta.outputs.update-type != 'version-update:semver-major'
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          check='Build (v1)'
+          for _ in $(seq 1 60); do
+            bucket=$(gh pr checks "$PR_URL" --json name,bucket \
+              --jq ".[] | select(.name == \"$check\") | .bucket" | head -n1 || true)
+            case "$bucket" in
+              pass)
+                echo "CI check '$check' passed."
+                exit 0 ;;
+              fail|cancel)
+                echo "CI check '$check' did not pass (bucket=$bucket); refusing to merge." >&2
+                exit 1 ;;
+              *)
+                echo "Waiting for CI check '$check' (state='${bucket:-not reported yet}')..."
+                sleep 30 ;;
+            esac
+          done
+          echo "Timed out waiting for CI check '$check'; refusing to merge." >&2
+          exit 1
 
       - name: Enable auto-merge for patch and minor bumps
         if: steps.meta.outputs.update-type != 'version-update:semver-major'
