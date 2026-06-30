@@ -1,3 +1,12 @@
+---
+title: Sherwood v2 — System Design
+status: draft
+kind: design
+scope: arc
+area: sherwood
+seeded: 2026-05-07
+---
+
 # Sherwood v2 — System Design
 
 |  |  |  |  |  |  |
@@ -24,15 +33,15 @@ Build a self-hosted automated trading platform — Sherwood v2 — that:
 6. **Eventually delivers a beautiful, Robinhood-inspired browser UI** — not in the v2.0 hard scope, but the API, event model, auth flow, and data shapes are designed from day one to support a polished, mobile-first web experience as a follow-on milestone (v2.x).
 7. Begins life as paper-trading with a deferred but designed-in path to live trading.
 
-The design also incorporates the lessons learned from v1; see the [v1 tech-debt retrospective](../docs/retros/v1-tech-debt.md) for the hard constraints carried into v2.
+The design also incorporates the lessons learned from v1; see the [v1 tech-debt retrospective](../../docs/retros/v1-tech-debt.md) for the hard constraints carried into v2.
 
 ---
 
 ## 2. Background
 
-Sherwood v1 (archived at [`v1/`](../v1)) was a Go proof-of-concept (~17,000 LOC, 49 tests, SQLite, chi router, 5 built-in strategies, paper-trading only). It validated that the basic shape of the problem was tractable in Go and produced a working trading engine plus REST API plus weekly cross-platform release pipeline.
+Sherwood v1 (archived at [`v1/`](../../v1)) was a Go proof-of-concept (~17,000 LOC, 49 tests, SQLite, chi router, 5 built-in strategies, paper-trading only). It validated that the basic shape of the problem was tractable in Go and produced a working trading engine plus REST API plus weekly cross-platform release pipeline.
 
-The v1 audit (full report in [`docs/retros/v1-tech-debt.md`](../docs/retros/v1-tech-debt.md)) surfaced foundational debt that cannot be retrofitted without effectively rewriting the core: float64 money, an optional/unwired risk subsystem, stringly-typed strategy configuration, time-based test flakes, and a 150-line god-main with positional 8-argument constructors. Rather than refactor incrementally, v2 starts from the lessons learned and rebuilds the engine, data layer, and execution path with these constraints baked in.
+The v1 audit (full report in [`docs/retros/v1-tech-debt.md`](../../docs/retros/v1-tech-debt.md)) surfaced foundational debt that cannot be retrofitted without effectively rewriting the core: float64 money, an optional/unwired risk subsystem, stringly-typed strategy configuration, time-based test flakes, and a 150-line god-main with positional 8-argument constructors. Rather than refactor incrementally, v2 starts from the lessons learned and rebuilds the engine, data layer, and execution path with these constraints baked in.
 
 Two opportunities motivate v2:
 
@@ -624,7 +633,7 @@ Data migration from v1's SQLite database is **out of scope** for v2.0. v2 launch
 - **No mobile-app.** Phone access is via mobile browser. PWA installability targeted but not a v2.0 hard requirement.
 - **Backtest determinism for streaming-ingest paths.** Backtests use historical bars and are deterministic; the live path's reordering is not reproducible. This is fundamental and accepted — backtests are the canonical reproducibility surface.
 
-Each item is tracked in [`docs/retros/v2-debt-register.md`](../docs/retros/v2-debt-register.md) (created at first commit) and revisited every release.
+Each item is tracked in [`docs/retros/v2-debt-register.md`](../../docs/retros/v2-debt-register.md) (created at first commit) and revisited every release.
 
 ---
 
@@ -732,11 +741,11 @@ For the eventual live-trading milestone (post-v2.0), the operator (not the syste
 
 ### 5.1 Work Estimates
 
-Phases align with the v2 build order in the [tech-debt retro](../docs/retros/v1-tech-debt.md):
+Phases align with the v2 build order in the [tech-debt retro](../../docs/retros/v1-tech-debt.md):
 
 | Phase | Scope | Est. effort |
 | --- | --- | --- |
-| **A — Foundation** | Decimal type, `App` scaffold, migration framework, `Clock` abstraction, CI gates (lint/vuln/race), repo skeleton, ADRs 1–5 | 1–2 weeks |
+| **A — Foundation** | Decimal type, `App` scaffold, migration framework, `Clock` abstraction, CI gates (lint/vuln/race), repo skeleton, first foundational decisions (see [Amendment log](#amendment-log)) | 1–2 weeks |
 | **B — Core Domain** | Order aggregate + state machine, Risk subsystem, `Strategy[Cfg]` + self-registration, scheduler, paper broker | 2–3 weeks |
 | **C — Data + Providers** | Postgres schema + partitions, Yahoo provider (REST), Alpaca provider (REST + stream), Robinhood Crypto provider, in-memory cache | 2 weeks |
 | **D — API + Auth + UI shell** | REST + WebSocket, password auth, sessions, basic web UI shell with login + portfolio + strategies pages | 2 weeks |
@@ -751,8 +760,8 @@ Total: **12–14 weeks of focused effort.** No fixed deadline; scope reduces bef
 
 | Doc | Path | Owner | Cadence |
 | --- | --- | --- | --- |
-| System Design (this doc) | `wiki/V2-System-Design.md` | Author | Update on architectural change |
-| ADRs (decisions) | `docs/adr/NNNN-*.md` | Author | One per significant decision |
+| System Design (this doc) | `wiki/designs/sherwood-v2.md` | Author | Update on architectural change |
+| Decision records | this design's [Amendment log](#amendment-log) | Author | One entry per significant decision |
 | Runbook | `wiki/Runbook.md` | Author | Update on incident; reviewed monthly |
 | Deployment Guide | `wiki/Deployment.md` | Author | Update on infra change |
 | API Reference | `wiki/API.md` (auto-generated from OpenAPI) | CI | On every API change |
@@ -837,7 +846,7 @@ Alerting is operator-configured (Grafana / Alertmanager / a webhook to a private
 
 **Schema migrations:** every `up.sql` has a corresponding `down.sql`. A migration is **rollback-safe** only if data preservation is documented. Destructive migrations (e.g., column drops) require:
 
-1. ADR documenting the migration.
+1. An amendment-log entry in the governing design documenting the migration.
 2. Pre-migration DB snapshot (`pg_dump` or FreeNAS snapshot).
 3. Operator-acknowledged in `migrations/NNN_DESTRUCTIVE.md` companion file.
 
@@ -848,6 +857,12 @@ Rollback procedure for a destructive migration is: stop container → restore sn
 **Strategy rollback:** strategies are stored in DB with versioned configs. Reverting a strategy = restoring its config row from `strategy_config_history` (append-only).
 
 **AI skills rollback:** skills mounted from a versioned directory; rollback = swap the mount target or `git checkout` the skills directory and restart container.
+
+---
+
+## Amendment log
+
+**2026-06-30 — Adopted the six-section wiki model; retired the planned ADR class.** This design moved into `wiki/designs/` as a living design and gains this amendment log as the home for build decisions; the Phase-A "ADRs 1–5", the documentation-plan `docs/adr/NNNN-*.md` row, and the destructive-migration "ADR" step now route to entries here instead of standalone records under `docs/adr/`. *Why not keep `docs/adr/`:* the ADR model was retired across the operator's repos — a standalone record re-creates the chain-read drift (a superseding decision left pointing back through a superseded file) that a living body collapses, so sherwood adopts the same model agentm + crickets did rather than carry a parallel artifact class. *Re-audit trigger:* a durable decision class emerges with no living-design home, or a future host reintroduces ADRs as the operator default.
 
 ---
 
