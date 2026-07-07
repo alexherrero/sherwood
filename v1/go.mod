@@ -5,7 +5,7 @@ go 1.25.7
 require (
 	github.com/adshao/go-binance/v2 v2.8.12
 	github.com/go-chi/chi/v5 v5.3.0
-	github.com/go-chi/httprate v0.15.0
+	github.com/go-chi/httprate v0.16.0
 	github.com/go-playground/validator/v10 v10.30.3
 	github.com/google/uuid v1.6.0
 	github.com/gorilla/websocket v1.5.3
