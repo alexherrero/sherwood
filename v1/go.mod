@@ -14,7 +14,7 @@ require (
 	github.com/piquette/finance-go v1.1.0
 	github.com/rs/zerolog v1.35.1
 	github.com/stretchr/testify v1.12.0
-	modernc.org/sqlite v1.56.0
+	modernc.org/sqlite v1.57.0
 )
 
 require (
