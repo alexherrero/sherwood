@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/adshao/go-binance/v2 v2.8.12
-	github.com/go-chi/chi/v5 v5.3.2
+	github.com/go-chi/chi/v5 v5.5.0
 	github.com/go-chi/httprate v0.16.1
 	github.com/go-playground/validator/v10 v10.30.5
 	github.com/google/uuid v1.6.0
