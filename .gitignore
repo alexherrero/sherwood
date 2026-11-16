@@ -1,0 +1,13 @@
+# Real settings and strategy files. They hold secrets and personal limits and
+# live only on the NAS; the repo ships *.example.yaml copies with placeholders.
+settings.yaml
+broker.yaml
+strategy.yaml
+
+# Local SQLite databases and their write-ahead files.
+*.db
+*-wal
+*-shm
+
+# Build output.
+/bin/
