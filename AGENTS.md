@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Universal instructions for AI coding agents working in a project using `agentic-harness`. Antigravity, Codex, Cursor, and other tools that read `AGENTS.md` should use this as the entry point. Claude Code users should also read this file (it's linked from `CLAUDE.md`).
+Universal instructions for AI coding agents working in a project using `agentic-harness`. Antigravity and other tools that read `AGENTS.md` should use this as the entry point. Claude Code users should also read this file (it's linked from `CLAUDE.md`).
 
 ## What this harness is
 
