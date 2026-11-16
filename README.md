@@ -2,9 +2,9 @@
 
 An automated trading platform.
 
-## v2 (in progress)
+## The rewrite (in design)
 
-v2 is currently being designed and built. See the design docs in `docs/` once scaffolding is complete.
+Sherwood is being rewritten from scratch as a small, self-hosted investment tool. The design is at [`wiki/designs/sherwood.md`](wiki/designs/sherwood.md).
 
 ## v1 (archived)
 
