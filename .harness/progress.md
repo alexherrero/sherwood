@@ -15,3 +15,4 @@ Append-only log. Newest entries at the bottom. Format: `<YYYY-MM-DD HH:MM> /<pha
 2026-11-16 /work — foundations task 1 (Go module and repo layout) merged as #64. Root module, cmd/sherwood, internal/ stubs, Makefile, golangci-lint v2 config, .gitignore for the real settings files and local databases. Next: tasks 3, 4, 6 and 8 in parallel.
 2026-11-16 /work — foundations task 4 (SQLite store and migrations) merged as #66 and task 8 (broker helper scaffold) merged as #67. Tasks 3 and 6 are open; task 2 (money) is next now that the store exists.
 2026-11-16 /work — foundations task 6 (masked secrets and the logger) merged as #69. Task 3 is open; tasks 2 (money) and 5 (settings files) are ready to start.
+2026-11-16 /work — foundations task 3 (clock and exchange calendar) merged as #71. Wave 2 is complete. Ready: tasks 2 (money), 5 (settings files) and 7 (scheduler).
