@@ -5,7 +5,7 @@ parent_part_slug: foundations
 
 # Plan: Foundations: container, storage and guard rails (from design sherwood)
 
-**Status:** ready
+**Status:** in progress
 **Created:** 2026-11-15
 **Roadmap item:** part 1 of 6 of [Sherwood Design](../wiki/designs/sherwood.md); part file [foundations](../wiki/designs/sherwood/parts/foundations.md)
 **Brief:** Build the base every later part stands on: the Go application and the Python broker helper in one container, SQLite with numbered migrations, exact decimal money, an injected clock and the exchange calendar, the scheduler's job records, validated settings and strategy files, masked secrets, and CI. Nothing in this part trades or talks to a broker.
@@ -35,7 +35,7 @@ When this plan is done, the container builds and starts on a machine with exampl
 ### 1. Go module and repo layout
 - **What:** Create the root Go module with `cmd/sherwood` and `internal/` packages, a `Makefile` with `build`, `test`, `lint` and `vet` targets, and `.gitignore` entries for the real settings files and local databases.
 - **Verification:** `go build ./...` and `go vet ./...` pass at the root and do not include `v1/`; `git check-ignore` matches the real settings file names.
-- **Status:** [ ]
+- **Status:** [x] Shipped in [#64](https://github.com/alexherrero/sherwood/pull/64) (2026-11-16). The root module `github.com/alexherrero/sherwood` (go 1.26, no dependencies yet) has a minimal `cmd/sherwood` whose `main` calls `run() error`, and eight package stubs under `internal/` (money, clock, store, config, secret, logging, scheduler, broker), each a `doc.go` for now. The `Makefile` has `build`, `test` (with `-race`), `vet`, `lint` and `all`, acting on the root module only; `.golangci.yml` is golangci-lint v2 with the standard set plus gosec, errorlint, revive (exported rule on) and a few others. The real files are named `settings.yaml`, `broker.yaml` and `strategy.yaml` and are ignored anywhere in the tree, as are `*.db`, `*-wal` and `*-shm`. `v1/go.mod` declares the same module path, which is fine because the nested module is never reached by `./...`; it does mean no `go.work` may include both, and Dependabot must list `/` and `/v1` separately.
 
 ### 2. Decimal money types
 - **What:** Add `Money`, `Price` and `Quantity` types over a decimal library, with SQL scan and value as text, JSON as strings, and the written rounding policy (prices to the cent, whole shares unless fractional is on).
