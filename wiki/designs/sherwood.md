@@ -1,6 +1,6 @@
 ---
 title: Sherwood Design
-status: draft
+status: final
 visibility: published
 author: repository owner
 contributors: []
@@ -361,4 +361,4 @@ The container image is versioned, and rolling back means pinning the previous im
 
 | Date | Change | Status |
 |---|---|---|
-| 2026-11-15 | Initial draft written from the 2026-11-15 rewrite brief, carrying over the v2 design's foundations and the v1 audit's constraints. The owner's first review the same day settled the open calls: Go for the application with Python only for the broker calls, an installable web app on the phone, SQLite, and the remaining calls (resting stops at the broker, the stop switch keeping them, non-protective sells waiting for approval, watchlist taps, approval devices) as written. The v1 audit was copied to `docs/retros/` on `main`. | draft |
+| 2026-11-15 | Initial draft written from the 2026-11-15 rewrite brief, carrying over the v2 design's foundations and the v1 audit's constraints. The owner's first review the same day settled the open calls: Go for the application with Python only for the broker calls, an installable web app on the phone, SQLite, and the remaining calls (resting stops at the broker, the stop switch keeping them, non-protective sells waiting for approval, watchlist taps, approval devices) as written. The v1 audit was copied to `docs/retros/` on `main`. The owner then approved the design as final. | final |
