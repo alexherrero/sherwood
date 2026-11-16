@@ -1,38 +1,113 @@
-# Plan: <short title>
+---
+parent_design_doc: ../wiki/designs/sherwood.md
+parent_part_slug: foundations
+---
 
-**Status:** planning
-**Created:** <YYYY-MM-DD>
-**Brief:** <1-3 sentence restatement of what we're building or changing>
+# Plan: Foundations: container, storage and guard rails (from design sherwood)
+
+**Status:** ready
+**Created:** 2026-11-15
+**Roadmap item:** part 1 of 6 of [Sherwood Design](../wiki/designs/sherwood.md); part file [foundations](../wiki/designs/sherwood/parts/foundations.md)
+**Brief:** Build the base every later part stands on: the Go application and the Python broker helper in one container, SQLite with numbered migrations, exact decimal money, an injected clock and the exchange calendar, the scheduler's job records, validated settings and strategy files, masked secrets, and CI. Nothing in this part trades or talks to a broker.
 
 ## Goal
 
-<What success looks like in 2-4 sentences. User-facing language, not implementation-flavored.>
+When this plan is done, the container builds and starts on a machine with example settings, refuses to start when a limit is missing, and runs an empty scheduler on a fake or real clock. Money cannot be stored or sent as a float, a secret cannot be printed in clear, and CI checks all of it on every pull request.
 
 ## Constraints
 
-- <Non-obvious constraint — performance, compatibility, deadline, regulatory, etc.>
+- The repo is public. Example files use placeholder values only; no holdings, strategies, limits, balances, account details or names.
+- No agent signs in to, calls or tests against Robinhood or any broker. The broker helper in this part offers only `ping`.
+- Money, prices and share counts are decimals end to end and stored in SQLite as text.
+- No test reads the wall clock or sleeps.
+- Migrations are numbered and forward-only from the first commit.
+- New code lives in a Go module at the repo root; `v1/` keeps its own module and stays untouched.
 
 ## Out of scope
 
-- <Explicit non-goal. At least one.>
+- The phone app, identity checks and holdings import (see `phone-app.PLAN.md`).
+- Prices, rules, the back-tester and the setup skill (see `prices-and-rules.PLAN.md`).
+- Orders, the risk check and the stop switch (see `paper-trading.PLAN.md`).
+- The research feed (see `research-feed.PLAN.md`) and live trading (see `live-trading.PLAN.md`).
 
 ## Tasks
 
-### 1. <Task title>
-- **What:** <1-2 sentences describing the concrete change>
-- **Verification:** <executable check — a test to add, a command to run, a user flow to exercise>
+### 1. Go module and repo layout
+- **What:** Create the root Go module with `cmd/sherwood` and `internal/` packages, a `Makefile` with `build`, `test`, `lint` and `vet` targets, and `.gitignore` entries for the real settings files and local databases.
+- **Verification:** `go build ./...` and `go vet ./...` pass at the root and do not include `v1/`; `git check-ignore` matches the real settings file names.
 - **Status:** [ ]
 
-### 2. <Task title>
-- **What:**
-- **Verification:**
+### 2. Decimal money types
+- **What:** Add `Money`, `Price` and `Quantity` types over a decimal library, with SQL scan and value as text, JSON as strings, and the written rounding policy (prices to the cent, whole shares unless fractional is on).
+- **Verification:** Table tests round-trip values through SQLite and JSON exactly; decoding a JSON number fails; a lint rule or test fails if `float32` or `float64` appears in the money packages.
+- **Status:** [ ]
+
+### 3. Clock and exchange calendar
+- **What:** Add a `Clock` interface with real and fake implementations, and an exchange calendar from a holiday table in the repo covering this year and next, with half days, in US Eastern time.
+- **Verification:** Tests check the published holidays and half days for both years, weekends and daylight-saving changes; a check fails if any non-test package outside `clock` calls `time.Now`.
+- **Status:** [ ]
+
+### 4. SQLite store and migrations
+- **What:** Open SQLite in write-ahead mode with a pure-Go driver and one writer, and add a forward-only migration runner that applies numbered SQL files inside a transaction. The first migration creates `schema_migrations`, `job_runs` and `settings_changes`.
+- **Verification:** Tests show a fresh database migrating to the latest version, a broken migration rolling back and returning an error that stops start-up, and a second run applying nothing.
+- **Status:** [ ]
+
+### 5. Settings and strategy files
+- **What:** Load the app settings file and the strategy file, validate the strategy file against a schema (every limit present, known rule types, strategy shares no more than the whole), and compute its hash. Ship `settings.example.yaml` and `strategy.example.yaml` with placeholders.
+- **Verification:** Table tests cover each missing limit, an unknown rule type and over-allocated shares, each refusing with a message naming the problem; the example files validate.
+- **Status:** [ ]
+
+### 6. Masked secrets and the logger
+- **What:** Add a `Secret` type whose text, format and JSON forms are a mask, and a structured JSON logger that writes only named fields from an allowlist.
+- **Verification:** Tests print, format, log and JSON-encode a secret and find only the mask; logging an unlisted field fails the test.
+- **Status:** [ ]
+
+### 7. Scheduler job records
+- **What:** Add the scheduler: jobs keyed by name and trading date, each run recorded with an input hash, run in US Eastern time on trading days, and caught up in order after downtime. Register no trading jobs yet.
+- **Verification:** Fake-clock tests show a job running once per trading day, skipping holidays, catching up missed days in order after a restart, and not running twice for the same date.
+- **Status:** [ ]
+
+### 8. Broker helper scaffold
+- **What:** Add the Python broker helper with a Unix-socket server that speaks one JSON request and reply per call and offers only `ping`, its dependencies locked with hashes, and a Go supervisor and client that start it, restart it and treat silence as an error.
+- **Verification:** `pytest` passes; a Go contract test starts the helper, pings it, kills it and sees the error reported; the lock file installs with `--require-hashes`.
+- **Status:** [ ]
+
+### 9. Container and Compose file
+- **What:** Add a multi-stage Dockerfile (Go build, slim Python runtime, non-root user, base images pinned by digest) and an example Compose file that publishes the web port on `127.0.0.1` only and mounts the application-data folder.
+- **Verification:** `docker build` succeeds; the container starts with the example files and stops with a clear error when a limit is removed.
+- **Status:** [ ]
+
+### 10. CI
+- **What:** Replace the placeholder workflow. Keep the v1 build for Dependabot, and add Go vet, lint, `govulncheck`, race-enabled tests, Python tests, a credential scan and the container build, every action pinned by commit. Extend Dependabot to the root Go module, the helper's Python dependencies and the Dockerfile.
+- **Verification:** The pull request's checks all pass; adding a fake credential-shaped string on a scratch branch makes the scan fail.
+- **Status:** [ ]
+
+### 11. Settings and strategy file reference
+- **What:** Write the wiki reference page for both files: every field, its type, and which ones are required, using placeholder values.
+- **Verification:** Every field in the schema appears on the page; a privacy scan of the page finds nothing personal.
 - **Status:** [ ]
 
 ## Risks / open questions
 
-- <What could go wrong, what we'll do if it does>
-- <Any decision we may need to defer until mid-work>
+- Choosing the decimal and SQLite libraries: a pure-Go SQLite driver avoids cgo in the container. Pick in task 4 and record it in the design's Document History if it changes anything there.
+- The holiday table needs a yearly update. Task 3 adds a test that fails in December when next year is missing, so the update cannot be forgotten.
+- The credential scan can flag placeholders. Keep placeholders obviously fake and allowlist them by path, not by pattern.
 
 ## Verification strategy
 
-<Which deterministic gates apply — typecheck, lint, tests, build, e2e. Any project-specific extras.>
+`make vet lint test` for Go with `-race`, `pytest` for the broker helper, `govulncheck`, the credential scan and `docker build`, all in CI on every pull request. Tasks close only when CI is green on the pull request.
+
+## How to resume
+
+Read this file's task list and find the first task with `Status: [ ]`. Then read the newest entries in `.harness/progress.md`. The next parts' plans are queued in `.harness/designs/sherwood/queued-plans/` in this order: phone-app, prices-and-rules, paper-trading, research-feed, live-trading.
+
+## Locked design calls
+
+These come from the final [Sherwood Design](../wiki/designs/sherwood.md); change them only by amending the design.
+
+- Go for the application; Python only in the broker helper, which alone reads the broker secrets.
+- SQLite with numbered, forward-only migrations from the first commit.
+- Decimal money everywhere, stored as text.
+- An injected clock everywhere; the scheduler is deterministic per trading date.
+- Every order will pass a mandatory risk check, and the AI will never create or send an order; nothing in this part may make either harder.
+- Broker secrets live only in the owner-only settings file on the NAS, never in the repo, the vault, logs or test fixtures.
