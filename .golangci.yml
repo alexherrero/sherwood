@@ -1,0 +1,33 @@
+# golangci-lint v2 configuration for the root module. v1/ is a separate module
+# and is not linted here.
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard # errcheck, govet, ineffassign, staticcheck, unused
+  enable:
+    - bodyclose
+    - errorlint
+    - gosec
+    - misspell
+    - nilerr
+    - revive
+    - unconvert
+  settings:
+    misspell:
+      locale: US
+    revive:
+      rules:
+        - name: exported
+        - name: package-comments
+        - name: var-naming
+  exclusions:
+    presets:
+      - std-error-handling
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
