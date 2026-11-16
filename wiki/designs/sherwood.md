@@ -110,7 +110,7 @@ Every order is a record that moves through clear states, and every change is app
 | `expired` | A day order ended unfilled. |
 | `unknown` | A send or a status check failed and the order's true state is unclear. |
 
-Only the transitions in the state machine are allowed, and an illegal one is an error that halts trading. Protective sells skip `awaiting_approval` and go from `proposed` straight to the risk check.
+Only the transitions in the state machine are allowed, and an illegal one is an error that halts trading. A protective sell is a sell made by a stop-loss or trailing-stop rule to limit the loss on a holding. Protective sells skip `awaiting_approval` and go from `proposed` straight to the risk check. Every other sell, such as a trim or a rule's ordinary exit, waits for your approval as a buy does.
 
 **Each order has an idempotency key built from its strategy, stock, side, signal kind and trading date,** and the database holds a unique constraint on it. Re-running the signal job, restarting the container or replaying a day therefore finds the existing order instead of making a second one. The key is passed to the broker as the client reference wherever the route accepts one.
 
