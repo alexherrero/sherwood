@@ -10,3 +10,5 @@ Append-only log. Newest entries at the bottom. Format: `<YYYY-MM-DD HH:MM> /<pha
 - The session was compacted at this point. To re-anchor on the
   in-flight task, read .harness/PLAN.md and the entries above
   this marker. The compaction summary alone is not enough.
+
+2026-11-15 /design — Sherwood design final; translated into six parts and sequenced. Active plan: foundations (11 tasks) at .harness/PLAN.md. Queued: phone-app, prices-and-rules, paper-trading, research-feed, live-trading. Next: /work task 1.

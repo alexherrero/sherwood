@@ -4,6 +4,6 @@ Sherwood is a small, self-hosted investment tool. It runs on a home NAS, keeps a
 
 ## Designs
 
-- **[Sherwood Design](designs/sherwood)** — is the design for the rewrite. It explains why sherwood is built the way it is: the rules that make every trade, the risk check every order passes through, the approval step for buys, and why the AI never touches the broker. It is final, and the build plan comes next.
+- **[Sherwood Design](designs/sherwood)** — is the design for the rewrite. It explains why sherwood is built the way it is: the rules that make every trade, the risk check every order passes through, the approval step for buys, and why the AI never touches the broker. It is final and is being built in six parts, starting with the foundations.
 
 The original proof-of-concept is archived in [`v1/`](https://github.com/alexherrero/sherwood/tree/main/v1).
