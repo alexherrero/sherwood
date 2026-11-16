@@ -60,7 +60,7 @@ When this plan is done, the container builds and starts on a machine with exampl
 ### 6. Masked secrets and the logger
 - **What:** Add a `Secret` type whose text, format and JSON forms are a mask, and a structured JSON logger that writes only named fields from an allowlist.
 - **Verification:** Tests print, format, log and JSON-encode a secret and find only the mask; logging an unlisted field fails the test.
-- **Status:** [ ]
+- **Status:** [x] Shipped in [#69](https://github.com/alexherrero/sherwood/pull/69) (2026-11-16). `internal/secret` has `Secret`, whose string, format (every verb), JSON, text, YAML and slog forms are all the mask `********`; `Reveal()` is the only way to read it, `Matches` compares in constant time, and unmarshal errors never echo the input. `internal/logging` wraps slog's JSON handler so only keys on one commented allowlist are written; an unlisted key is dropped and named in a `refused_fields` field, and values must be plain (no headers, requests, URLs, byte slices or structs). A guard test keeps credential-like words out of the allowlist. `loggingtest.New(t)` gives every package's tests a logger that fails the test on any refused field. Secrets in settings are declared as `secret.Secret`, so writing settings back out writes the mask unless a writer reveals them deliberately.
 
 ### 7. Scheduler job records
 - **What:** Add the scheduler: jobs keyed by name and trading date, each run recorded with an input hash, run in US Eastern time on trading days, and caught up in order after downtime. Register no trading jobs yet.
