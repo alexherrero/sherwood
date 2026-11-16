@@ -1,0 +1,18 @@
+[project]
+name = "sherwood-brokerhelper"
+version = "0.1.0"
+description = "Sherwood's broker helper: the one process that talks to the broker, over a local Unix socket."
+readme = "README.md"
+requires-python = ">=3.12"
+# Runtime dependencies. The broker library joins this list, pinned to one
+# reviewed version, in a later part. Regenerate requirements.lock after any
+# change here (see README.md).
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src"]
+testpaths = ["tests"]
+addopts = ["-p", "no:cacheprovider"]
