@@ -1,6 +1,13 @@
-# Placeholder CI — replace with the real test pipeline when v2 lands.
-# For now, build + vet on the archived v1 module so Dependabot has a real
-# (compilation-level) gate to wait on before auto-merging.
+# Sherwood's checks. Every job runs on every pull request and on every push to
+# main. The job names are stable on purpose, so any of them can be made a
+# required check in the repository ruleset.
+#
+# Supply-chain rules: every action is pinned by commit, with its version in a
+# comment. Tools fetched outside an action are pinned too: govulncheck by
+# module version (checked against Go's checksum database) and gitleaks by
+# release version and SHA-256. No job talks to a broker, and no job uses the
+# network beyond fetching dependencies; the container smoke test runs with no
+# network at all.
 
 name: CI
 
@@ -14,7 +21,18 @@ concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
+permissions:
+  contents: read
+
+env:
+  # The newest 1.26 patch release, so the standard library carries every fix
+  # govulncheck knows about. go.mod's `go 1.26.0` is the floor, not the pin.
+  GO_VERSION: "1.26.x"
+  PYTHON_VERSION: "3.13"
+
 jobs:
+  # The archived v1 module. The repository ruleset requires this check by name
+  # and Dependabot's auto-merge waits on it, so keep the job and its name.
   build:
     name: Build (v1)
     runs-on: ubuntu-latest
@@ -34,3 +52,213 @@ jobs:
 
       - name: go vet
         run: go vet ./...
+
+  vet:
+    name: Go vet
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: Check the module's checksums
+        run: go mod verify
+
+      - name: go vet
+        run: go vet ./...
+
+  lint:
+    name: Go lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@ba0d7d2ec06a0ea1cb5fa41b2e4a3ab91d21278a # v9.3.0
+        with:
+          # golangci-lint v2, matching .golangci.yml's `version: "2"`.
+          version: v2.15.0
+
+  vulncheck:
+    name: Go vulnerability check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      - name: govulncheck
+        run: go run golang.org/x/vuln/cmd/govulncheck@v1.9.0 ./...
+
+  test:
+    name: Go tests (race)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6.5.0
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+
+      # The broker helper's contract test and the live-mode start-up test run
+      # the real helper with python3; without it they would skip.
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: go test -race
+        run: go test -race ./...
+
+  python:
+    name: Python helper tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: brokerhelper
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - uses: actions/setup-python@ece7cb06caefa5fff74198d8649806c4678c61a1 # v6.3.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install the locked test dependencies
+        run: python -m pip install --require-hashes -r requirements-dev.lock
+
+      - name: pytest
+        run: python -m pytest
+
+  secrets:
+    name: Credential scan
+    runs-on: ubuntu-latest
+    env:
+      GITLEAKS_VERSION: "8.30.1"
+      GITLEAKS_SHA256: "551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb"
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          # The pull-request step below reads the pull request's own commits.
+          fetch-depth: 0
+
+      - name: Install gitleaks
+        working-directory: ${{ runner.temp }}
+        run: |
+          curl -sSfL -o gitleaks.tar.gz \
+            "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
+          echo "${GITLEAKS_SHA256}  gitleaks.tar.gz" | sha256sum --check --strict -
+          tar -xzf gitleaks.tar.gz gitleaks
+          echo "$RUNNER_TEMP" >> "$GITHUB_PATH"
+
+      # Every file in the tree, with .gitleaks.toml's path allowlist.
+      - name: Scan the files
+        run: gitleaks dir . --config .gitleaks.toml --redact --no-banner --verbose
+
+      # A secret committed and then deleted inside a pull request is gone from
+      # the tree but still public in the branch, so scan its commits as well.
+      # Older history is not scanned: it predates this check, and the archived
+      # v1 commits hold test placeholders.
+      - name: Scan the pull request's commits
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          gitleaks git . --config .gitleaks.toml --redact --no-banner --verbose \
+            --log-opts="--no-merges ${BASE_SHA}..${HEAD_SHA}"
+
+  container:
+    name: Container build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+
+      - name: docker build
+        run: docker build --build-arg "VERSION=${GITHUB_SHA::12}" -t sherwood:ci .
+
+      # Start the image the way compose.example.yaml does (read-only, no
+      # capabilities, /tmp as tmpfs) and with no network at all, against the
+      # example files in a scratch /data. It must start cleanly in paper mode,
+      # stop cleanly on SIGTERM, and refuse to start, naming the field, when a
+      # limit is removed.
+      - name: Smoke-test the image
+        run: |
+          set -euo pipefail
+          run=(docker run --network none --read-only --tmpfs /tmp
+               --cap-drop ALL --security-opt no-new-privileges)
+
+          # The image runs as uid 10001, so the scratch folders must be
+          # writable by it.
+          good=$(mktemp -d)
+          cp settings.example.yaml "$good/settings.yaml"
+          cp strategy.example.yaml "$good/strategy.yaml"
+          chmod 0777 "$good"
+
+          echo "::group::Clean start and stop"
+          cid=$("${run[@]}" -d -v "$good:/data" sherwood:ci)
+          started=
+          for _ in $(seq 1 30); do
+            # grep reads all the input (no -q), so pipefail never sees a
+            # broken pipe from docker logs.
+            if docker logs "$cid" 2>&1 | grep 'sherwood started' >/dev/null; then
+              started=yes
+              break
+            fi
+            if [ "$(docker inspect -f '{{.State.Running}}' "$cid")" != true ]; then
+              break
+            fi
+            sleep 1
+          done
+          docker stop --time 20 "$cid" >/dev/null || true
+          code=$(docker wait "$cid")
+          docker logs "$cid"
+          docker rm "$cid" >/dev/null
+          echo "::endgroup::"
+          if [ -z "$started" ]; then
+            echo "::error::The container did not log 'sherwood started'."
+            exit 1
+          fi
+          if [ "$code" != 0 ]; then
+            echo "::error::The container exited $code after SIGTERM, not 0."
+            exit 1
+          fi
+          if [ ! -f "$good/sherwood.db" ]; then
+            echo "::error::The container did not create /data/sherwood.db."
+            exit 1
+          fi
+
+          echo "::group::Refusal when a limit is removed"
+          bad=$(mktemp -d)
+          cp settings.example.yaml "$bad/settings.yaml"
+          grep -v '^  max_stock_share:' strategy.example.yaml > "$bad/strategy.yaml"
+          chmod 0777 "$bad"
+          set +e
+          out=$("${run[@]}" --rm -v "$bad:/data" sherwood:ci 2>&1)
+          code=$?
+          set -e
+          echo "$out"
+          echo "::endgroup::"
+          if [ "$code" != 1 ]; then
+            echo "::error::The container exited $code without max_stock_share, not 1."
+            exit 1
+          fi
+          if ! grep -q 'refusing to start: .*limits.max_stock_share is missing' <<<"$out"; then
+            echo "::error::The refusal did not name limits.max_stock_share."
+            exit 1
+          fi
+          if [ -e "$bad/sherwood.db" ]; then
+            echo "::error::The container created a database before refusing."
+            exit 1
+          fi
+          echo "The image starts, stops and refuses as expected."

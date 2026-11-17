@@ -1,13 +1,37 @@
 version: 2
 updates:
-  # Go (v1 module)
+  # Go: the root module (the application).
+  - package-ecosystem: "gomod"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  # Go: the archived v1 module, a separate module with its own go.mod.
   - package-ecosystem: "gomod"
     directory: "/v1"
     schedule:
       interval: "weekly"
     open-pull-requests-limit: 10
 
-  # GitHub Actions
+  # Python: the broker helper's hash-locked requirements files. The locks are
+  # written by uv through brokerhelper/lock.sh; if a Dependabot update leaves
+  # them inconsistent, regenerate them with lock.sh on the pull request's
+  # branch rather than editing hashes by hand.
+  - package-ecosystem: "pip"
+    directory: "/brokerhelper"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  # The container's base images, pinned by digest in the Dockerfile.
+  - package-ecosystem: "docker"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+
+  # GitHub Actions, pinned by commit in .github/workflows.
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
