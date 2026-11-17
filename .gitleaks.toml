@@ -1,0 +1,30 @@
+# The credential scan's settings. CI runs gitleaks with this file on every
+# push and pull request (see .github/workflows/ci.yml).
+#
+# It uses gitleaks' own rules unchanged. The only addition is a short list of
+# files whose secret-shaped strings are made-up placeholders on purpose:
+# example settings and the tests that prove a secret never leaks. They are
+# allowed by path, never by pattern, so a real-looking value anywhere else
+# still fails the scan. Add a file here only when every secret-shaped string
+# in it is obviously fake, and say why beside it.
+
+title = "sherwood credential scan"
+
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "Placeholder secrets in examples and tests"
+paths = [
+  # The example settings file: replace-me placeholders.
+  '''^settings\.example\.yaml$''',
+  # Settings, start-up, secret and logger tests plant fake values to prove
+  # they never appear in errors or log lines.
+  '''^internal/config/settings_test\.go$''',
+  '''^cmd/sherwood/main_test\.go$''',
+  '''^internal/secret/[^/]+_test\.go$''',
+  '''^internal/logging/([^/]+/)?[^/]+_test\.go$''',
+  # Archived v1 code: a test API key and a setup page's placeholder header.
+  '''^v1/backend/api/middleware_audit_test\.go$''',
+  '''^v1/wiki/Backend-Setup\.md$''',
+]
