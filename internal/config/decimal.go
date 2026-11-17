@@ -8,6 +8,8 @@ import (
 	"strings"
 
 	"go.yaml.in/yaml/v3"
+
+	"github.com/alexherrero/sherwood/internal/money"
 )
 
 // decimalText is the only form a decimal may take in the strategy file: an
@@ -18,9 +20,8 @@ var decimalText = regexp.MustCompile(`^-?[0-9]+(\.[0-9]+)?$`)
 // Decimal is an exact decimal number read from the strategy file, kept as the
 // text that was written. It never passes through a float.
 //
-// It stands in until internal/money lands (foundations task 2); the risk
-// check will read limits as money types then, and this type can be swapped
-// for them without changing the file format.
+// It holds the file's ratios: shares of the portfolio, distances, margins and
+// tolerances. Dollar amounts are read as money.Money instead.
 type Decimal struct {
 	text string
 }
@@ -78,6 +79,29 @@ func (d *Decimal) UnmarshalYAML(node *yaml.Node) error {
 		return fmt.Errorf("line %d: expected a plain decimal number such as 0.05 or 250", node.Line)
 	}
 	d.text = text
+	return nil
+}
+
+// amountText is a dollar amount read from the strategy file: the exact
+// money.Money and the text it was written as, so problems can quote the file.
+type amountText struct {
+	m    money.Money
+	text string
+}
+
+// UnmarshalYAML reads an amount from a YAML scalar, quoted or not, parsing
+// the scalar's text with money.ParseMoney so that it never passes through a
+// float.
+func (a *amountText) UnmarshalYAML(node *yaml.Node) error {
+	text, err := scalarText(node)
+	if err != nil {
+		return err
+	}
+	m, err := money.ParseMoney(text)
+	if err != nil {
+		return fmt.Errorf("line %d: expected a plain decimal number such as 0.05 or 250", node.Line)
+	}
+	a.m, a.text = m, text
 	return nil
 }
 
