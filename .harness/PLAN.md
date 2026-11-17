@@ -5,7 +5,7 @@ parent_part_slug: phone-app
 
 # Plan: Phone app and read-only holdings (from design sherwood)
 
-**Status:** ready (refined 2026-11-16 against foundations as merged)
+**Status:** in progress
 **Created:** 2026-11-15
 **Roadmap item:** part 2 of 6 of [Sherwood Design](../wiki/designs/sherwood.md); part file [phone-app](../wiki/designs/sherwood/parts/phone-app.md)
 **Brief:** Put sherwood on your phone as an installable web app over Tailscale Serve, with identity, anti-forgery and approval-device checks, the Today and Portfolio views and web push. Add the broker helper's login command and read-only holdings and cash calls, and import holdings read-only.
@@ -32,7 +32,7 @@ You can install sherwood on your home screen, see Today and your Portfolio, and 
 ### 1. Web server and the Serve identity check
 - **What:** Add `internal/web`: an HTTP server on `:8080` (the port `compose.example.yaml` reserves) started and stopped by `cmd/sherwood` with the rest of the app. Middleware requires the allowed `Tailscale-User-Login` header, refuses anything else, and checks an anti-forgery token on every POST. Approving a buy and resetting the stop switch can be limited to approval devices, identified by the tailnet address Serve forwards (`X-Forwarded-For`, trusted only because the port is bound to loopback). Change `approval_devices` in `internal/config` to tailnet addresses (100.64.0.0/10 or `fd7a:115c:a1e0::/48`) and update the example file and the settings reference page to match.
 - **Verification:** Tests refuse a missing or wrong login, a POST without a token or with a stale one, a GET that would change state, and an approval-device POST from another address; start-up tests show the server stopping cleanly on SIGTERM.
-- **Status:** [ ]
+- **Status:** [x] Shipped in [#88](https://github.com/alexherrero/sherwood/pull/88) (2026-11-16). `internal/web` serves on `:8080`, started and stopped by `cmd/sherwood` with the rest of the app and shut down cleanly on SIGTERM. Every route, `/health` included, sits behind one guard: security headers on every response (a CSP with no inline script or style, frame denial, `no-store` by default), exactly one `Tailscale-User-Login` header equal to the allowed login, and on every POST an anti-forgery token checked in constant time plus a `Sec-Fetch-Site` check. Views mount with `HandleRead` (GET only) and actions with `HandleChange` (POST only); `web.ApprovalDevicesOnly` limits an action to approval devices, identified by the address Serve forwards. `approval_devices` in the settings file are now tailnet addresses, and a wrong entry is refused without echoing its value. Logs carry the matched route pattern, never the raw path, address or login. The design's wording was amended to match. A later part must decide how the Mac's feed upload passes the login check.
 
 ### 2. Installable app shell
 - **What:** Server-rendered layout built for phones (Go `html/template`, contextual escaping), the app manifest and icon, a little JavaScript, and a service worker that caches only the shell (layout, styles, icon). Navigation between the six views, with the ones not built yet saying so.
