@@ -1,0 +1,68 @@
+# Example strategy file for sherwood.
+#
+# Every value below is a placeholder that shows the shape of the file. None of
+# it is a recommendation or anyone's real portfolio. Your real strategy.yaml is
+# written for your install by the setup skill, lives only on the NAS, and is
+# never committed (it is in .gitignore).
+#
+# Sherwood refuses to start if this file fails validation or if any limit is
+# missing. Shares are fractions of the whole portfolio, so 0.10 means 10%.
+# Amounts are dollars with at most two decimal places.
+
+version: 1
+
+# The risk check's limits. The code has no defaults: every limit must be set
+# here, except max_sector_share, which may be left out to turn the sector
+# limit off.
+limits:
+  max_stock_share: 0.10            # largest share of the portfolio in one stock
+  max_order_value: "100.00"        # largest value of a single order
+  max_orders_per_day: 3            # most orders sent in one trading day
+  daily_loss_limit: "50.00"        # loss since the previous close that stops trading for the day
+  max_holdings: 20                 # most holdings, at most 20
+  max_sector_share: 0.30           # optional: largest share of the portfolio in one sector
+  max_limit_distance: 0.05         # how far a buy's limit price may be from the last close
+  buy_limit_margin: 0.01           # buy limit price is this far above the previous close
+  fractional_shares: false         # trade fractional share counts
+  price_cross_check_tolerance: 0.02  # how far the two price sources may disagree
+  min_paper_weeks: 4               # weeks of paper trading before live mode can be turned on
+
+# Stocks the rules may buy besides those already held. Adding a candidate from
+# the research feed puts it here.
+watchlist:
+  - AAPL
+  - MSFT
+  - KO
+
+# Each strategy is a named set of rules, the stocks it may trade and its share
+# of the portfolio. The shares must add up to no more than 1.
+strategies:
+  - name: example-trend
+    portfolio_share: 0.40
+    stocks: [AAPL, MSFT]
+    rules:
+      - type: moving_average_cross
+        settings:
+          fast_days: 20
+          slow_days: 50
+      - type: trailing_stop
+        settings:
+          distance: 0.10
+      - type: size_fixed_amount
+        settings:
+          amount: "100.00"
+
+  - name: example-pullback
+    portfolio_share: 0.30
+    stocks: [KO]
+    rules:
+      - type: pullback
+        settings:
+          trend_days: 100
+          pullback: 0.05
+      - type: fixed_stop
+        settings:
+          distance: 0.08
+      - type: size_by_risk
+        settings:
+          risk_per_trade: 0.01
