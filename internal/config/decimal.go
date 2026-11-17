@@ -99,7 +99,7 @@ func (a *amountText) UnmarshalYAML(node *yaml.Node) error {
 	}
 	m, err := money.ParseMoney(text)
 	if err != nil {
-		return fmt.Errorf("line %d: expected a plain decimal number such as 100.00", node.Line)
+		return fmt.Errorf("line %d: expected a plain decimal number such as 0.05 or 250", node.Line)
 	}
 	a.m, a.text = m, text
 	return nil

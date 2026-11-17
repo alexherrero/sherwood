@@ -278,7 +278,7 @@ func TestBadValuesAreRefusedByName(t *testing.T) {
 		{"loss limit zero", `daily_loss_limit: "50.00"`, `daily_loss_limit: "0.00"`, "limits.daily_loss_limit is 0.00"},
 		{"loss limit negative zero", `daily_loss_limit: "50.00"`, `daily_loss_limit: -0`, "limits.daily_loss_limit is -0, but it must be greater than 0"},
 		{"loss limit sub-cent unquoted", `daily_loss_limit: "50.00"`, `daily_loss_limit: 0.005`, "limits.daily_loss_limit is 0.005, but an amount has at most 2 decimal places"},
-		{"amount exponent", `max_order_value: "100.00"`, `max_order_value: 1e2`, "expected a plain decimal number"},
+		{"amount exponent", `max_order_value: "100.00"`, `max_order_value: 1e2`, "expected a plain decimal number such as 0.05 or 250"},
 		{"amount word", `max_order_value: "100.00"`, `max_order_value: "a hundred"`, "expected a plain decimal number"},
 		{"amount with dollar sign", `daily_loss_limit: "50.00"`, `daily_loss_limit: "$50"`, "expected a plain decimal number"},
 		{"amount as list", `max_order_value: "100.00"`, `max_order_value: [100]`, "expected a single value"},
