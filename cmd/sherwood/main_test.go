@@ -231,7 +231,7 @@ func TestStartsInPaperModeAndStopsCleanly(t *testing.T) {
 	for _, want := range []string{
 		`"msg":"strategy file loaded"`,
 		`"strategy_hash":"` + strategy.Hash + `"`,
-		`"msg":"database ready","migrations":1`,
+		`"msg":"database ready","migrations":2`,
 		`"msg":"paper mode: the broker helper is not started","mode":"paper"`,
 		`"msg":"web server listening","listen_address":"127.0.0.1:`,
 		`"msg":"request","method":"GET","route":"GET /health","status":200`,
