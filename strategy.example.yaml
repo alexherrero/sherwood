@@ -59,6 +59,7 @@ strategies:
       - type: pullback
         settings:
           trend_days: 100
+          high_days: 20
           pullback: 0.05
       - type: fixed_stop
         settings:
