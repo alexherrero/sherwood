@@ -9,6 +9,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"github.com/alexherrero/sherwood/internal/money"
 )
 
 // validStrategy is a complete, valid strategy file with placeholder values.
@@ -126,6 +128,9 @@ func TestValidStrategyParses(t *testing.T) {
 		if c.got != c.want {
 			t.Errorf("%s = %q, want %q (decimals must keep their written text)", c.name, c.got, c.want)
 		}
+	}
+	if !l.MaxOrderValue.Equal(money.Cents(10000)) || !l.DailyLossLimit.Equal(money.Cents(5000)) {
+		t.Errorf("amounts = %s and %s, want 100.00 and 50.00", l.MaxOrderValue, l.DailyLossLimit)
 	}
 	if l.MaxSectorShare == nil || l.MaxSectorShare.String() != "0.30" {
 		t.Errorf("max_sector_share = %v, want 0.30", l.MaxSectorShare)
@@ -271,6 +276,12 @@ func TestBadValuesAreRefusedByName(t *testing.T) {
 		{"order value negative", `max_order_value: "100.00"`, `max_order_value: "-1"`, "limits.max_order_value is -1, but it must be greater than 0"},
 		{"order value sub-cent", `max_order_value: "100.00"`, `max_order_value: "100.001"`, "limits.max_order_value is 100.001, but an amount has at most 2 decimal places"},
 		{"loss limit zero", `daily_loss_limit: "50.00"`, `daily_loss_limit: "0.00"`, "limits.daily_loss_limit is 0.00"},
+		{"loss limit negative zero", `daily_loss_limit: "50.00"`, `daily_loss_limit: -0`, "limits.daily_loss_limit is -0, but it must be greater than 0"},
+		{"loss limit sub-cent unquoted", `daily_loss_limit: "50.00"`, `daily_loss_limit: 0.005`, "limits.daily_loss_limit is 0.005, but an amount has at most 2 decimal places"},
+		{"amount exponent", `max_order_value: "100.00"`, `max_order_value: 1e2`, "expected a plain decimal number"},
+		{"amount word", `max_order_value: "100.00"`, `max_order_value: "a hundred"`, "expected a plain decimal number"},
+		{"amount with dollar sign", `daily_loss_limit: "50.00"`, `daily_loss_limit: "$50"`, "expected a plain decimal number"},
+		{"amount as list", `max_order_value: "100.00"`, `max_order_value: [100]`, "expected a single value"},
 		{"orders per day zero", "max_orders_per_day: 3", "max_orders_per_day: 0", "limits.max_orders_per_day is 0"},
 		{"holdings over 20", "max_holdings: 20", "max_holdings: 21", "limits.max_holdings is 21, but it must be from 1 to 20"},
 		{"holdings zero", "max_holdings: 20", "max_holdings: 0", "limits.max_holdings is 0"},
@@ -304,6 +315,32 @@ func TestBadValuesAreRefusedByName(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			refuse(t, replaced(t, validStrategy, tc.old, tc.new), tc.want)
 		})
+	}
+}
+
+func TestAmountsAreReadExactlyAsMoney(t *testing.T) {
+	// Unquoted, these would be floats to the YAML library; 0.29 and 100.10
+	// have no exact float form. They must arrive as exact money.
+	doc := replaced(t, validStrategy, `max_order_value: "100.00"`, "max_order_value: 100.10")
+	doc = replaced(t, doc, `daily_loss_limit: "50.00"`, "daily_loss_limit: 0.29")
+	s, err := ParseStrategy([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Limits.MaxOrderValue; !got.Equal(money.Cents(10010)) || got.String() != "100.10" {
+		t.Errorf("max_order_value = %s, want exactly 100.10", got)
+	}
+	if got := s.Limits.DailyLossLimit; !got.Equal(money.Cents(29)) || got.String() != "0.29" {
+		t.Errorf("daily_loss_limit = %s, want exactly 0.29", got)
+	}
+
+	doc = replaced(t, validStrategy, `max_order_value: "100.00"`, "max_order_value: 250")
+	s, err = ParseStrategy([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := s.Limits.MaxOrderValue; !got.Equal(money.Cents(25000)) {
+		t.Errorf("max_order_value = %s, want 250", got)
 	}
 }
 

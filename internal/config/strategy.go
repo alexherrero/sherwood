@@ -8,6 +8,8 @@ import (
 	"os"
 	"regexp"
 	"slices"
+
+	"github.com/alexherrero/sherwood/internal/money"
 )
 
 // StrategyVersion is the only strategy file format version this build reads.
@@ -69,14 +71,16 @@ type Limits struct {
 	// MaxStockShare is the largest share of the portfolio (0 to 1) one stock
 	// may hold after a buy fills.
 	MaxStockShare Decimal
-	// MaxOrderValue is the largest value of a single order, in dollars.
-	MaxOrderValue Decimal
+	// MaxOrderValue is the largest value of a single order, in dollars, at
+	// most two decimal places.
+	MaxOrderValue money.Money
 	// MaxOrdersPerDay is the most orders sent in one trading day, protective
 	// sells aside.
 	MaxOrdersPerDay int
 	// DailyLossLimit is the loss since the previous close, in dollars, at
-	// which all trading stops for the rest of the day.
-	DailyLossLimit Decimal
+	// which all trading stops for the rest of the day, at most two decimal
+	// places.
+	DailyLossLimit money.Money
 	// MaxHoldings is the most holdings after a buy fills, at most 20.
 	MaxHoldings int
 	// MaxSectorShare is the largest share of the portfolio (0 to 1) in one
@@ -124,9 +128,9 @@ type strategyFile struct {
 
 type limitsFile struct {
 	MaxStockShare            *Decimal     `yaml:"max_stock_share"`
-	MaxOrderValue            *Decimal     `yaml:"max_order_value"`
+	MaxOrderValue            *amountText  `yaml:"max_order_value"`
 	MaxOrdersPerDay          *wholeNumber `yaml:"max_orders_per_day"`
-	DailyLossLimit           *Decimal     `yaml:"daily_loss_limit"`
+	DailyLossLimit           *amountText  `yaml:"daily_loss_limit"`
 	MaxHoldings              *wholeNumber `yaml:"max_holdings"`
 	MaxSectorShare           *Decimal     `yaml:"max_sector_share"`
 	MaxLimitDistance         *Decimal     `yaml:"max_limit_distance"`
@@ -218,15 +222,15 @@ func share(p *problems, field string, d Decimal, allowZero, below bool) {
 	}
 }
 
-// amount checks a positive dollar amount with at most two decimal places.
-func amount(p *problems, field string, d Decimal) {
-	if d.Rat().Cmp(ratZero) <= 0 {
-		p.add("%s is %s, but it must be greater than 0", field, d)
-		return
+// amount checks a positive dollar amount with at most two decimal places and
+// returns it. Problems quote the amount as it was written in the file.
+func amount(p *problems, field string, a amountText) money.Money {
+	if !a.m.IsPositive() {
+		p.add("%s is %s, but it must be greater than 0", field, a.text)
+	} else if !a.m.IsCents() {
+		p.add("%s is %s, but an amount has at most 2 decimal places", field, a.text)
 	}
-	if d.Places() > 2 {
-		p.add("%s is %s, but an amount has at most 2 decimal places", field, d)
-	}
+	return a.m
 }
 
 func checkLimits(p *problems, f *limitsFile) Limits {
@@ -242,8 +246,7 @@ func checkLimits(p *problems, f *limitsFile) Limits {
 	if f.MaxOrderValue == nil {
 		missing("max_order_value")
 	} else {
-		l.MaxOrderValue = *f.MaxOrderValue
-		amount(p, "limits.max_order_value", l.MaxOrderValue)
+		l.MaxOrderValue = amount(p, "limits.max_order_value", *f.MaxOrderValue)
 	}
 	if f.MaxOrdersPerDay == nil {
 		missing("max_orders_per_day")
@@ -256,8 +259,7 @@ func checkLimits(p *problems, f *limitsFile) Limits {
 	if f.DailyLossLimit == nil {
 		missing("daily_loss_limit")
 	} else {
-		l.DailyLossLimit = *f.DailyLossLimit
-		amount(p, "limits.daily_loss_limit", l.DailyLossLimit)
+		l.DailyLossLimit = amount(p, "limits.daily_loss_limit", *f.DailyLossLimit)
 	}
 	if f.MaxHoldings == nil {
 		missing("max_holdings")
