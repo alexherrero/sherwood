@@ -5,8 +5,9 @@
 // calendar must cover the year, the settings and strategy files must pass
 // validation, and the database must migrate cleanly. Any failure stops it
 // with a non-zero exit and a message that names the problem and never holds a
-// secret. Once started it runs the scheduler until SIGTERM or SIGINT, then
-// shuts down cleanly.
+// secret. Once started it serves the phone app and runs the scheduler until
+// SIGTERM or SIGINT, then shuts down cleanly: the web server stops first, then
+// the broker helper, then the database closes.
 package main
 
 import (
@@ -16,6 +17,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -28,6 +30,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/logging"
 	"github.com/alexherrero/sherwood/internal/scheduler"
 	"github.com/alexherrero/sherwood/internal/store"
+	"github.com/alexherrero/sherwood/internal/web"
 )
 
 // version is the build's version, set with -ldflags "-X main.version=...".
@@ -40,9 +43,13 @@ const (
 	envSettings     = "SHERWOOD_SETTINGS"
 	envStrategy     = "SHERWOOD_STRATEGY"
 	envBrokerSocket = "SHERWOOD_BROKER_SOCKET"
+	envListen       = "SHERWOOD_LISTEN"
 
 	defaultSettings = "/data/settings.yaml"
 	defaultStrategy = "/data/strategy.yaml"
+	// defaultListen is the web port inside the container. The Compose file
+	// publishes it on the host's loopback address only.
+	defaultListen = ":8080"
 )
 
 // helperCommand starts the broker helper. The image puts brokerhelper/src on
@@ -77,8 +84,8 @@ type env struct {
 	// helperCommand, when set, replaces the package's helperCommand.
 	helperCommand []string
 	// started, when set by a test, is called once start-up has finished and
-	// the scheduler is about to run.
-	started func()
+	// the scheduler is about to run, with the web server's address.
+	started func(webAddr string)
 }
 
 // options are the paths start-up reads.
@@ -86,6 +93,7 @@ type options struct {
 	settingsPath string
 	strategyPath string
 	brokerSocket string
+	listen       string
 }
 
 func parseOptions(e env) (options, error) {
@@ -99,6 +107,8 @@ func parseOptions(e env) (options, error) {
 	fs.StringVar(&o.brokerSocket, "broker-socket",
 		orDefault(e.getenv(envBrokerSocket), filepath.Join(os.TempDir(), "sherwood", "broker.sock")),
 		"Unix socket for the broker helper, live mode only (env "+envBrokerSocket+")")
+	fs.StringVar(&o.listen, "listen", orDefault(e.getenv(envListen), defaultListen),
+		"address the web server listens on (env "+envListen+")")
 	if err := fs.Parse(e.args); err != nil {
 		return options{}, err
 	}
@@ -152,10 +162,11 @@ func run(ctx context.Context, e env) (err error) {
 	}()
 	logger.Info("database ready", "migrations", len(db.Migrated()))
 
-	ctx, cancel := context.WithCancel(ctx)
+	stopping := ctx // done once shutdown is requested
+	ctx, cancel := context.WithCancelCause(ctx)
 	var helpers sync.WaitGroup
 	defer func() {
-		cancel()
+		cancel(nil)
 		helpers.Wait() // the helper is stopped before the database closes
 	}()
 	if settings.Mode == config.ModeLive {
@@ -182,12 +193,42 @@ func run(ctx context.Context, e env) (err error) {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
 
+	srv, err := web.New(web.Config{
+		Login:           settings.TailnetLogin,
+		ApprovalDevices: settings.ApprovalAddrs(),
+		Clock:           e.clock,
+		Logger:          logger,
+	})
+	if err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	ln, err := new(net.ListenConfig).Listen(ctx, "tcp", opts.listen)
+	if err != nil {
+		return fmt.Errorf("refusing to start: web server: %w", err)
+	}
+	webDone := make(chan error, 1)
+	go func() {
+		err := srv.Serve(ctx, ln)
+		if err != nil {
+			cancel(err) // a failed web server stops the scheduler too
+		}
+		webDone <- err
+	}()
+	logger.Info("web server listening", "listen_address", ln.Addr().String())
+
 	logger.Info("sherwood started", "version", version, "mode", mode)
 	if e.started != nil {
-		e.started()
+		e.started(ln.Addr().String())
 	}
 	err = sched.Run(ctx)
-	if errors.Is(err, context.Canceled) && ctx.Err() != nil {
+	cancel(nil)
+	// Serve returns once requests in flight finish, before the helper stops
+	// and the database closes.
+	if werr := <-webDone; werr != nil {
+		logger.Error("web server failed", "error", werr)
+		return werr
+	}
+	if errors.Is(err, context.Canceled) && stopping.Err() != nil {
 		logger.Info("sherwood stopped", "reason", "shutdown requested")
 		return nil
 	}

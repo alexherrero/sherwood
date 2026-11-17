@@ -49,7 +49,7 @@ Every field in the settings file is required. There are no defaults.
 ```yaml
 tailnet_login: you@example.com
 approval_devices:
-  - example-phone
+  - "100.64.0.10"
 feed_token: "replace-me-with-a-long-random-feed-token"
 notifications:
   web_push:
@@ -64,7 +64,7 @@ database_path: /data/sherwood.db
 | Field | Type | Required | Accepted values |
 |---|---|---|---|
 | `tailnet_login` | text | yes | A login with no spaces |
-| `approval_devices` | list of text | yes | At least one device name; no spaces; no repeats |
+| `approval_devices` | list of tailnet addresses | yes | At least one; each an IPv4 address in `100.64.0.0/10` or an IPv6 address in `fd7a:115c:a1e0::/48`; no repeats |
 | `feed_token` | secret text | yes | At least 32 characters |
 | `notifications.web_push.vapid_public_key` | text | yes | Any non-empty value |
 | `notifications.web_push.vapid_private_key` | secret text | yes | Any non-empty value |
@@ -75,18 +75,24 @@ database_path: /data/sherwood.db
 
 ### `tailnet_login`
 
-The one tailnet login sherwood accepts, written exactly as Tailscale Serve reports it. Tailscale Serve adds the caller's login to every request, and sherwood turns away any request from a different login.
+The one tailnet login sherwood accepts, written exactly as Tailscale Serve reports it. Tailscale Serve adds the caller's login to every request, and sherwood turns away any request from a different login, or with no login at all. The match is exact, letter case included.
 
 - `tailnet_login is missing`
 - `tailnet_login must not contain spaces`
 
 ### `approval_devices`
 
-The tailnet devices that may approve a buy and reset the stop switch. Name at least one, usually your phone, using the device name your tailnet shows for it.
+The devices that may approve a buy and reset the stop switch, listed by their tailnet addresses. List at least one, usually your phone. Tailscale Serve tells sherwood the address of the device that is calling but not its name, so sherwood identifies a device by its address.
+
+Find each device's address in your tailnet's machine list, or by running `tailscale ip` on the device. Tailscale gives every device an IPv4 address between `100.64.0.0` and `100.127.255.255`, and an IPv6 address starting `fd7a:115c:a1e0:`; either one works. Put quotes around an IPv6 address. Write the address on its own, with no port, range or interface name. Two spellings of the same address count as a repeat.
+
+Every other action, and every page, is open to any of your devices signed in with your tailnet login.
 
 - `approval_devices is missing or empty; name at least one device, such as your phone`
-- `approval_devices[0] must be a device name with no spaces`
-- `approval_devices lists "example-phone" more than once`
+- `approval_devices[0] must be a device's tailnet address, an IPv4 address in 100.64.0.0/10 or an IPv6 address in fd7a:115c:a1e0::/48`
+- `approval_devices lists "100.64.0.10" more than once`
+
+The message for a wrong entry does not repeat what you wrote, in case it was a secret pasted into the wrong field.
 
 ### `feed_token`
 

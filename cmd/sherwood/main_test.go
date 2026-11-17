@@ -4,8 +4,11 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
+	"net"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -149,7 +152,7 @@ func (w *watchWriter) wait(t *testing.T, s string) {
 
 func testEnv(f files, out io.Writer, clk clock.Clock) env {
 	return env{
-		args:   []string{"-settings", f.settings, "-strategy", f.strategy},
+		args:   []string{"-settings", f.settings, "-strategy", f.strategy, "-listen", "127.0.0.1:0"},
 		getenv: func(string) string { return "" },
 		stdout: out,
 		stderr: io.Discard,
@@ -157,8 +160,12 @@ func testEnv(f files, out io.Writer, clk clock.Clock) env {
 	}
 }
 
+// exampleLogin is the tailnet login in settings.example.yaml.
+const exampleLogin = "you@example.com"
+
 // startAndStop runs sherwood until it reports started, then cancels it the
-// way SIGTERM does, and returns run's error and the log.
+// way SIGTERM does, and returns run's error and the log. While it runs, it
+// checks the web server answers the allowed login and refuses anyone else.
 func startAndStop(t *testing.T, e env) (string, error) {
 	t.Helper()
 	var out bytes.Buffer
@@ -167,9 +174,46 @@ func startAndStop(t *testing.T, e env) (string, error) {
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	e.started = cancel
+	var addr string
+	e.started = func(webAddr string) {
+		addr = webAddr
+		if got := getHealth(t, webAddr, exampleLogin); got != http.StatusOK {
+			t.Errorf("GET /health with the allowed login = %d", got)
+		}
+		if got := getHealth(t, webAddr, ""); got != http.StatusForbidden {
+			t.Errorf("GET /health without a login = %d", got)
+		}
+		cancel()
+	}
 	err := run(ctx, e)
+	if addr != "" {
+		if c, derr := net.Dial("tcp", addr); derr == nil {
+			_ = c.Close()
+			t.Error("the web port still accepts connections after shutdown")
+		}
+	}
 	return e.stdout.(interface{ String() string }).String(), err
+}
+
+// getHealth asks the web server at addr for its health page as login ("" for
+// none) and returns the status.
+func getHealth(t *testing.T, addr, login string) int {
+	t.Helper()
+	r, err := http.NewRequestWithContext(context.Background(), http.MethodGet, "http://"+addr+"/health", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if login != "" {
+		r.Header.Set("Tailscale-User-Login", login)
+	}
+	resp, err := http.DefaultClient.Do(r)
+	if err != nil {
+		t.Errorf("GET /health: %v", err)
+		return 0
+	}
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
+	return resp.StatusCode
 }
 
 func TestStartsInPaperModeAndStopsCleanly(t *testing.T) {
@@ -189,6 +233,9 @@ func TestStartsInPaperModeAndStopsCleanly(t *testing.T) {
 		`"strategy_hash":"` + strategy.Hash + `"`,
 		`"msg":"database ready","migrations":1`,
 		`"msg":"paper mode: the broker helper is not started","mode":"paper"`,
+		`"msg":"web server listening","listen_address":"127.0.0.1:`,
+		`"msg":"request","method":"GET","route":"GET /health","status":200`,
+		`"msg":"request refused","method":"GET","route":"GET /health","status":403`,
 		`"msg":"sherwood started","version":"dev","mode":"paper"`,
 		`"msg":"sherwood stopped","reason":"shutdown requested"`,
 	} {
@@ -328,7 +375,7 @@ func TestPathsComeFromTheEnvironment(t *testing.T) {
 	e := testEnv(f, nil, clock.NewFake(covered))
 	e.args = nil
 	e.getenv = func(k string) string {
-		return map[string]string{envSettings: f.settings, envStrategy: f.strategy}[k]
+		return map[string]string{envSettings: f.settings, envStrategy: f.strategy, envListen: "127.0.0.1:0"}[k]
 	}
 	if log, err := startAndStop(t, e); err != nil {
 		t.Fatalf("run: %v\n%s", err, log)
@@ -340,11 +387,29 @@ func TestDefaultPathsAreInTheDataFolder(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if o.settingsPath != "/data/settings.yaml" || o.strategyPath != "/data/strategy.yaml" {
-		t.Errorf("defaults = %q, %q", o.settingsPath, o.strategyPath)
+	if o.settingsPath != "/data/settings.yaml" || o.strategyPath != "/data/strategy.yaml" || o.listen != ":8080" {
+		t.Errorf("defaults = %q, %q, %q", o.settingsPath, o.strategyPath, o.listen)
 	}
 	if _, err := parseOptions(env{args: []string{"stray"}, getenv: func(string) string { return "" }, stderr: io.Discard}); err == nil {
 		t.Error("a stray argument was accepted")
+	}
+}
+
+func TestRefusesToStartWhenTheWebPortIsTaken(t *testing.T) {
+	taken, err := net.Listen("tcp", "127.0.0.1:0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = taken.Close() }()
+	f := writeExamples(t, nil, nil)
+	e := testEnv(f, nil, clock.NewFake(covered))
+	e.args = append(e.args, "-listen", taken.Addr().String())
+	log, err := startAndStop(t, e)
+	if err == nil || !strings.Contains(err.Error(), "refusing to start: web server") {
+		t.Fatalf("run = %v, want a refusal naming the web server", err)
+	}
+	if strings.Contains(log, "sherwood started") {
+		t.Error("it started anyway")
 	}
 }
 
@@ -399,7 +464,7 @@ func TestBinary(t *testing.T) {
 
 	t.Run("starts and stops on SIGTERM", func(t *testing.T) {
 		f := writeExamples(t, nil, nil)
-		cmd := exec.Command(bin, "-settings", f.settings, "-strategy", f.strategy) //nolint:gosec // the binary this test just built
+		cmd := exec.Command(bin, "-settings", f.settings, "-strategy", f.strategy, "-listen", "127.0.0.1:0") //nolint:gosec // the binary this test just built
 		stdout, err := cmd.StdoutPipe()
 		if err != nil {
 			t.Fatal(err)
@@ -411,11 +476,25 @@ func TestBinary(t *testing.T) {
 		}
 		lines := bufio.NewScanner(stdout)
 		var log strings.Builder
+		var addr string
 		for lines.Scan() {
 			log.WriteString(lines.Text() + "\n")
+			var line struct {
+				Msg           string `json:"msg"`
+				ListenAddress string `json:"listen_address"`
+			}
+			if json.Unmarshal(lines.Bytes(), &line) == nil && line.Msg == "web server listening" {
+				addr = line.ListenAddress
+			}
 			if strings.Contains(lines.Text(), "sherwood started") {
 				break
 			}
+		}
+		if addr == "" {
+			t.Fatalf("no web server address logged:\n%s", log.String())
+		}
+		if got := getHealth(t, addr, exampleLogin); got != http.StatusOK {
+			t.Errorf("GET /health = %d", got)
 		}
 		if err := cmd.Process.Signal(syscall.SIGTERM); err != nil {
 			t.Fatal(err)
@@ -428,6 +507,10 @@ func TestBinary(t *testing.T) {
 		}
 		if !strings.Contains(log.String(), "sherwood stopped") {
 			t.Errorf("no clean stop logged:\n%s", log.String())
+		}
+		if c, err := net.Dial("tcp", addr); err == nil {
+			_ = c.Close()
+			t.Error("the web port still accepts connections after exit")
 		}
 	})
 

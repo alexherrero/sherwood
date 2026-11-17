@@ -40,8 +40,10 @@ services:
       - /mnt/user/appdata/sherwood:/data
 
     # The web port, published on the host's loopback address only, so Tailscale
-    # Serve on the host is the one way in. Never publish it on 0.0.0.0. No web
-    # server listens yet: this reserves the port for the part that adds one.
+    # Serve on the host is the one way in. Never publish it on 0.0.0.0: sherwood
+    # trusts the login and device address Serve adds to each request only
+    # because nothing else can reach this port, and it cannot check that from
+    # inside the container. Point Serve at http://127.0.0.1:8080.
     ports:
       - "127.0.0.1:8080:8080"
 

@@ -57,6 +57,9 @@ var allowedKeys = []string{
 	"method", // HTTP method
 	"route",  // the matched route pattern, not the raw path
 	"status", // HTTP status code
+	// The address the web server listens on, such as ":8080". It is the
+	// server's own address, never a caller's.
+	"listen_address",
 }
 
 // allowed is allowedKeys as a set.
