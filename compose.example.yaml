@@ -1,0 +1,48 @@
+# Example Docker Compose file for sherwood.
+#
+# Copy it to compose.yaml beside a checkout of this repo, change the data
+# folder path to your own, and run `docker compose up -d --build`.
+#
+# The application-data folder holds everything that belongs to your install
+# and nothing in the image does:
+#   settings.yaml   the app settings (start from settings.example.yaml)
+#   strategy.yaml   your strategies and limits (start from strategy.example.yaml)
+#   sherwood.db     the SQLite database, created on first start
+# Keep settings.yaml readable by its owner only. Sherwood refuses to start,
+# naming the problem, if either file is missing or fails validation.
+
+services:
+  sherwood:
+    build:
+      context: .
+    image: sherwood:local
+    container_name: sherwood
+    restart: unless-stopped
+
+    # The image runs as user 10001. Either make the data folder writable by
+    # that user, or set this to the folder's owner (for example "99:100",
+    # nobody:users, on Unraid).
+    # user: "99:100"
+
+    # A small init process as PID 1 passes on stop signals and reaps children.
+    init: true
+    read_only: true
+    tmpfs:
+      - /tmp # the broker helper's socket, in live mode
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+
+    volumes:
+      # Host folder : container folder. /data is where sherwood looks by
+      # default; settings.yaml's data_dir and database_path must point inside it.
+      - /mnt/user/appdata/sherwood:/data
+
+    # The web port, published on the host's loopback address only, so Tailscale
+    # Serve on the host is the one way in. Never publish it on 0.0.0.0. No web
+    # server listens yet: this reserves the port for the part that adds one.
+    ports:
+      - "127.0.0.1:8080:8080"
+
+    stop_grace_period: 30s

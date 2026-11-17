@@ -1,0 +1,29 @@
+# The Dockerfile copies only what it names, and this list keeps everything
+# else, above all real settings and databases, out of the build context.
+
+# Archived v1 code, repo tooling, docs and plans.
+v1/
+.git
+.github
+.harness
+.claude
+wiki
+docs
+
+# Real settings, strategy and broker files, wherever they sit, and their
+# examples (the image needs none of them).
+**/settings.yaml
+**/strategy.yaml
+**/broker.yaml
+**/*.example.yaml
+
+# Databases and their write-ahead files.
+**/*.db
+**/*-wal
+**/*-shm
+
+# Python and build leftovers.
+**/__pycache__
+**/.pytest_cache
+**/.venv
+bin/
