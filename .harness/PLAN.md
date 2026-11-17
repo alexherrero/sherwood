@@ -85,7 +85,7 @@ When this plan is done, the container builds and starts on a machine with exampl
 ### 11. Settings and strategy file reference
 - **What:** Write the wiki reference page for both files: every field, its type, and which ones are required, using placeholder values.
 - **Verification:** Every field in the schema appears on the page; a privacy scan of the page finds nothing personal.
-- **Status:** [ ]
+- **Status:** [x] Shipped in [#79](https://github.com/alexherrero/sherwood/pull/79) (2026-11-16). `wiki/reference/settings-and-strategy-files.md`, linked from a new Reference section in `wiki/Home.md`, covers every field of both files with its type, whether it is required, its accepted range and the exact error text, captured by running the real parser. It also explains where the files live, that limits have no defaults, that the strategy file's hash marks every signal so even a comment makes a new version, and that a tightening from the phone is recorded while a loosening is a file edit and a restart. A script found all 40 schema names on the page, and a privacy scan found nothing personal. Per-rule settings are left to the rule library reference in prices-and-rules. A follow-up, [#81](https://github.com/alexherrero/sherwood/pull/81), moved the two dollar limits (`max_order_value`, `daily_loss_limit`) onto `money.Money` without changing the file format or any error text; the ratio limits stay on `config.Decimal`.
 
 ## Risks / open questions
 
