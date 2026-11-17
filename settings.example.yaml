@@ -26,6 +26,13 @@ notifications:
     vapid_private_key: "replace-me-with-the-vapid-private-key"
     contact: "mailto:you@example.com"
 
+# Keys for the two free end-of-day price sources: Tiingo (the primary) and
+# Stooq (the cross-check). Both are free; get your own from each site. Without
+# them every day's prices are missing and sherwood makes no signals.
+prices:
+  tiingo_token: "replace-me-with-your-tiingo-token"
+  stooq_api_key: "replace-me-with-your-stooq-key"
+
 # paper or live. Sherwood starts in paper mode.
 mode: paper
 

@@ -35,6 +35,9 @@ var allowedKeys = []string{
 	"state",         // order state after a change
 	"from_state",    // order state before a change
 
+	// Prices.
+	"price_source", // price source name, such as tiingo or stooq
+
 	// Halts, resets and mode.
 	"mode",          // paper or live
 	"halt_cause",    // why trading halted

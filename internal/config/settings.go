@@ -39,6 +39,8 @@ type Settings struct {
 	FeedToken secret.Secret `yaml:"feed_token"`
 	// Notifications holds the notification channels' keys.
 	Notifications Notifications `yaml:"notifications"`
+	// Prices holds the price sources' keys.
+	Prices PriceKeys `yaml:"prices"`
 	// Mode is paper or live.
 	Mode Mode `yaml:"mode"`
 	// DataDir is the application-data folder.
@@ -59,6 +61,16 @@ type WebPush struct {
 	// Contact is the mailto: or https: address push services may use to
 	// reach the sender.
 	Contact string `yaml:"contact"`
+}
+
+// PriceKeys holds the keys for the two free end-of-day price sources. Both
+// may be left out when the file loads, but without them every trading day's
+// prices are missing and sherwood makes no signals.
+type PriceKeys struct {
+	// TiingoToken is the primary source's API token.
+	TiingoToken secret.Secret `yaml:"tiingo_token"`
+	// StooqAPIKey is the cross-check source's API key.
+	StooqAPIKey secret.Secret `yaml:"stooq_api_key"`
 }
 
 // LoadSettings reads and validates the app settings file at path.
