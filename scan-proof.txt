@@ -1,0 +1,3 @@
+This file exists only on a scratch branch, to prove the credential scan fails.
+The value below is made up for this test and was never a real credential.
+service_api_key = "Zq2Xr9Lm4Tb7Vn1Kc6Wd3Hy5Pj0GsQ8"
