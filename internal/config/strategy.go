@@ -19,8 +19,10 @@ const StrategyVersion = 1
 // max_holdings may be lower, never higher.
 const MaxHoldings = 20
 
-// Rule type names. The rule library itself arrives in a later part; until
-// then this list is the registry the strategy file is checked against.
+// Rule type names: the one list the strategy file is checked against. The
+// rule library in internal/rules gives each name its implementation; it reads
+// config's types, so it cannot be imported here, and a test there fails if
+// the two lists disagree.
 const (
 	RuleMovingAverageCross = "moving_average_cross"
 	RuleBreakout           = "breakout"
