@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/netip"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,7 +21,7 @@ const (
 )
 
 var validSettings = `tailnet_login: you@example.com
-approval_devices: [example-phone]
+approval_devices: ["100.64.0.1"]
 feed_token: "` + planted + `"
 notifications:
   web_push:
@@ -67,8 +68,11 @@ func TestValidSettingsParse(t *testing.T) {
 		s.DataDir != "/data" || s.DatabasePath != "/data/sherwood.db" {
 		t.Errorf("settings = %+v", s)
 	}
-	if len(s.ApprovalDevices) != 1 || s.ApprovalDevices[0] != "example-phone" {
+	if len(s.ApprovalDevices) != 1 || s.ApprovalDevices[0] != "100.64.0.1" {
 		t.Errorf("approval_devices = %v", s.ApprovalDevices)
+	}
+	if a := s.ApprovalAddrs(); len(a) != 1 || a[0] != netip.MustParseAddr("100.64.0.1") {
+		t.Errorf("ApprovalAddrs = %v", a)
 	}
 	if !s.FeedToken.Matches(planted) || s.FeedToken.Matches("other") {
 		t.Error("feed token not read as a secret")
@@ -116,6 +120,46 @@ func TestEachMissingSettingIsRefusedByName(t *testing.T) {
 	}
 }
 
+// devices is the approval_devices line in validSettings.
+const devices = `approval_devices: ["100.64.0.1"]`
+
+func TestApprovalDevicesMustBeTailnetAddresses(t *testing.T) {
+	good := []string{"100.64.0.1", "100.127.255.254", "100.100.100.100", "fd7a:115c:a1e0::1", "fd7a:115c:a1e0:ab12:4843:cd96:6258:b240"}
+	for _, d := range good {
+		s, err := ParseSettings([]byte(replaced(t, validSettings, devices, `approval_devices: ["`+d+`"]`)))
+		if err != nil {
+			t.Errorf("%s refused: %v", d, err)
+			continue
+		}
+		if a := s.ApprovalAddrs(); len(a) != 1 || a[0] != netip.MustParseAddr(d) {
+			t.Errorf("%s parsed as %v", d, a)
+		}
+	}
+	bad := []string{
+		"example-phone",          // a device name, the old form
+		"100.63.255.255",         // just below the tailnet range
+		"100.128.0.1",            // just above it
+		"192.0.2.10",             // a documentation address
+		"127.0.0.1",              // loopback
+		"::ffff:100.64.0.1",      // IPv4-mapped IPv6
+		"fd7a:115c:a1e1::1",      // just outside Tailscale's IPv6 prefix
+		"2001:db8::1",            // a documentation IPv6 address
+		"fd7a:115c:a1e0::1%eth0", // zoned
+		"100.64.0.1:443",         // with a port
+		"100.64.0.0/10",          // a range, not an address
+		" 100.64.0.1",            // padded
+	}
+	for _, d := range bad {
+		doc := replaced(t, validSettings, devices, fmt.Sprintf("approval_devices: [\"100.64.0.2\", %q]", d))
+		refuseSettings(t, doc, "approval_devices[1] must be a device's tailnet address",
+			"100.64.0.0/10", "fd7a:115c:a1e0::/48")
+	}
+
+	// A secret pasted into the list is not repeated in the refusal.
+	refuseSettings(t, replaced(t, validSettings, devices, `approval_devices: ["`+planted+`"]`),
+		"approval_devices[0] must be a device's tailnet address")
+}
+
 func TestBadSettingsAreRefusedByName(t *testing.T) {
 	tests := []struct{ name, old, new, want string }{
 		{"short feed token", planted, "short", "feed_token is too short"},
@@ -124,9 +168,10 @@ func TestBadSettingsAreRefusedByName(t *testing.T) {
 		{"relative data dir", "data_dir: /data", "data_dir: data", `data_dir is "data", but it must be an absolute path`},
 		{"relative db", "database_path: /data/sherwood.db", "database_path: sherwood.db", "database_path is \"sherwood.db\""},
 		{"login with space", "tailnet_login: you@example.com", "tailnet_login: you example", "tailnet_login must not contain spaces"},
-		{"empty device list", "approval_devices: [example-phone]", "approval_devices: []", "approval_devices is missing or empty"},
-		{"repeated device", "approval_devices: [example-phone]", "approval_devices: [example-phone, example-phone]", `approval_devices lists "example-phone" more than once`},
-		{"blank device", "approval_devices: [example-phone]", `approval_devices: [""]`, "approval_devices[0] must be a device name"},
+		{"empty device list", devices, "approval_devices: []", "approval_devices is missing or empty"},
+		{"repeated device", devices, `approval_devices: ["100.64.0.1", "100.64.0.1"]`, `approval_devices lists "100.64.0.1" more than once`},
+		{"repeated device spelled two ways", devices, `approval_devices: ["fd7a:115c:a1e0::1", "fd7a:115c:a1e0:0::1"]`, `approval_devices lists "fd7a:115c:a1e0::1" more than once`},
+		{"blank device", devices, `approval_devices: [""]`, "approval_devices[0] must be a device's tailnet address"},
 		{"contact scheme", `contact: "mailto:you@example.com"`, `contact: "you@example.com"`, "contact must start with mailto: or https://"},
 		{"unknown field", "mode: paper", "mode: paper\nbroker_password: x", "field broker_password not found"},
 		{"secret as list", `feed_token: "` + planted + `"`, `feed_token: ["` + planted + `"]`, "secret: value must be a string"},
@@ -141,7 +186,7 @@ func TestBadSettingsAreRefusedByName(t *testing.T) {
 func TestSettingsErrorsNeverRepeatAValue(t *testing.T) {
 	// A secret pasted into the wrong field makes the YAML library build a
 	// type error that quotes the value; the error must not carry it.
-	doc := replaced(t, validSettings, "approval_devices: [example-phone]", "approval_devices: "+planted)
+	doc := replaced(t, validSettings, devices, "approval_devices: "+planted)
 	refuseSettings(t, doc, "line 2", "(value hidden)")
 
 	doc = replaced(t, validSettings, "    contact: \"mailto:you@example.com\"", "    contact:\n      - "+planted)

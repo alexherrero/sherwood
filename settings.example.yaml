@@ -8,9 +8,12 @@
 # The one tailnet login sherwood accepts, as Tailscale Serve reports it.
 tailnet_login: you@example.com
 
-# Tailnet devices allowed to approve buys and reset the stop switch.
+# The devices allowed to approve buys and reset the stop switch, by their
+# tailnet address (Tailscale Serve passes on the caller's address, not a device
+# name). Use each device's 100.x.y.z or fd7a:115c:a1e0:... address from your
+# tailnet's machine list; quote IPv6 addresses.
 approval_devices:
-  - example-phone
+  - "100.64.0.10"
 
 # Lets the research job read the export and upload a feed, and nothing else.
 # Replace it with at least 32 random characters.
