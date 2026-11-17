@@ -1,0 +1,31 @@
+# Example app settings file for sherwood.
+#
+# Every value below is a fake placeholder. Your real settings.yaml lives only
+# in the NAS's application-data folder, readable by its owner alone, and is
+# never committed (it is in .gitignore). Broker logins do not go here: the
+# broker helper keeps its own file.
+
+# The one tailnet login sherwood accepts, as Tailscale Serve reports it.
+tailnet_login: you@example.com
+
+# Tailnet devices allowed to approve buys and reset the stop switch.
+approval_devices:
+  - example-phone
+
+# Lets the research job read the export and upload a feed, and nothing else.
+# Replace it with at least 32 random characters.
+feed_token: "replace-me-with-a-long-random-feed-token"
+
+notifications:
+  web_push:
+    # The VAPID key pair for web push. Generate your own; these are not keys.
+    vapid_public_key: "replace-me-with-the-vapid-public-key"
+    vapid_private_key: "replace-me-with-the-vapid-private-key"
+    contact: "mailto:you@example.com"
+
+# paper or live. Sherwood starts in paper mode.
+mode: paper
+
+# The application-data folder inside the container, and the database file.
+data_dir: /data
+database_path: /data/sherwood.db
