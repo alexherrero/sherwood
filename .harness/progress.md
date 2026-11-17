@@ -17,3 +17,4 @@ Append-only log. Newest entries at the bottom. Format: `<YYYY-MM-DD HH:MM> /<pha
 2026-11-16 /work — foundations task 6 (masked secrets and the logger) merged as #69. Task 3 is open; tasks 2 (money) and 5 (settings files) are ready to start.
 2026-11-16 /work — foundations task 3 (clock and exchange calendar) merged as #71. Wave 2 is complete. Ready: tasks 2 (money), 5 (settings files) and 7 (scheduler).
 2026-11-16 /work — foundations task 7 (scheduler) merged as #73 and task 5 (settings and strategy files) merged as #74. Task 2 (money) is open; tasks 9 (container and start-up) and 11 (reference page) are ready.
+2026-11-16 /work — foundations task 2 (money types) merged as #76 and task 9 (container, Compose and start-up wiring) merged as #77. Task 11 (reference page) is open; task 10 (CI, including the first real docker build) is ready, with a small follow-up to move config's dollar limits onto money.Money.
