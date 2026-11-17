@@ -5,7 +5,7 @@ parent_part_slug: prices-and-rules
 
 # Plan: Prices, rules and the setup skill (from design sherwood)
 
-**Status:** draft
+**Status:** ready (refined 2026-11-16 against foundations as merged)
 **Created:** 2026-11-15
 **Roadmap item:** part 3 of 6 of [Sherwood Design](../../../../wiki/designs/sherwood.md); part file [prices-and-rules](../../../../wiki/designs/sherwood/parts/prices-and-rules.md)
 **Brief:** Fetch free end-of-day prices with a cross-check, build the rule library and the rule runner that turns prices into signals, schedule the 16:30 ET job, build the back-tester, and write the setup skill that generates a strategy file on the Mac.
@@ -20,6 +20,9 @@ After each trading day's close, sherwood records prices and signals with plain r
 - No agent signs in to, calls or tests against Robinhood or any broker, and no agent places, simulates against a live account, or scripts a trade. Broker tests use fakes; any check that needs the real account is run by the operator.
 - Decimals for money, an injected clock, no sleeping in tests, migrations numbered and forward-only.
 - Rules are pure functions of prices, holdings, the strategy file and the trading date.
+- No test reaches a price source over the network; recorded-shape fixtures use made-up values.
+- This plan runs alongside phone-app. Only one session at a time, across both plans, may add a migration; the coordinator names its number in the brief, because the runner refuses gaps and repeats.
+- `cmd/sherwood/main.go`, `internal/logging/allowlist.go` and `go.mod` are shared with phone-app: keep edits there small and rebase (never back-merge) when `main` moves.
 
 ## Out of scope
 
@@ -28,53 +31,62 @@ After each trading day's close, sherwood records prices and signals with plain r
 ## Tasks
 
 ### 1. Price sources and cross-check
-- **What:** A price-source interface, a primary and a cross-check free end-of-day source, a bars table, and fail-closed handling of gaps and disagreements.
-- **Verification:** Tests with fake sources show no signals on a missing day and none for a stock whose sources disagree.
+- **What:** Add `internal/prices`: a price-source interface returning split-adjusted daily bars (open, high, low, close as `money.Price`, volume), a primary and a cross-check free end-of-day source (keyless or free-key, chosen on their terms and limits, recorded in the design's Document History), a fake for tests, a migration for a bars table, and fail-closed handling: a missing day gives no bars for anyone that day, and a held or watched stock whose sources disagree beyond `price_cross_check_tolerance` is marked so it gets no signals, with a held stock flagged for a halt.
+- **Verification:** Tests with fake sources show nothing stored as usable on a missing day, a disagreeing stock excluded and flagged, and parsing of each source's recorded response shape (fixtures hand-written with made-up values).
 - **Status:** [ ]
 
 ### 2. Rule library
-- **What:** Moving-average cross, breakout, momentum ranking, pullback, fixed stop, trailing stop and sizing rules, each with a mechanical reason.
-- **Verification:** Table tests per rule cover signal and no-change days.
+- **What:** Add `internal/rules`: moving-average cross, breakout, momentum ranking, pullback, fixed stop, trailing stop, and sizing by fixed amount and by risk, each a pure function with its own settings schema parsed from the strategy file's `config.Scalar` text, each outcome (buy, add, trim or sell, no change) carrying a short mechanical reason. Maths on `Decimal()` with an explicit precision, back through `money.RoundPrice` and the `QuantityPolicy`. The rule registry here and `config`'s known rule types must agree, checked by a test.
+- **Verification:** Table tests per rule cover signal and no-change days and bad settings; the registry test fails when a name is added to one side only.
 - **Status:** [ ]
 
 ### 3. Rule runner and signals
-- **What:** Run each strategy's rules for the day, record signals with reasons, the strategy hash and their idempotency keys, and the hold, add or trim suggestion per holding.
-- **Verification:** Two runs on the same inputs give identical signals and keys.
+- **What:** Run each strategy's rules for one trading date, recording signals with their reasons, the strategy file's hash and their idempotency keys (strategy, stock, side, signal kind, trading date) under a unique constraint (a migration), and the hold, add or trim suggestion per holding.
+- **Verification:** Two runs on the same inputs give identical signals and keys and a single row each; an excluded stock (task 1) gets no signal.
 - **Status:** [ ]
 
 ### 4. The 16:30 ET job
-- **What:** Register the after-close job: fetch, cross-check, value the portfolio, run rules.
-- **Verification:** Fake-clock tests run it once per trading day and catch up after downtime.
+- **What:** Register the after-close job with the scheduler in `cmd/sherwood`: fetch and cross-check the day's bars, value the portfolio from the holdings and cash tables (phone-app task 3), run the rules, and record everything under the run's input hash. Publishing the research export is left to research-feed.
+- **Verification:** Fake-clock tests run it once per trading day, skip holidays, catch up after downtime with each run using its own date's bars, and produce no signals on a missing day.
 - **Status:** [ ]
 
-### 5. Back-tester
-- **What:** Replay past bars through the same rule functions with the paper fill model, and report return, drawdown, win rate and turnover.
-- **Verification:** The same inputs give the same report on every run.
+### 5. Paper fill model and back-tester
+- **What:** Add the paper fill model as a pure function (a buy fills at the next open if the open is at or below its limit, otherwise at the limit if the day traded through it; a stop fills when the low reaches it, at the stop or at the open if it opened below), so paper-trading's paper broker reuses it. Then the back-tester: replay past bars through the same rule functions and fill model, and report return, drawdown, win rate and turnover per strategy, as a `sherwood backtest` subcommand.
+- **Verification:** Table tests for every fill case; the same inputs give the same report on every run.
 - **Status:** [ ]
 
 ### 6. Setup skill
-- **What:** A skill in the repo that interviews you on the Mac, writes a strategy file from the rule library, validates it and back-tests it.
-- **Verification:** Its output passes validation; its examples use placeholders only.
+- **What:** A skill in the repo that interviews you on the Mac (goals, amount, loss tolerance, sectors), writes a strategy file from the rule library, validates it with the real loader, and back-tests it. It never sees the broker login and never talks to the NAS, and says plainly that its output is not financial advice.
+- **Verification:** Its output passes validation; its examples use placeholders only; a privacy scan of the skill finds nothing personal.
 - **Status:** [ ]
 
 ### 7. Rule library reference and setup how-to
-- **What:** Wiki reference for every rule type and a how-to for the setup skill.
-- **Verification:** Every rule type in code appears on the reference page.
+- **What:** Wiki reference for every rule type and its settings, and a how-to for the setup skill.
+- **Verification:** Every rule type in code appears on the reference page, checked by a script.
 - **Status:** [ ]
+
+## Order and parallelism
+
+Tasks 1 and 2 can run together (only 1 adds a migration). Then 3 (after 1 and 2; adds a migration) and 5 (after 2). Task 4 waits for 3 and for phone-app task 3 (holdings tables). Then 6 (after 5), and 7 last.
 
 ## Risks / open questions
 
-- Choosing the two free price sources: their terms and limits decide the pick; record it in the design's Document History.
-- Splits: a share-count change at the broker halts trading until confirmed; the rule side uses split-adjusted bars.
+- Free sources change terms and have gaps; the cross-check and fail-closed handling contain the damage, but a shared upstream error would pass.
+- Splits: a share-count change at the broker halts trading until confirmed (live-trading); the rule side uses split-adjusted bars.
+- The sector limit needs a sector source (SEC industry codes); it is optional, so it can wait for paper-trading's risk check.
 
 ## Verification strategy
 
-CI gates from foundations, plus determinism tests for the runner and the back-tester.
+CI gates from foundations (task 10), plus determinism tests for the runner and the back-tester.
 
 ## How to resume
 
-Read this file's task list and find the first task with `Status: [ ]`, then read the newest entries in `.harness/progress.md`. This plan is queued: before starting it, archive the finished active plan to `.harness/archive/` and move this file to `.harness/PLAN.md`. Refine the task list with `/plan` before `/work`.
+Read this file's task list and find the first task with `Status: [ ]`, then read the newest entries in `.harness/progress.md`. When the last task lands, close it out: status done, a summary in `progress.md`, and archive this file to `.harness/PLAN.archive.YYYYMMDD-prices-and-rules.md`.
 
 ## Locked design calls
 
 See the final [Sherwood Design](../../../../wiki/designs/sherwood.md). In short: Go application with Python only in the broker helper; SQLite; decimals; a mandatory risk check on every order; buys wait for approval and only protective sells go through on their own; any broker error halts trading with no retry; the AI never creates or sends an order; broker secrets only in the owner-only settings file on the NAS.
+
+Refinement calls (2026-11-16):
+- The paper fill model is built here as a pure function, because the back-tester needs it before the paper broker exists; paper-trading wraps it.
+- Signals get their idempotency keys here; paper-trading's orders reuse the same key under their own unique constraint.
