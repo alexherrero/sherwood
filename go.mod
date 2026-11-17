@@ -3,7 +3,7 @@ module github.com/alexherrero/sherwood
 go 1.26.0
 
 require (
-	github.com/shopspring/decimal v1.4.0
+	github.com/shopspring/decimal v1.6.0
 	go.yaml.in/yaml/v3 v3.0.6
 	modernc.org/sqlite v1.62.0
 )
