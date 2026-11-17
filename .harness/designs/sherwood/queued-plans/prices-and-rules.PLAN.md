@@ -5,7 +5,7 @@ parent_part_slug: prices-and-rules
 
 # Plan: Prices, rules and the setup skill (from design sherwood)
 
-**Status:** ready (refined 2026-11-16 against foundations as merged)
+**Status:** in progress
 **Created:** 2026-11-15
 **Roadmap item:** part 3 of 6 of [Sherwood Design](../../../../wiki/designs/sherwood.md); part file [prices-and-rules](../../../../wiki/designs/sherwood/parts/prices-and-rules.md)
 **Brief:** Fetch free end-of-day prices with a cross-check, build the rule library and the rule runner that turns prices into signals, schedule the 16:30 ET job, build the back-tester, and write the setup skill that generates a strategy file on the Mac.
@@ -33,12 +33,12 @@ After each trading day's close, sherwood records prices and signals with plain r
 ### 1. Price sources and cross-check
 - **What:** Add `internal/prices`: a price-source interface returning split-adjusted daily bars (open, high, low, close as `money.Price`, volume), a primary and a cross-check free end-of-day source (keyless or free-key, chosen on their terms and limits, recorded in the design's Document History), a fake for tests, a migration for a bars table, and fail-closed handling: a missing day gives no bars for anyone that day, and a held or watched stock whose sources disagree beyond `price_cross_check_tolerance` is marked so it gets no signals, with a held stock flagged for a halt.
 - **Verification:** Tests with fake sources show nothing stored as usable on a missing day, a disagreeing stock excluded and flagged, and parsing of each source's recorded response shape (fixtures hand-written with made-up values).
-- **Status:** [ ]
+- **Status:** [x] Shipped in [#89](https://github.com/alexherrero/sherwood/pull/89) (2026-11-16). `internal/prices` has the source interface, a fake, Tiingo as the primary (a documented API on a free personal-use plan with split factors) and Stooq as the cross-check (a free key since early 2026), both keys as `secret.Secret` settings under `prices:`, and the pick recorded in the design's Document History. Migration 0002 adds the bars, day and check tables. Only the trading date's own bar is compared across sources; any gap makes the whole day unusable, and a stock whose sources disagree beyond the tolerance is excluded, with a held one flagged for a halt that paper-trading will act on. History is re-fetched from the primary on each run, so it follows a split. Tests use hand-written fixtures and `httptest` only. Open points for the 16:30 job: a source may not have published the day's bar by 16:30, so a later retry may be needed, and Tiingo's 50 requests an hour bounds re-runs.
 
 ### 2. Rule library
 - **What:** Add `internal/rules`: moving-average cross, breakout, momentum ranking, pullback, fixed stop, trailing stop, and sizing by fixed amount and by risk, each a pure function with its own settings schema parsed from the strategy file's `config.Scalar` text, each outcome (buy, add, trim or sell, no change) carrying a short mechanical reason. Maths on `Decimal()` with an explicit precision, back through `money.RoundPrice` and the `QuantityPolicy`. The rule registry here and `config`'s known rule types must agree, checked by a test.
 - **Verification:** Table tests per rule cover signal and no-change days and bad settings; the registry test fails when a name is added to one side only.
-- **Status:** [ ]
+- **Status:** [x] Shipped in [#90](https://github.com/alexherrero/sherwood/pull/90) (2026-11-16). `internal/rules` implements all eight rule types as pure functions with their own settings schemas, parsed from the strategy file's text with errors naming the setting. Signal rules fire on the day their condition starts to hold, so a declined buy is not proposed again the next day; stops are levels and sell every day a holding sits at or below them. Comparisons cross-multiply instead of dividing, so every one is exact, and a no-float guard covers the package. `config.RuleTypes()` stays the one list of names and a test fails if the rule definitions drift from it. The example strategy file now passes `rules.Validate`, but nothing calls `Validate` at start-up yet; task 3 does that. Rules can need up to 302 bars of history.
 
 ### 3. Rule runner and signals
 - **What:** Run each strategy's rules for one trading date, recording signals with their reasons, the strategy file's hash and their idempotency keys (strategy, stock, side, signal kind, trading date) under a unique constraint (a migration), and the hold, add or trim suggestion per holding.
