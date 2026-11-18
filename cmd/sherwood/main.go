@@ -11,7 +11,9 @@
 //
 // "sherwood backtest" instead replays past bars from a folder of CSV files
 // through the strategy file's rules and prints a report; it starts nothing
-// else (see backtest.go).
+// else (see backtest.go). "sherwood import-holdings" starts the broker
+// helper just long enough to read the holdings and cash once, read-only, and
+// records them (see importholdings.go).
 package main
 
 import (
@@ -135,6 +137,9 @@ func orDefault(v, def string) string {
 func run(ctx context.Context, e env) (err error) {
 	if len(e.args) > 0 && e.args[0] == backtestCommand {
 		return runBacktest(e, e.args[1:])
+	}
+	if len(e.args) > 0 && e.args[0] == importCommand {
+		return runImportHoldings(ctx, e, e.args[1:])
 	}
 	opts, err := parseOptions(e)
 	if err != nil {
