@@ -1,97 +1,92 @@
 ---
 parent_design_doc: ../wiki/designs/sherwood.md
-parent_part_slug: phone-app
+parent_part_slug: prices-and-rules
 ---
 
-# Plan: Phone app and read-only holdings (from design sherwood)
+# Plan: Prices, rules and the setup skill (from design sherwood)
 
 **Status:** in progress
 **Created:** 2026-11-15
-**Roadmap item:** part 2 of 6 of [Sherwood Design](../wiki/designs/sherwood.md); part file [phone-app](../wiki/designs/sherwood/parts/phone-app.md)
-**Brief:** Put sherwood on your phone as an installable web app over Tailscale Serve, with identity, anti-forgery and approval-device checks, the Today and Portfolio views and web push. Add the broker helper's login command and read-only holdings and cash calls, and import holdings read-only.
+**Roadmap item:** part 3 of 6 of [Sherwood Design](../wiki/designs/sherwood.md); part file [prices-and-rules](../wiki/designs/sherwood/parts/prices-and-rules.md)
+**Brief:** Fetch free end-of-day prices with a cross-check, build the rule library and the rule runner that turns prices into signals, schedule the 16:30 ET job, build the back-tester, and write the setup skill that generates a strategy file on the Mac.
 
 ## Goal
 
-You can install sherwood on your home screen, see Today and your Portfolio, and receive a test notification. Your holdings are imported without any order being possible.
+After each trading day's close, sherwood records prices and signals with plain reasons and the strategy file's hash, and you can back-test any strategy. The setup skill writes a valid strategy file for your install.
 
 ## Constraints
 
 - The repo is public: placeholders only, nothing personal.
 - No agent signs in to, calls or tests against Robinhood or any broker, and no agent places, simulates against a live account, or scripts a trade. Broker tests use fakes; any check that needs the real account is run by the operator.
 - Decimals for money, an injected clock, no sleeping in tests, migrations numbered and forward-only.
-- Only GET reads and only POST changes; every POST carries an anti-forgery token.
-- This plan runs alongside prices-and-rules. Only one session at a time, across both plans, may add a migration; the coordinator names its number in the brief, because the runner refuses gaps and repeats.
-- `cmd/sherwood/main.go`, `internal/logging/allowlist.go` and `go.mod` are shared with prices-and-rules: keep edits there small and rebase (never back-merge) when `main` moves.
+- Rules are pure functions of prices, holdings, the strategy file and the trading date.
+- No test reaches a price source over the network; recorded-shape fixtures use made-up values.
+- This plan runs alongside phone-app. Only one session at a time, across both plans, may add a migration; the coordinator names its number in the brief, because the runner refuses gaps and repeats.
+- `cmd/sherwood/main.go`, `internal/logging/allowlist.go` and `go.mod` are shared with phone-app: keep edits there small and rebase (never back-merge) when `main` moves.
 
 ## Out of scope
 
-- Orders, approvals and the stop switch (paper-trading). Prices and suggestions (prices-and-rules).
+- Turning signals into orders (paper-trading). AI explanations (research-feed).
 
 ## Tasks
 
-### 1. Web server and the Serve identity check
-- **What:** Add `internal/web`: an HTTP server on `:8080` (the port `compose.example.yaml` reserves) started and stopped by `cmd/sherwood` with the rest of the app. Middleware requires the allowed `Tailscale-User-Login` header, refuses anything else, and checks an anti-forgery token on every POST. Approving a buy and resetting the stop switch can be limited to approval devices, identified by the tailnet address Serve forwards (`X-Forwarded-For`, trusted only because the port is bound to loopback). Change `approval_devices` in `internal/config` to tailnet addresses (100.64.0.0/10 or `fd7a:115c:a1e0::/48`) and update the example file and the settings reference page to match.
-- **Verification:** Tests refuse a missing or wrong login, a POST without a token or with a stale one, a GET that would change state, and an approval-device POST from another address; start-up tests show the server stopping cleanly on SIGTERM.
-- **Status:** [x] Shipped in [#88](https://github.com/alexherrero/sherwood/pull/88) (2026-11-16). `internal/web` serves on `:8080`, started and stopped by `cmd/sherwood` with the rest of the app and shut down cleanly on SIGTERM. Every route, `/health` included, sits behind one guard: security headers on every response (a CSP with no inline script or style, frame denial, `no-store` by default), exactly one `Tailscale-User-Login` header equal to the allowed login, and on every POST an anti-forgery token checked in constant time plus a `Sec-Fetch-Site` check. Views mount with `HandleRead` (GET only) and actions with `HandleChange` (POST only); `web.ApprovalDevicesOnly` limits an action to approval devices, identified by the address Serve forwards. `approval_devices` in the settings file are now tailnet addresses, and a wrong entry is refused without echoing its value. Logs carry the matched route pattern, never the raw path, address or login. The design's wording was amended to match. A later part must decide how the Mac's feed upload passes the login check.
+### 1. Price sources and cross-check
+- **What:** Add `internal/prices`: a price-source interface returning split-adjusted daily bars (open, high, low, close as `money.Price`, volume), a primary and a cross-check free end-of-day source (keyless or free-key, chosen on their terms and limits, recorded in the design's Document History), a fake for tests, a migration for a bars table, and fail-closed handling: a missing day gives no bars for anyone that day, and a held or watched stock whose sources disagree beyond `price_cross_check_tolerance` is marked so it gets no signals, with a held stock flagged for a halt.
+- **Verification:** Tests with fake sources show nothing stored as usable on a missing day, a disagreeing stock excluded and flagged, and parsing of each source's recorded response shape (fixtures hand-written with made-up values).
+- **Status:** [x] Shipped in [#89](https://github.com/alexherrero/sherwood/pull/89) (2026-11-16). `internal/prices` has the source interface, a fake, Tiingo as the primary (a documented API on a free personal-use plan with split factors) and Stooq as the cross-check (a free key since early 2026), both keys as `secret.Secret` settings under `prices:`, and the pick recorded in the design's Document History. Migration 0002 adds the bars, day and check tables. Only the trading date's own bar is compared across sources; any gap makes the whole day unusable, and a stock whose sources disagree beyond the tolerance is excluded, with a held one flagged for a halt that paper-trading will act on. History is re-fetched from the primary on each run, so it follows a split. Tests use hand-written fixtures and `httptest` only. Open points for the 16:30 job: a source may not have published the day's bar by 16:30, so a later retry may be needed, and Tiingo's 50 requests an hour bounds re-runs.
 
-### 2. Installable app shell
-- **What:** Server-rendered layout built for phones (Go `html/template`, contextual escaping), the app manifest and icon, a little JavaScript, and a service worker that caches only the shell (layout, styles, icon). Navigation between the six views, with the ones not built yet saying so.
-- **Verification:** A test confirms the service worker's cache list has no data routes; a test confirms every data response sends `Cache-Control: no-store`; a manual install on the phone opens full-screen (operator check).
-- **Status:** [x] Shipped in [#93](https://github.com/alexherrero/sherwood/pull/93) (2026-11-18). `internal/web` now renders a phone-first layout with `html/template` from embedded templates and static files, with Today at `/` and the five other views at `/approvals`, `/portfolio`, `/feed`, `/orders` and `/settings`, each saying "Not built yet" until its task lands. The manifest, an original pine-tree icon (PNG sizes drawn from one tested description) and light and dark themes make it installable. The service worker is served at `/sw.js` for root scope, caches only the seven shell files under a version that changes with them, always sends navigations to the network and shows a built-in offline page rather than any saved data. Tests prove the worker's list holds no data route and that every data response, including errors and refusals, is `no-store`. A later view plugs in by adding a template and a `load` function to the `views` table; the operator still has to install it on the phone and check it opens full-screen.
+### 2. Rule library
+- **What:** Add `internal/rules`: moving-average cross, breakout, momentum ranking, pullback, fixed stop, trailing stop, and sizing by fixed amount and by risk, each a pure function with its own settings schema parsed from the strategy file's `config.Scalar` text, each outcome (buy, add, trim or sell, no change) carrying a short mechanical reason. Maths on `Decimal()` with an explicit precision, back through `money.RoundPrice` and the `QuantityPolicy`. The rule registry here and `config`'s known rule types must agree, checked by a test.
+- **Verification:** Table tests per rule cover signal and no-change days and bad settings; the registry test fails when a name is added to one side only.
+- **Status:** [x] Shipped in [#90](https://github.com/alexherrero/sherwood/pull/90) (2026-11-16). `internal/rules` implements all eight rule types as pure functions with their own settings schemas, parsed from the strategy file's text with errors naming the setting. Signal rules fire on the day their condition starts to hold, so a declined buy is not proposed again the next day; stops are levels and sell every day a holding sits at or below them. Comparisons cross-multiply instead of dividing, so every one is exact, and a no-float guard covers the package. `config.RuleTypes()` stays the one list of names and a test fails if the rule definitions drift from it. The example strategy file now passes `rules.Validate`, but nothing calls `Validate` at start-up yet; task 3 does that. Rules can need up to 302 bars of history.
 
-### 3. Holdings and cash tables
-- **What:** A migration for holdings (symbol, quantity, average cost, source, as-of time) and cash snapshots, using `money` and `Quantity` as TEXT in STRICT tables, with store accessors. These are shared with prices-and-rules, whose 16:30 job values the portfolio from them.
-- **Verification:** Round-trip tests through the store; no REAL column (the store's existing test enforces it); a test refuses a 21st holding being written without the over-20 flag.
-- **Status:** [x] Shipped in [#92](https://github.com/alexherrero/sherwood/pull/92) (2026-11-18). Migration `0003` keeps holdings and cash as add-only snapshots, the newest being current, with `current_holdings` and `current_cash` views. Triggers refuse updates and deletes, out-of-order snapshots and rows beyond a snapshot's stated count, and the schema ties the over-20 flag to the count, so a 21st holding cannot be written without it. The new `internal/holdings` package records a set and its cash in one transaction (or on the caller's), reads the current or any earlier set, values holdings exactly with the money types, and refuses bad symbols, repeats, zero shares, negative costs and out-of-order times without writing anything. Snapshot sources are import, fills and reconcile, so later parts can record fills and accept broker figures without a new migration.
+### 3. Rule runner and signals
+- **What:** Run each strategy's rules for one trading date, recording signals with their reasons, the strategy file's hash and their idempotency keys (strategy, stock, side, signal kind, trading date) under a unique constraint (a migration), and the hold, add or trim suggestion per holding.
+- **Verification:** Two runs on the same inputs give identical signals and keys and a single row each; an excluded stock (task 1) gets no signal.
+- **Status:** [x] Shipped in [#98](https://github.com/alexherrero/sherwood/pull/98) (2026-11-18). Rule combining now lives once in `internal/rules/combine.go` (stop sell, other sell, trim, buy or add, no change, with the first rule's reason in file order and the highest stop), and the back-tester calls it. Migration `0004` adds append-only `signals` (with a SHA-256 idempotency key over strategy, stock, side, kind and date, unique) and `holding_suggestions`, where the first run's row stands, so a re-run writes nothing. `internal/signals` evaluates a strategy for one date as a pure function, gives no signal or suggestion on a missing day or for an excluded stock, and the runner writes the results in one transaction. `cmd/sherwood` now refuses to start when a strategy's rule settings are wrong, naming the field. Sizing and limit prices are left to paper-trading's order step; paper-trading should reuse the same key function for order keys.
 
-### 4. Today and Portfolio views
-- **What:** Today shows the paper or live banner (words, not colour alone), a placeholder stop switch, any halt, and the last run of each job from `job_runs`. Portfolio lists holdings with value and gain or loss from stored data, at most 20, with room for the suggestion and AI note columns later parts fill.
-- **Verification:** Handler tests render both views from fixture data with placeholder symbols; the banner test checks the text; values render from `money` types without floats.
-- **Status:** [x] Shipped in [#99](https://github.com/alexherrero/sherwood/pull/99) (2026-11-18). Today shows the paper or live banner in words, a placeholder stop switch, any halt and the last run of each job from `job_runs`; Portfolio lists the current holdings and cash from `internal/holdings`, with a "not imported yet" state, an over-limit warning in words, values and gain or loss from exact money types ("Not available" until a checked close exists), and empty suggestion and note columns for later parts. `web.Config` now requires the store and the mode, passed from `cmd/sherwood`. Both views are built on the shared components from the layout redesign (#97); the operator is still choosing the final design, so a later layout change may restyle them.
+### 4. The 16:30 ET job
+- **What:** Register the after-close job with the scheduler in `cmd/sherwood`: fetch and cross-check the day's bars, value the portfolio from the holdings and cash tables (phone-app task 3), run the rules, and record everything under the run's input hash. Publishing the research export is left to research-feed.
+- **Verification:** Fake-clock tests run it once per trading day, skip holidays, catch up after downtime with each run using its own date's bars, and produce no signals on a missing day.
+- **Status:** [x] Shipped in [#103](https://github.com/alexherrero/sherwood/pull/103) (2026-11-18). The after-close work runs as three scheduler jobs on each trading day, at 16:30, 18:00 and 21:00 Eastern, so a source that publishes late is caught by a later attempt; once one attempt succeeds the others skip, and a day still unusable at 21:00 is recorded as having no signals. Each attempt reads the holdings and cash in force at 16:30 on its own date (new `holdings.AsOf` and `holdings.CashAsOf`), fetches and cross-checks the day, values the portfolio only when every holding has an agreed close, and runs each strategy's rules through the signals runner. A halt cause is logged as an error but acted on only by paper-trading. Catch-up after downtime runs each date with its own bars. The retry times are a first guess; the operator should move them if the bars usually arrive later.
 
-### 5. Web push channel
-- **What:** A `Notifier` interface with a fake, a web push implementation using the VAPID keys already in the settings file (pick a maintained Go web push library and record it), a migration for push subscriptions, and a subscribe flow in the app.
-- **Verification:** Tests check the payload carries only the short alert text (no amounts, symbols or reasons) and that no test reaches a push service; a test push reaches the phone (operator check).
-- **Status:** [x] Shipped in [#105](https://github.com/alexherrero/sherwood/pull/105) (2026-11-18). `internal/notify` has a `Notifier` interface, a fake, and alerts that can only be built from fixed short wording (a test notification, buys waiting with a count, trading halted), so no amount, symbol or reason can reach a push payload. `webpush.Sender` uses `github.com/ergochat/webpush-go/v2` v2.0.0 with the VAPID keys from the settings file, a required injected HTTP client (tests use a fake push service that decrypts what it receives), no retry, and removal of subscriptions the push service says are gone; endpoints and keys never reach a log or an error. Migration `0005` stores push subscriptions. Settings is now a real view with a subscribe form and a test-send button, both POSTs with the anti-forgery token, and the service worker shows pushes and opens the right view while still caching only the shell. With placeholder keys sherwood starts with notifications off. A test push reaching the phone is the operator's check.
+### 5. Paper fill model and back-tester
+- **What:** Add the paper fill model as a pure function (a buy fills at the next open if the open is at or below its limit, otherwise at the limit if the day traded through it; a stop fills when the low reaches it, at the stop or at the open if it opened below), so paper-trading's paper broker reuses it. Then the back-tester: replay past bars through the same rule functions and fill model, and report return, drawdown, win rate and turnover per strategy, as a `sherwood backtest` subcommand.
+- **Verification:** Table tests for every fill case; the same inputs give the same report on every run.
+- **Status:** [x] Shipped in [#95](https://github.com/alexherrero/sherwood/pull/95) (2026-11-18). `internal/fill` is the paper fill model as a pure function: a buy limit fills at the open when the open is at or below the limit, otherwise at the limit only if the low went strictly below it (a touch is not a fill); a protective stop fills at the open on a gap, otherwise at the stop when the low reaches it; a rule exit or trim sells at the open. `internal/backtest` replays bars day by day with no look-ahead (a test proves a cut-short run matches), combines each stock's rules in a fixed order (stop sell, other sell, trim, buy or add) with the first rule's reason, sizes buys by the strategy's sizing rule at a limit above the close, keeps each strategy to its own cash and `max_holdings`, and reports return, maximum drawdown, win rate and turnover in exact decimals, byte-identical on every run. `sherwood backtest` reads split-adjusted CSV bars from a folder and needs no database or network. The order risk limits are not applied in a back-test, which task 7's docs must say. Task 3's runner must combine rules the same way.
 
-### 6. Broker helper login and read-only calls
-- **What:** Add the unofficial Robinhood client library to the helper, pinned to one reviewed version with hashes. Add the one-time login command (`python3 -m brokerhelper login`) that prompts on the terminal and writes the owner-only `broker.yaml` (mode 0600, refuses to write anywhere else), and two read-only ops, `holdings` and `cash`, returning decimals as strings. The library is reached only through a thin wrapper that tests replace with a fake.
-- **Verification:** Helper tests run against a fake library and never import the real one's network paths; a test confirms the helper offers no order ops yet; a test confirms no secret value reaches stdout, stderr or an error reply. The real login is run by the operator.
-- **Status:** [x] Shipped in [#100](https://github.com/alexherrero/sherwood/pull/100) (2026-11-18). The helper pins `robin-stocks` 3.4.0 with hashes in both lock files, reached only through a thin wrapper that tests replace with a fake. `python3 -m brokerhelper login` prompts on the terminal and writes the owner-only `broker.yaml` (mode 0600, refusing any other place), and two read-only ops, `holdings` and `cash`, return decimals as strings. Tests prove the helper offers no order op, never imports the library's network paths, and never lets a secret reach stdout, stderr or an error reply. No agent ran the real login: the first login, the file check and noting how long the session lasts are the operator's.
+### 6. Setup skill
+- **What:** A skill in the repo that interviews you on the Mac (goals, amount, loss tolerance, sectors), writes a strategy file from the rule library, validates it with the real loader, and back-tests it. It never sees the broker login and never talks to the NAS, and says plainly that its output is not financial advice.
+- **Verification:** Its output passes validation; its examples use placeholders only; a privacy scan of the skill finds nothing personal.
+- **Status:** [x] Shipped in [#107](https://github.com/alexherrero/sherwood/pull/107) (2026-11-18). The `strategy-setup` skill in `.claude/skills/` interviews the operator on the Mac (goals, amount, loss tolerance, sectors), drafts a strategy file in a work folder it refuses to place inside the repo, validates it with the real loader, fetches split-adjusted bars and back-tests it, and says it is not financial advice at the start, at the results and at hand-over. Three new subcommands support it: `sherwood rules` prints every rule type and setting, `sherwood check-strategy` validates a file exactly as start-up does, and `sherwood fetch-bars` writes the back-tester's CSV folder through the same Tiingo source, reading the token only from an owner-only file or the environment. The example strategy uses made-up symbols and round placeholder amounts. Running it for real with a Tiingo token, and copying the result to the NAS, are the operator's.
 
-### 7. Read-only holdings import
-- **What:** A one-shot subcommand, `sherwood import-holdings`, that starts the broker helper just for the call (the long-running service still starts it only in live mode), reads holdings and cash through the Go client, writes them to the tables from task 3, and flags more than 20 holdings. It creates no order rows and has no path to any order op.
-- **Verification:** Tests against the fake helper import holdings and cash, create no order rows, and halt on any helper error with no retry; the first real import is run by the operator.
-- **Status:** [x] Shipped in [#102](https://github.com/alexherrero/sherwood/pull/102) (2026-11-18). `sherwood import-holdings` starts the broker helper once on a private socket just for the run (the service still starts it only in live mode), calls the read-only `holdings` op with a 120-second limit and `cash` with 30 seconds, decodes replies strictly so a changed shape stops the import, upper-cases symbols, and writes holdings and cash as one import snapshot in a single `holdings.Record` call, after the helper has exited. More than 20 holdings is recorded with the flag and a warning line, never refused. Any helper error, bad reply or refused value halts with "nothing was written" and no retry or restart. It prints a table to compare with the broker's app and has no path to any order op. The first real import, and the check that the cash figure is the right one, are the operator's. Design B from #97 was kept, so the layout question is closed.
-
-### 8. Install and broker-login how-tos
-- **What:** Wiki how-to pages for installing sherwood on the NAS (Compose, app-data ownership, Tailscale Serve to `127.0.0.1:8080`, installing to the home screen, enabling notifications) and for logging in to the broker on the NAS and running the first import.
-- **Verification:** Pages use placeholders only and match `compose.example.yaml` and the real commands; a privacy scan finds nothing personal.
+### 7. Rule library reference and setup how-to
+- **What:** Wiki reference for every rule type and its settings, and a how-to for the setup skill.
+- **Verification:** Every rule type in code appears on the reference page, checked by a script.
 - **Status:** [ ]
 
 ## Order and parallelism
 
-Task 1 first. Then 2, 3 and 6 can run together (3 is the only one adding a migration). Then 4 (after 2 and 3), 5 (after 2; adds a migration, so not alongside another migration task), and 7 (after 3 and 6). Task 8 last.
+Tasks 1 and 2 can run together (only 1 adds a migration). Then 3 (after 1 and 2; adds a migration) and 5 (after 2). Task 4 waits for 3 and for phone-app task 3 (holdings tables). Then 6 (after 5), and 7 last.
 
 ## Risks / open questions
 
-- Web push on iPhone needs the app installed to the home screen first; the how-to says so.
-- The unofficial library's login flow may change; the helper isolates it.
-- Serve's identity headers are trustworthy only because the port is bound to loopback; a test or start-up check should refuse to listen on anything but loopback inside the container's published mapping. If that cannot be checked from inside the container, the install how-to must say so plainly.
+- Free sources change terms and have gaps; the cross-check and fail-closed handling contain the damage, but a shared upstream error would pass.
+- Splits: a share-count change at the broker halts trading until confirmed (live-trading); the rule side uses split-adjusted bars.
+- The sector limit needs a sector source (SEC industry codes); it is optional, so it can wait for paper-trading's risk check.
 
 ## Verification strategy
 
-CI gates from foundations (task 10), plus handler tests for every route's identity and token checks.
+CI gates from foundations (task 10), plus determinism tests for the runner and the back-tester.
 
 ## How to resume
 
-Read this file's task list and find the first task with `Status: [ ]`, then read the newest entries in `.harness/progress.md`. Prices-and-rules runs alongside this plan and is tracked in place at `.harness/designs/sherwood/queued-plans/prices-and-rules.PLAN.md`. When the last task lands, close it out: status done, a summary in `progress.md`, and archive this file to `.harness/PLAN.archive.YYYYMMDD-phone-app.md`.
+Read this file's task list and find the first task with `Status: [ ]`, then read the newest entries in `.harness/progress.md`. When the last task lands, close it out: status done, a summary in `progress.md`, and archive this file to `.harness/PLAN.archive.YYYYMMDD-prices-and-rules.md`.
 
 ## Locked design calls
 
 See the final [Sherwood Design](../wiki/designs/sherwood.md). In short: Go application with Python only in the broker helper; SQLite; decimals; a mandatory risk check on every order; buys wait for approval and only protective sells go through on their own; any broker error halts trading with no retry; the AI never creates or sends an order; broker secrets only in the owner-only settings file on the NAS.
 
 Refinement calls (2026-11-16):
-- The holdings import is a one-shot subcommand that starts the helper only for itself, so the long-running service keeps the design's rule of starting the helper only in live mode.
-- Approval devices are identified by tailnet address, because Serve forwards the caller's address but no device name.
-- The holdings and cash tables belong to this part and are shared with prices-and-rules.
+- The paper fill model is built here as a pure function, because the back-tester needs it before the paper broker exists; paper-trading wraps it.
+- Signals get their idempotency keys here; paper-trading's orders reuse the same key under their own unique constraint.
