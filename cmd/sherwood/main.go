@@ -35,7 +35,9 @@ import (
 	"github.com/alexherrero/sherwood/internal/broker"
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/logging"
+	"github.com/alexherrero/sherwood/internal/notify"
 	"github.com/alexherrero/sherwood/internal/notify/webpush"
 	"github.com/alexherrero/sherwood/internal/prices"
 	"github.com/alexherrero/sherwood/internal/rules"
@@ -197,6 +199,12 @@ func run(ctx context.Context, e env) (err error) {
 	}()
 	logger.Info("database ready", "migrations", len(db.Migrated()))
 
+	push := newPush(settings, db, e.clock, logger)
+	stopSwitch, err := newStopSwitch(db, e.clock, push, logger)
+	if err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+
 	stopping := ctx // done once shutdown is requested
 	ctx, cancel := context.WithCancelCause(ctx)
 	var helpers sync.WaitGroup
@@ -205,7 +213,7 @@ func run(ctx context.Context, e env) (err error) {
 		helpers.Wait() // the helper is stopped before the database closes
 	}()
 	if settings.Mode == config.ModeLive {
-		sup, err := newSupervisor(e, opts, logger)
+		sup, err := newSupervisor(e, opts, logger, haltOnBrokerFailure(ctx, stopSwitch))
 		if err != nil {
 			return fmt.Errorf("refusing to start: %w", err)
 		}
@@ -227,7 +235,7 @@ func run(ctx context.Context, e env) (err error) {
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
-	if err := registerAfterClose(e, sched, settings.Prices, strategy, db, logger); err != nil {
+	if err := registerAfterClose(e, sched, settings.Prices, strategy, db, stopSwitch, logger); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
 
@@ -238,7 +246,8 @@ func run(ctx context.Context, e env) (err error) {
 		Logger:          logger,
 		Store:           db,
 		Mode:            settings.Mode,
-		Push:            newPush(settings, db, e.clock, logger),
+		Push:            push,
+		Switch:          stopSwitch,
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
@@ -299,9 +308,28 @@ func newPush(settings *config.Settings, db *store.Store, c clock.Clock, logger *
 	return sender
 }
 
+// newStopSwitch builds the stop switch, which notifies through push, or
+// nowhere when notifications are not set up.
+func newStopSwitch(db *store.Store, c clock.Clock, push web.PushChannel, logger *slog.Logger) (*halt.Switch, error) {
+	n := notify.Nowhere
+	if push != nil { // newPush returns a literal nil when notifications are off
+		n = push
+	}
+	return halt.New(halt.Config{Store: db, Clock: c, Notifier: n, Logger: logger})
+}
+
+// haltOnBrokerFailure is the supervisor's failure hook: any helper failure is
+// a broker error, so trading halts. A failure to record the halt is logged by
+// the switch.
+func haltOnBrokerFailure(ctx context.Context, sw *halt.Switch) func(error) {
+	return func(err error) {
+		_, _, _ = sw.Throw(ctx, halt.BrokerError, "The broker helper failed: "+err.Error())
+	}
+}
+
 // newSupervisor builds the broker helper's supervisor. Every helper failure is
-// logged; a later part also halts trading on it.
-func newSupervisor(e env, opts options, logger *slog.Logger) (*broker.Supervisor, error) {
+// logged and passed to onFailure, which halts trading.
+func newSupervisor(e env, opts options, logger *slog.Logger, onFailure func(error)) (*broker.Supervisor, error) {
 	if err := os.MkdirAll(filepath.Dir(opts.brokerSocket), 0o700); err != nil {
 		return nil, fmt.Errorf("making the broker socket folder: %w", err)
 	}
@@ -316,6 +344,7 @@ func newSupervisor(e env, opts options, logger *slog.Logger) (*broker.Supervisor
 		Stderr:     e.stderr,
 		OnError: func(err error) {
 			logger.Error("broker helper failed", "error", err)
+			onFailure(err)
 		},
 		OnReady: func() {
 			logger.Info("broker helper ready")

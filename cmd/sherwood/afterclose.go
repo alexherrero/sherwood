@@ -12,6 +12,7 @@ import (
 
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/prices"
@@ -61,6 +62,7 @@ type afterClose struct {
 	calendar *clock.Calendar
 	log      *slog.Logger
 	strategy *config.Strategy // loaded and validated at start-up
+	halts    *halt.Switch     // thrown when the sources disagree on a held stock
 	primary  prices.Source
 	check    prices.Source
 }
@@ -79,7 +81,7 @@ func newPriceSources(keys config.PriceKeys) (primary, check prices.Source) {
 // says so; once the keys are set, the next start catches up the last few
 // dates.
 func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys, strategy *config.Strategy,
-	db *store.Store, logger *slog.Logger) error {
+	db *store.Store, halts *halt.Switch, logger *slog.Logger) error {
 	build := e.priceSources
 	if build == nil {
 		build = newPriceSources
@@ -91,11 +93,14 @@ func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys
 		return nil
 	}
 	a := &afterClose{store: db, clock: e.clock, calendar: clock.NYSE(), log: logger, strategy: strategy,
-		primary: primary, check: check}
+		halts: halts, primary: primary, check: check}
 	return a.register(sched)
 }
 
 func (a *afterClose) register(sched *scheduler.Scheduler) error {
+	if a.halts == nil {
+		return errors.New("the after-close job needs the stop switch")
+	}
 	for i, at := range afterCloseAttempts {
 		err := sched.Register(scheduler.Job{
 			Name:   at.name,
@@ -225,9 +230,13 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 		return err
 	}
 	if day.Halt() {
-		// Paper trading halts on this; until it exists, the log says it.
-		log.Error("held stock's price sources disagree: trading must halt for review",
-			"halt_cause", "held stock's price sources disagree", "symbol", strings.Join(day.HaltSymbols(), ", "))
+		// Trading halts for your review. The rules still run below, without
+		// the disagreeing stocks, and record their signals.
+		log.Error("held stock's price sources disagree: trading halts for review",
+			"halt_cause", string(halt.PriceDisagreement), "symbol", strings.Join(day.HaltSymbols(), ", "))
+		if _, _, err := a.halts.Throw(ctx, halt.PriceDisagreement, disagreement(day)); err != nil {
+			return err
+		}
 	}
 	if !day.Usable {
 		if next := attempt + 1; next < len(afterCloseAttempts) {
@@ -250,6 +259,20 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 		return fmt.Errorf("the rules found the prices missing after they were checked: %s", res.Missing)
 	}
 	return nil
+}
+
+// disagreement is a price halt's evidence: the date, and each held stock
+// whose sources disagreed with what differed.
+func disagreement(day *prices.Day) string {
+	var b strings.Builder
+	fmt.Fprintf(&b, "Price check for %s (%s against %s): the sources disagree on a stock you hold.",
+		day.DateString(), day.PrimarySource, day.CheckSource)
+	for _, c := range day.Checks {
+		if c.Halt {
+			fmt.Fprintf(&b, " %s: %s.", c.Symbol, strings.TrimSuffix(c.Detail, "."))
+		}
+	}
+	return b.String()
 }
 
 // succeeded reports whether any attempt has already succeeded for date.

@@ -13,6 +13,7 @@ import (
 
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/store"
@@ -178,12 +179,13 @@ func TestTodayWithNothingRecorded(t *testing.T) {
 	body := newFixture(t).page("/")
 	wantIn(t, body,
 		"Nothing is halted.",
-		"Prices have not been checked yet, so there is no halt to show.",
+		"Prices have not been checked yet.",
 		`<h2 class="card-title" id="stop-switch">Stop switch</h2>`,
-		"The stop switch arrives with paper trading.",
+		`<span class="badge badge--passed">Off</span>`,
+		`<form class="card-body stack" method="post" action="/stop-switch/on">`,
+		`<button type="submit" class="button button--destructive button--full">Stop all trading</button>`,
 		"No job has run yet.")
-	// The placeholder switch is words only: nothing on Today can post.
-	wantNotIn(t, body, "<form", "<button", "notice--halt")
+	wantNotIn(t, body, "notice--halt", "/stop-switch/reset", "Last reset", `role="status"`)
 }
 
 func TestTodayShowsTheLastRunOfEachJob(t *testing.T) {
@@ -212,24 +214,31 @@ func TestTodayShowsTheLastRunOfEachJob(t *testing.T) {
 
 func TestTodayShowsAHaltAndItsCause(t *testing.T) {
 	f := newFixture(t)
+	// A disagreement in the price record is not itself the halt: the
+	// after-close job throws the switch for it, with the evidence.
 	f.recordPrices("2026-11-13",
 		priceCheck{symbol: "AAAA", held: true, outcome: "agreed", close: "10.00"},
-		priceCheck{symbol: "BBBB", held: true, outcome: "disagreed", close: "20.00"},
-		priceCheck{symbol: "CCCC", held: false, outcome: "disagreed", close: "30.00"})
+		priceCheck{symbol: "BBBB", held: true, outcome: "disagreed", close: "20.00"})
 	body := f.page("/")
+	wantIn(t, body, "Nothing is halted.", "Prices were last checked for Fri 13 Nov 2026.")
+	wantNotIn(t, body, "notice--halt", "BBBB")
+
+	if _, _, err := f.stop.Throw(context.Background(), halt.PriceDisagreement,
+		"Price check for 2026-11-13: the sources disagree on BBBB, a stock you hold (the sources differ by 5%)."); err != nil {
+		t.Fatal(err)
+	}
+	body = f.page("/")
 	wantIn(t, body,
 		`<section class="notice notice--halt" aria-label="Halt">`,
-		"Trading is halted for your review.",
-		"The price check for Fri 13 Nov 2026 found that the two price sources disagree on a stock you hold.",
-		`<span class="row-label">BBBB</span><span class="row-meta">the sources differ by 5%</span>`)
-	// Only a held stock halts; a watched one that disagrees does not.
-	wantNotIn(t, body, ">CCCC<", ">AAAA<", "Nothing is halted.")
-
-	// The latest check is what counts.
-	f.recordPrices("2026-11-16", priceCheck{symbol: "AAAA", held: true, outcome: "agreed", close: "10.00"})
-	body = f.page("/")
-	wantIn(t, body, "Nothing is halted.", "The latest price check, for Mon 16 Nov 2026, found no halt.")
-	wantNotIn(t, body, "notice--halt", "BBBB")
+		"Trading is halted.",
+		"Rules still run and record their signals",
+		`<span class="row-label">The price sources disagree on a stock you hold<span class="row-meta">Mon 16 Nov 2026, 10:00 am ET</span>`,
+		"the sources disagree on BBBB, a stock you hold (the sources differ by 5%).",
+		`<span class="badge badge--blocked">On: trading halted</span>`,
+		`<form class="card-body stack" method="post" action="/stop-switch/reset">`,
+		`<input type="hidden" name="through" value="1">`,
+		`<textarea class="field-input" id="reset-reason" name="reason" rows="3" maxlength="500" required></textarea>`)
+	wantNotIn(t, body, "Nothing is halted.", "/stop-switch/on", "Stop all trading</button>")
 }
 
 // --- Portfolio ---
