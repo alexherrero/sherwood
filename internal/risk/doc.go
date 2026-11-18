@@ -16,10 +16,12 @@
 //
 // Buys and ordinary sells (trims and rule exits) pass the design's full
 // list. Protective sells, the stop-loss and trailing-stop sells that rest at
-// the broker, pass a shorter list on purpose: the order value, shares held
-// (no more than held) and the market-open check, which a resting stop always
-// passes. The daily loss limit, the order count and the stop switch never
-// block them, so a sell that cuts a loss goes through on a bad day.
+// the broker, pass a shorter list on purpose: shares held (no more than held)
+// and the market-open check, which a resting stop always passes. The daily
+// loss limit, the order count, the stop switch and the order value never
+// block them, so a sell that cuts a loss goes through on a bad day, and a
+// holding that has grown past the order-value limit keeps a stop for every
+// share. Shares held already bounds a protective sell.
 //
 // The execution layer takes a Checker and cannot be built without one.
 // Standard is the real check.

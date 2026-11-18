@@ -110,7 +110,7 @@ func TestEachKindRunsItsOwnList(t *testing.T) {
 		Buy: {CheckStockShare, CheckOrderValue, CheckOrderCount, CheckDailyLoss, CheckHoldings, CheckSectorShare,
 			CheckCash, CheckWatchlist, CheckLimitPrice, CheckSameDay, CheckSwitch, CheckMarketOpen},
 		Sell:           {CheckOrderValue, CheckOrderCount, CheckDailyLoss, CheckSharesHeld, CheckSameDay, CheckSwitch, CheckMarketOpen},
-		ProtectiveSell: {CheckOrderValue, CheckSharesHeld, CheckMarketOpen},
+		ProtectiveSell: {CheckSharesHeld, CheckMarketOpen},
 	}
 	for _, o := range []Order{buy(), sell(), protective()} {
 		if got := names(Check(o, snapshot())); !slices.Equal(got, want[o.Kind]) {
@@ -152,9 +152,6 @@ func TestEachLimit(t *testing.T) {
 			CheckOrderValue, false, "worth $150.00, over the $100.00 limit"},
 		{"sell with no close", sell, func(_ *Order, s *Snapshot) { delete(s.LastCloses, "BBB") },
 			CheckOrderValue, false, "no last close for BBB"},
-		{"protective sell over the limit", protective, func(o *Order, _ *Snapshot) { o.Price = p("60.00") },
-			CheckOrderValue, false, "worth $120.00, over the $100.00 limit"},
-		{"protective sell under the limit", protective, nil, CheckOrderValue, true, "worth $36.00"},
 
 		// Orders in one day.
 		{"third order of three", buy, func(_ *Order, s *Snapshot) {
@@ -371,6 +368,7 @@ func TestProtectiveSellsGoThroughOnABadDay(t *testing.T) {
 
 	// Each blocker on its own, too.
 	blockers := map[string]func(*Snapshot){
+		"order value": func(s *Snapshot) { s.Limits.MaxOrderValue = m("1.00") },
 		"loss limit":  func(s *Snapshot) { s.Value = m("900.00") },
 		"order count": func(s *Snapshot) { s.DayOrders = make([]DayOrder, 3) },
 		"switch":      func(s *Snapshot) { s.SwitchOff = false },

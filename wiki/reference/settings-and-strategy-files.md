@@ -228,7 +228,7 @@ The risk check's limits. **The code holds no default for any limit.** Every limi
 A missing limit gives `limits.<name> is missing`, for example `limits.max_order_value is missing`. A value out of range names the field, its value and the rule, for example `limits.max_stock_share is 10, but it must be at most 1 (it is a share, so 0.10 means 10%)`.
 
 - **`max_stock_share`** is the largest share of the portfolio one stock may hold after a buy fills. The risk check applies it to buys.
-- **`max_order_value`** is the largest value of a single order, in dollars. It applies to every order.
+- **`max_order_value`** is the largest value of a single order, in dollars. It applies to buys and ordinary sells. Protective sells (stop-loss and trailing-stop sells) skip it, so a holding that has grown past it still keeps a stop for every share.
 - **`max_orders_per_day`** is the most orders sherwood sends in one trading day. Protective sells, which cut a loss, do not count against it and are never blocked by it. Error when below 1: `limits.max_orders_per_day is 0, but it must be at least 1`.
 - **`daily_loss_limit`** is the loss since the previous close, in dollars, at which all trading stops for the rest of the day. Protective sells still go through.
 - **`max_holdings`** is the most holdings sherwood may have after a buy fills. The design's hard ceiling is 20, so the file may set a lower number but never a higher one: `limits.max_holdings is 25, but it must be from 1 to 20`.

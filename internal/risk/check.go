@@ -51,7 +51,6 @@ func Check(o Order, s Snapshot) Verdict {
 		}
 	case ProtectiveSell:
 		rs = []Result{
-			c.orderValueLimit(),
 			c.sharesHeld(),
 			c.marketOpen(),
 		}
@@ -81,6 +80,12 @@ func details(o Order, s Snapshot) []string {
 		p = append(p, "The buy has no limit price.")
 	case o.Kind == ProtectiveSell && o.Price.IsZero():
 		p = append(p, "The protective sell has no stop price.")
+	}
+	// A protective sell runs no limit check of its own, so a snapshot whose
+	// limits were never loaded is caught here; buys and ordinary sells
+	// refuse on the unset limit itself.
+	if o.Kind == ProtectiveSell && !s.Limits.MaxOrderValue.IsPositive() {
+		p = append(p, "The limits were not loaded: max_order_value is not set.")
 	}
 	if o.Session.IsZero() {
 		p = append(p, "The order names no trading date.")
@@ -202,8 +207,9 @@ func (c checker) stockShare() Result {
 		c.o.Symbol, percent(share), percent(limit)))
 }
 
-// orderValueLimit: the largest value of a single order. Applies to every
-// order.
+// orderValueLimit: the largest value of a single order. Applies to buys and
+// ordinary sells. Protective sells skip it, because a holding can grow past
+// the limit and its stop must still cover every share.
 func (c checker) orderValueLimit() Result {
 	const name = CheckOrderValue
 	if c.valueErr != "" {
