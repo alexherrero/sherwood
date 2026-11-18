@@ -28,7 +28,8 @@ const tradingDate = "2026-01-09"
 
 var history = []string{"2026-01-05", "2026-01-06", "2026-01-07", "2026-01-08", tradingDate}
 
-// strategyText is the example file's limits with one made-up strategy:
+// strategyText is the example file's limits and sectors, with sectors for
+// the made-up stocks and one made-up strategy:
 // a two-day breakout, a 10% fixed stop and a fixed-amount sizing rule.
 func strategyText(t *testing.T, rulesText string) string {
 	t.Helper()
@@ -40,6 +41,10 @@ func strategyText(t *testing.T, rulesText string) string {
 	if !ok {
 		t.Fatal("the example file has no strategies block")
 	}
+	if !strings.Contains(head, "\nsectors:\n") {
+		t.Fatal("the example file has no sectors block")
+	}
+	head = strings.Replace(head, "\nsectors:\n", "\nsectors:\n  AAA: sector-a\n  BBB: sector-a\n  CCC: sector-b\n  DDD: sector-b\n", 1)
 	return head + `
 strategies:
   - name: test-breakout

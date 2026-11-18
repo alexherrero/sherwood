@@ -8,6 +8,8 @@ import (
 	"os"
 	"regexp"
 	"slices"
+	"strings"
+	"unicode"
 
 	"github.com/alexherrero/sherwood/internal/money"
 )
@@ -65,6 +67,11 @@ type Strategy struct {
 	Limits     Limits
 	Watchlist  []string
 	Strategies []StrategyDef
+	// Sectors gives each stock's sector, for the sector limit. It must cover
+	// every stock on the watchlist and in a strategy when
+	// Limits.MaxSectorShare is set; otherwise it may be empty. Sector names
+	// are compared exactly as written.
+	Sectors map[string]string
 }
 
 // Limits are the risk check's limits. Every field except MaxSectorShare is
@@ -126,6 +133,7 @@ type strategyFile struct {
 	Limits     *limitsFile       `yaml:"limits"`
 	Watchlist  []string          `yaml:"watchlist"`
 	Strategies []strategyDefFile `yaml:"strategies"`
+	Sectors    map[string]string `yaml:"sectors"`
 }
 
 type limitsFile struct {
@@ -187,6 +195,7 @@ func ParseStrategy(data []byte) (*Strategy, error) {
 	s.Limits = checkLimits(p, f.Limits)
 	s.Watchlist = checkSymbols(p, "watchlist", f.Watchlist)
 	s.Strategies = checkStrategies(p, f.Strategies)
+	s.Sectors = checkSectors(p, f.Sectors, s)
 
 	if err := p.err(); err != nil {
 		return nil, err
@@ -383,6 +392,60 @@ func checkStrategies(p *problems, defs []strategyDefFile) []StrategyDef {
 		// shares' own number of places it is exact.
 		p.add("the strategies' portfolio_share values add up to %s, which is more than the whole portfolio (1)",
 			total.FloatString(places))
+	}
+	return out
+}
+
+// maxSectorLen bounds a sector name's length.
+const maxSectorLen = 40
+
+// checkSectors checks the sectors map: each key a stock symbol, each sector a
+// short name. When the sector limit is set, every stock on the watchlist and
+// in a strategy must have a sector, because the risk check could not measure
+// a buy of a stock with none.
+func checkSectors(p *problems, sectors map[string]string, s *Strategy) map[string]string {
+	symbols := make([]string, 0, len(sectors))
+	for sym := range sectors {
+		symbols = append(symbols, sym)
+	}
+	slices.Sort(symbols)
+	out := make(map[string]string, len(sectors))
+	for _, sym := range symbols {
+		name := sectors[sym]
+		if len(sym) > maxSymbolLen || !symbolText.MatchString(sym) {
+			p.add("sectors has %q, which is not a stock symbol (capital letters, digits, and one . or - for a share class)", sym)
+			continue
+		}
+		switch {
+		case strings.TrimSpace(name) == "":
+			p.add("sectors.%s is empty; give the stock's sector, such as technology", sym)
+		case strings.TrimSpace(name) != name:
+			p.add("sectors.%s is %q, which starts or ends with a space", sym, name)
+		case len(name) > maxSectorLen || strings.ContainsFunc(name, unicode.IsControl):
+			p.add("sectors.%s is not a sector name (at most %d characters, on one line)", sym, maxSectorLen)
+		}
+		out[sym] = name
+	}
+	if s.Limits.MaxSectorShare == nil {
+		return out
+	}
+	if len(sectors) == 0 {
+		p.add("sectors is missing, but limits.max_sector_share is set, so every stock on the watchlist and in a strategy needs a sector")
+		return out
+	}
+	seen := make(map[string]bool)
+	need := slices.Clone(s.Watchlist)
+	for _, def := range s.Strategies {
+		need = append(need, def.Stocks...)
+	}
+	for _, sym := range need {
+		if seen[sym] {
+			continue
+		}
+		seen[sym] = true
+		if _, ok := sectors[sym]; !ok {
+			p.add("sectors has no sector for %s, but limits.max_sector_share is set", sym)
+		}
 	}
 	return out
 }

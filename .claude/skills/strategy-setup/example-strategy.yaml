@@ -76,3 +76,16 @@ strategies:
       - type: size_fixed_amount
         settings:
           amount: "100.00"
+
+# Each stock's sector, needed for every stock above because max_sector_share
+# is set. The names are placeholders; spell each one the same way every time.
+sectors:
+  TECH1: technology
+  TECH2: technology
+  INDU1: industrials
+  HLTH1: health-care
+  HLTH2: health-care
+  STPL1: consumer-staples
+  ENRG1: energy
+  FINC1: financials
+  UTIL1: utilities

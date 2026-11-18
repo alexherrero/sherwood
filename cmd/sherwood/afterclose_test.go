@@ -37,6 +37,10 @@ func acStrategy(t *testing.T) *config.Strategy {
 	s, err := config.ParseStrategy([]byte(head + `
 watchlist:
   - EEE
+sectors:
+  AAA: sector-a
+  BBB: sector-b
+  EEE: sector-a
 strategies:
   - name: test-breakout
     portfolio_share: 0.50

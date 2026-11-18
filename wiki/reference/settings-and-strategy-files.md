@@ -145,7 +145,7 @@ Whether orders go to the paper ledger or to the broker. Sherwood starts in `pape
 
 ## Strategy file
 
-The strategy file has four top-level fields:
+The strategy file has five top-level fields. `sectors` is needed only when `limits.max_sector_share` is set:
 
 ```yaml
 version: 1
@@ -165,6 +165,10 @@ watchlist:
   - AAPL
   - MSFT
   - KO
+sectors:
+  AAPL: technology
+  MSFT: technology
+  KO: consumer-staples
 strategies:
   - name: example-trend
     portfolio_share: 0.40
@@ -228,7 +232,7 @@ A missing limit gives `limits.<name> is missing`, for example `limits.max_order_
 - **`max_orders_per_day`** is the most orders sherwood sends in one trading day. Protective sells, which cut a loss, do not count against it and are never blocked by it. Error when below 1: `limits.max_orders_per_day is 0, but it must be at least 1`.
 - **`daily_loss_limit`** is the loss since the previous close, in dollars, at which all trading stops for the rest of the day. Protective sells still go through.
 - **`max_holdings`** is the most holdings sherwood may have after a buy fills. The design's hard ceiling is 20, so the file may set a lower number but never a higher one: `limits.max_holdings is 25, but it must be from 1 to 20`.
-- **`max_sector_share`** is the largest share of the portfolio in one sector. It is the one optional limit; leave the line out to turn the sector check off.
+- **`max_sector_share`** is the largest share of the portfolio in one sector, counting what is held, today's buys not yet filled, and the buy being checked. It is the one optional limit; leave the line out to turn the sector check off. When it is set, the [`sectors`](#sectors) map must give every stock on the watchlist and in a strategy a sector.
 - **`max_limit_distance`** is how far a buy's limit price may sit from the last close, as a share of that close. A buy whose limit price is further away is refused.
 - **`buy_limit_margin`** is how far above the previous close a buy's limit price is set, as a share of that close. It may be 0. It may not be larger than `max_limit_distance`, because then every buy would be refused: `limits.buy_limit_margin (0.06) is larger than limits.max_limit_distance (0.05), so every buy would be refused`.
 - **`fractional_shares`** turns fractional share counts on. When it is `false`, share counts are rounded to whole shares.
@@ -254,6 +258,30 @@ A stock symbol is written in capital letters and digits, starts with a letter, m
 
 - `watchlist[0] is "aapl", which is not a stock symbol (capital letters, digits, and one . or - for a share class)`
 - `watchlist lists AAPL more than once`
+
+### `sectors`
+
+| Type | Required | Accepted values |
+|---|---|---|
+| mapping of stock symbol to sector name | only when `limits.max_sector_share` is set | Well-formed symbols; each sector a name of at most 40 characters on one line, with no space at either end |
+
+Each stock's sector, for the sector limit. The risk check adds up what you hold in a buy's sector and refuses the buy if the sector would then be more than `max_sector_share` of the portfolio. Sherwood has no sector feed, so you give the sectors here. Name them however you like, but spell each one the same way every time: `technology` and `Technology` are two different sectors.
+
+When `max_sector_share` is set, every stock on the watchlist and in every strategy's `stocks` needs a sector, and sherwood refuses to start until each has one. A stock you hold that is in neither list needs no sector to start, but the risk check refuses a buy of any stock without one. When `max_sector_share` is left out, `sectors` may be left out too; any entries you do write are still checked.
+
+```yaml
+sectors:
+  AAPL: technology
+  MSFT: technology
+  KO: consumer-staples
+```
+
+- `sectors is missing, but limits.max_sector_share is set, so every stock on the watchlist and in a strategy needs a sector`
+- `sectors has no sector for KO, but limits.max_sector_share is set`
+- `sectors.KO is empty; give the stock's sector, such as technology`
+- `sectors.KO is " consumer-staples", which starts or ends with a space`
+- `sectors.KO is not a sector name (at most 40 characters, on one line)`
+- `sectors has "ko", which is not a stock symbol (capital letters, digits, and one . or - for a share class)`
 
 ### `strategies`
 
