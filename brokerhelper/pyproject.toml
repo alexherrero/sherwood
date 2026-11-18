@@ -4,10 +4,15 @@ version = "0.1.0"
 description = "Sherwood's broker helper: the one process that talks to the broker, over a local Unix socket."
 readme = "README.md"
 requires-python = ">=3.12"
-# Runtime dependencies. The broker library joins this list, pinned to one
-# reviewed version, in a later part. Regenerate requirements.lock after any
-# change here (see README.md).
-dependencies = []
+# Runtime dependencies. The broker library is pinned to one exact version,
+# read before it was taken (see README.md); read every upgrade the same way.
+# tzdata gives the helper the US Eastern time zone even in a slim image that
+# has no system time-zone files. Regenerate both lock files after any change
+# here (see README.md).
+dependencies = [
+    "robin-stocks==3.4.0",
+    "tzdata",
+]
 
 [dependency-groups]
 dev = ["pytest"]
