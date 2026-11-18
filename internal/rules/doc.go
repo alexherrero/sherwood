@@ -25,6 +25,13 @@
 // day. Stop rules are levels instead: a holding that has closed at or below
 // its stop gets a sell on every day it is still held.
 //
+// A strategy's rules are combined into one verdict per stock by Set.Combine,
+// which both the rule runner and the back-tester call. First match wins: a
+// stop rule's sell, any other sell, a trim, a buy or add, then no change. The
+// reason kept is "<rule type>: <reason>" from the first rule in the file's
+// order that gave the winning action, and a held stock's stop is the highest
+// any stop rule gives.
+//
 // Determinism: a rule reads nothing but its arguments. It never reads the
 // clock, the network or a global, and ties are broken by symbol, so the same
 // inputs always give the same outcome and the same reason. All maths is exact

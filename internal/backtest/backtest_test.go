@@ -235,26 +235,6 @@ func TestNoSizingRuleMakesNoBuys(t *testing.T) {
 	}
 }
 
-func TestCombinePriority(t *testing.T) {
-	p := &pick{act: none}
-	p.offer(entry, "a", "buy")
-	p.offer(trim, "b", "trim")
-	p.offer(entry, "c", "buy again")
-	if p.act != trim || p.why != "b: trim" {
-		t.Fatalf("trim did not beat a buy: %+v", p)
-	}
-	p.offer(sell, "d", "sell")
-	p.offer(sell, "e", "a later sell")
-	if p.act != sell || p.why != "d: sell" {
-		t.Fatalf("the first sell did not win: %+v", p)
-	}
-	p.offer(stopSell, "f", "stop")
-	p.offer(none, "g", "nothing")
-	if p.act != stopSell || p.why != "f: stop" {
-		t.Fatalf("a stop sell did not come first: %+v", p)
-	}
-}
-
 func TestRefuses(t *testing.T) {
 	s := strategyFile(t, 20, breakoutStrategy("AAA", fixedAmount))
 	good := map[string][]prices.Bar{"AAA": bars(t, "AAA", path...)}

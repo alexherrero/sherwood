@@ -142,35 +142,6 @@ type order struct {
 	why    string
 }
 
-// strategyRules is a strategy's parsed rules by kind, in the file's order.
-type strategyRules struct {
-	signal  []rules.SignalRule
-	ranking []rules.RankingRule
-	stop    []rules.StopRule
-	sizing  rules.SizingRule
-}
-
-func parseRules(def config.StrategyDef) (strategyRules, error) {
-	var sr strategyRules
-	for _, cr := range def.Rules {
-		r, err := rules.Parse(cr)
-		if err != nil {
-			return sr, err
-		}
-		switch x := r.(type) {
-		case rules.SignalRule:
-			sr.signal = append(sr.signal, x)
-		case rules.RankingRule:
-			sr.ranking = append(sr.ranking, x)
-		case rules.StopRule:
-			sr.stop = append(sr.stop, x)
-		case rules.SizingRule:
-			sr.sizing = x
-		}
-	}
-	return sr, nil
-}
-
 // dayKey turns a date into a number that orders like the date, reading its
 // Eastern year, month and day.
 func dayKey(t time.Time) int {
@@ -189,7 +160,7 @@ func ratio(a, b decimal.Decimal) decimal.Decimal {
 type sim struct {
 	cfg     Config
 	def     config.StrategyDef
-	rules   strategyRules
+	rules   rules.Set
 	policy  money.QuantityPolicy
 	margin  decimal.Decimal
 	maxHeld int
@@ -205,7 +176,7 @@ type sim struct {
 }
 
 func runStrategy(cfg Config, def config.StrategyDef) (*Result, error) {
-	sr, err := parseRules(def)
+	sr, err := rules.ParseSet(def)
 	if err != nil {
 		return nil, err
 	}
@@ -462,42 +433,6 @@ func (s *sim) holdingsValue(d int) money.Money {
 	return v
 }
 
-// action is a stock's combined outcome, in priority order: a lower value
-// wins.
-type action int
-
-const (
-	stopSell action = iota
-	sell
-	trim
-	entry
-	none
-)
-
-func actionOf(o rules.Outcome) action {
-	switch o {
-	case rules.Sell:
-		return sell
-	case rules.Trim:
-		return trim
-	case rules.Buy, rules.Add:
-		return entry
-	default:
-		return none
-	}
-}
-
-type pick struct {
-	act action
-	why string
-}
-
-func (p *pick) offer(a action, ruleType, reason string) {
-	if a < p.act {
-		p.act, p.why = a, ruleType+": "+reason
-	}
-}
-
 func (s *sim) holding(sym string) (*rules.Holding, error) {
 	p, ok := s.held[sym]
 	if !ok {
@@ -511,9 +446,9 @@ func (s *sim) holding(sym string) (*rules.Holding, error) {
 }
 
 // decide runs the rules after date d's close and makes the next date's
-// orders.
+// orders. The rules are combined by rules.Set.Combine, the same code the rule
+// runner uses.
 func (s *sim) decide(d int) error {
-	picks := map[string]*pick{}
 	inputs := make([]rules.Input, 0, len(s.symbols))
 	for _, sym := range s.symbols {
 		se := s.series[sym]
@@ -525,85 +460,48 @@ func (s *sim) decide(d int) error {
 		}
 		inputs = append(inputs, rules.Input{Symbol: sym, Bars: se.rules[:end+1], Holding: h})
 	}
-	for i, sym := range s.symbols {
-		if _, _, ok := s.barOn(sym, d); !ok {
-			continue
-		}
-		pk := &pick{act: none}
-		picks[sym] = pk
-		in := inputs[i]
-		if in.Holding != nil {
-			var top *money.Price
-			for _, r := range s.rules.stop {
-				dec, err := r.Stop(in)
-				if err != nil {
-					return err
-				}
-				if dec.Stop != nil && (top == nil || dec.Stop.Cmp(*top) > 0) {
-					stop := *dec.Stop
-					top = &stop
-				}
-				if dec.Outcome == rules.Sell {
-					pk.offer(stopSell, r.Type(), dec.Reason)
-				}
-			}
-			if top != nil {
-				s.held[sym].stop = top
-			}
-		}
-		for _, r := range s.rules.signal {
-			dec, err := r.Decide(in)
-			if err != nil {
-				return err
-			}
-			pk.offer(actionOf(dec.Outcome), r.Type(), dec.Reason)
-		}
-	}
-	for _, r := range s.rules.ranking {
-		decs, err := r.Rank(inputs)
-		if err != nil {
-			return err
-		}
-		for i, dec := range decs {
-			if pk, ok := picks[s.symbols[i]]; ok {
-				pk.offer(actionOf(dec.Outcome), r.Type(), dec.Reason)
-			}
-		}
+	verdicts, err := s.rules.Combine(inputs, func(i int) bool {
+		_, _, ok := s.barOn(s.symbols[i], d)
+		return ok
+	})
+	if err != nil {
+		return err
 	}
 
 	// Sells first, so they are worked before buys on the next date.
-	var buys []string
-	for _, sym := range s.symbols {
-		pk, ok := picks[sym]
-		if !ok {
-			continue
+	var buys []rules.Verdict
+	for _, v := range verdicts {
+		sym := v.Symbol
+		if v.Stop != nil {
+			s.held[sym].stop = v.Stop
 		}
-		switch pk.act {
-		case stopSell, sell:
+		switch v.Action {
+		case rules.ActionStopSell, rules.ActionSell:
 			s.pending = append(s.pending, order{symbol: sym, kind: fill.SellAtOpen, qty: s.held[sym].qty,
-				stop: pk.act == stopSell, why: pk.why})
-		case trim:
+				stop: v.Action == rules.ActionStopSell, why: v.Reason})
+		case rules.ActionTrim:
 			half, err := s.policy.Round(s.held[sym].qty.Decimal().DivRound(decimal.NewFromInt(2), divPlaces))
 			if err != nil {
 				return err
 			}
 			if !half.IsZero() {
-				s.pending = append(s.pending, order{symbol: sym, kind: fill.SellAtOpen, qty: half, why: pk.why})
+				s.pending = append(s.pending, order{symbol: sym, kind: fill.SellAtOpen, qty: half, why: v.Reason})
 			}
-		case entry:
-			buys = append(buys, sym)
+		case rules.ActionEntry:
+			buys = append(buys, v)
 		}
 	}
-	return s.placeBuys(d, buys, picks, inputs)
+	return s.placeBuys(d, buys, inputs)
 }
 
 // placeBuys sizes each buy and admits it if the cash and the holdings limit
 // allow, in symbol order.
-func (s *sim) placeBuys(d int, buys []string, picks map[string]*pick, inputs []rules.Input) error {
+func (s *sim) placeBuys(d int, buys []rules.Verdict, inputs []rules.Input) error {
 	promised := money.Money{}
 	count := len(s.held)
-	for _, sym := range buys {
-		if s.rules.sizing == nil {
+	for _, v := range buys {
+		sym := v.Symbol
+		if s.rules.Sizing == nil {
 			s.res.NoSizing++
 			continue
 		}
@@ -612,11 +510,11 @@ func (s *sim) placeBuys(d int, buys []string, picks map[string]*pick, inputs []r
 		if err != nil {
 			return err
 		}
-		stop, err := s.initialStop(sym, limit, inputs)
+		stop, err := s.rules.InitialStop(inputs[slices.Index(s.symbols, sym)], limit)
 		if err != nil {
 			return err
 		}
-		size, err := s.rules.sizing.Size(rules.SizeInput{Symbol: sym, Price: limit, Stop: stop,
+		size, err := s.rules.Sizing.Size(rules.SizeInput{Symbol: sym, Price: limit, Stop: stop,
 			Capital: s.res.Capital, Policy: s.policy})
 		if err != nil {
 			return err
@@ -639,33 +537,9 @@ func (s *sim) placeBuys(d int, buys []string, picks map[string]*pick, inputs []r
 			count++
 		}
 		s.pending = append(s.pending, order{symbol: sym, kind: fill.BuyLimit, qty: size.Quantity, limit: limit,
-			why: picks[sym].why + "; " + size.Reason})
+			why: v.Reason + "; " + size.Reason})
 	}
 	return nil
-}
-
-// initialStop is the highest stop the strategy's stop rules give a holding of
-// sym bought at limit on the trading date, or nil if none gives one.
-func (s *sim) initialStop(sym string, limit money.Price, inputs []rules.Input) (*money.Price, error) {
-	var in rules.Input
-	for _, x := range inputs {
-		if x.Symbol == sym {
-			in = x
-		}
-	}
-	in.Holding = &rules.Holding{Cost: limit, Opened: in.Bars[len(in.Bars)-1].Date}
-	var top *money.Price
-	for _, r := range s.rules.stop {
-		dec, err := r.Stop(in)
-		if err != nil {
-			return nil, err
-		}
-		if dec.Stop != nil && (top == nil || dec.Stop.Cmp(*top) > 0) {
-			stop := *dec.Stop
-			top = &stop
-		}
-	}
-	return top, nil
 }
 
 // finish works out the figures.

@@ -32,6 +32,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/logging"
+	"github.com/alexherrero/sherwood/internal/rules"
 	"github.com/alexherrero/sherwood/internal/scheduler"
 	"github.com/alexherrero/sherwood/internal/store"
 	"github.com/alexherrero/sherwood/internal/web"
@@ -153,6 +154,11 @@ func run(ctx context.Context, e env) (err error) {
 	}
 	strategy, err := config.LoadStrategy(opts.strategyPath)
 	if err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	// config cannot check rule settings (rules imports config), so the rule
+	// library checks them here, before anything is opened.
+	if err := rules.Validate(strategy); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
 	mode := string(settings.Mode)
