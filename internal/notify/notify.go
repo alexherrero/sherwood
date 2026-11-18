@@ -129,3 +129,16 @@ func (a Alert) Payload() ([]byte, error) {
 	}
 	return json.Marshal(Payload{Text: a.Text(), Path: a.Path()})
 }
+
+// Nowhere is a Notifier for when no channel is set up: it sends nothing and
+// returns ErrNoRecipients. Hand it on instead of a nil Notifier.
+var Nowhere Notifier = nowhere{}
+
+type nowhere struct{}
+
+func (nowhere) Notify(_ context.Context, a Alert) error {
+	if !a.Valid() {
+		return errors.New("notify: the alert was not made by a constructor in package notify")
+	}
+	return ErrNoRecipients
+}

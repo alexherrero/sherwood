@@ -29,6 +29,7 @@ import (
 
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/store"
 )
 
@@ -71,6 +72,9 @@ type Config struct {
 	// Push is the web push channel. Leave it nil when notifications are not
 	// set up; Settings then says so.
 	Push PushChannel
+	// Switch is the stop switch, which Today shows and its two actions throw
+	// and reset. Required.
+	Switch *halt.Switch
 }
 
 // Server is the phone app's HTTP server.
@@ -83,6 +87,7 @@ type Server struct {
 	store   *store.Store
 	mode    config.Mode
 	push    PushChannel
+	stop    *halt.Switch
 	mux     *http.ServeMux
 	handler http.Handler
 	// reads lists every read pattern registered, for tests.
@@ -102,6 +107,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Store == nil {
 		return nil, errors.New("web: the database is required")
 	}
+	if cfg.Switch == nil {
+		return nil, errors.New("web: the stop switch is required")
+	}
 	if cfg.Mode != config.ModePaper && cfg.Mode != config.ModeLive {
 		return nil, fmt.Errorf("web: the trading mode must be %q or %q", config.ModePaper, config.ModeLive)
 	}
@@ -118,6 +126,7 @@ func New(cfg Config) (*Server, error) {
 		store:   cfg.Store,
 		mode:    cfg.Mode,
 		push:    cfg.Push,
+		stop:    cfg.Switch,
 		mux:     http.NewServeMux(),
 	}
 	for _, a := range cfg.ApprovalDevices {
@@ -127,6 +136,7 @@ func New(cfg Config) (*Server, error) {
 
 	s.mountShell()
 	s.mountPush()
+	s.mountStopSwitch()
 	s.HandleRead("/health", http.HandlerFunc(health))
 	return s, nil
 }
@@ -135,7 +145,7 @@ func New(cfg Config) (*Server, error) {
 type ChangeOption int
 
 // ApprovalDevicesOnly limits a change to the approval devices: approving a
-// buy and resetting the stop switch.
+// buy, and throwing and resetting the stop switch.
 const ApprovalDevicesOnly ChangeOption = 1
 
 // HandleRead registers a view. It answers GET and HEAD only, so it must never

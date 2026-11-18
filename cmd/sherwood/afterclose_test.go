@@ -12,9 +12,12 @@ import (
 
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/logging/loggingtest"
 	"github.com/alexherrero/sherwood/internal/money"
+	"github.com/alexherrero/sherwood/internal/notify"
+	"github.com/alexherrero/sherwood/internal/notify/notifytest"
 	"github.com/alexherrero/sherwood/internal/prices/pricestest"
 	"github.com/alexherrero/sherwood/internal/scheduler"
 	"github.com/alexherrero/sherwood/internal/secret"
@@ -86,6 +89,8 @@ type acHarness struct {
 	check   *pricestest.Source
 	sched   *scheduler.Scheduler
 	logs    *loggingtest.Output
+	alerts  *notifytest.Fake
+	halts   *halt.Switch
 }
 
 // newAC builds a store, two fake sources and a scheduler with the
@@ -103,7 +108,11 @@ func newAC(t *testing.T, now time.Time, catchUpDays int, missing ...string) *acH
 	t.Cleanup(func() { _ = s.Close() })
 	log, out := loggingtest.New(t)
 	h := &acHarness{store: s, clock: clock.NewFake(now), primary: pricestest.New("primary"),
-		check: pricestest.New("cross"), logs: out}
+		check: pricestest.New("cross"), logs: out, alerts: &notifytest.Fake{}}
+	h.halts, err = halt.New(halt.Config{Store: s, Clock: h.clock, Notifier: h.alerts, Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
 	for d := day(t, "2026-11-02"); d.Month() == time.November; d = d.AddDate(0, 0, 1) {
 		if open, err := clock.NYSE().IsTradingDay(d); err != nil || !open {
 			continue
@@ -127,7 +136,7 @@ func newAC(t *testing.T, now time.Time, catchUpDays int, missing ...string) *acH
 		t.Fatal(err)
 	}
 	a := &afterClose{store: s, clock: h.clock, calendar: clock.NYSE(), log: log, strategy: acStrategy(t),
-		primary: h.primary, check: h.check}
+		halts: h.halts, primary: h.primary, check: h.check}
 	if err := a.register(h.sched); err != nil {
 		t.Fatal(err)
 	}
@@ -352,6 +361,52 @@ func TestAfterCloseCatchesUpWithEachDatesOwnBarsAndHoldings(t *testing.T) {
 	}
 }
 
+func TestAfterCloseHaltsWhenTheSourcesDisagreeOnAHeldStock(t *testing.T) {
+	h := newAC(t, at(t, "2026-11-24", 9, 0), 1)
+	ctx := context.Background()
+	held := holdings.Holding{Symbol: "BBB", Quantity: money.MustParseQuantity("3"),
+		AverageCost: money.MustParseMoney("9.50"), Opened: day(t, "2026-11-20")}
+	if _, _, err := holdings.Record(ctx, h.store, holdings.Snapshot{Source: holdings.SourceImport,
+		AsOf: at(t, "2026-11-24", 10, 0), Holdings: []holdings.Holding{held}, Cash: money.MustParseMoney("100.00")}); err != nil {
+		t.Fatal(err)
+	}
+	// The cross-check source has BBB 20% higher on the 24th.
+	h.check.Add(pricestest.Bar("BBB", "2026-11-24", "12.00", "12.00", "12.00", "12.00", 1000))
+	h.runAt(t, at(t, "2026-11-24", 16, 30))
+
+	st, err := halt.Active(ctx, h.store.Reader())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !st.On() || len(st.Active) != 1 || st.Active[0].Cause != halt.PriceDisagreement {
+		t.Fatalf("switch = %+v, want one price halt", st)
+	}
+	ev := st.Active[0].Evidence
+	if !strings.Contains(ev, "Price check for 2026-11-24 (primary against cross)") || !strings.Contains(ev, " BBB: ") ||
+		strings.Contains(ev, "AAA") {
+		t.Errorf("evidence %q", ev)
+	}
+	if sent := h.alerts.Sent(); len(sent) != 1 || sent[0] != notify.TradingHalted() {
+		t.Errorf("alerts %v, want one TradingHalted", sent)
+	}
+	// While halted, the rules still run and record their signals.
+	if got, want := h.signalText(t), []string{"2026-11-24 test-breakout AAA buy"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("signals %q, want %q", got, want)
+	}
+	if runs := h.runs(t); runs[len(runs)-1].outcome != "succeeded" {
+		t.Errorf("the attempt %s", runs[len(runs)-1].outcome)
+	}
+
+	// The next day agrees, which does not reset the switch: only you can.
+	h.runAt(t, at(t, "2026-11-25", 16, 30))
+	if st, err := halt.Active(ctx, h.store.Reader()); err != nil || len(st.Active) != 1 {
+		t.Errorf("after a clean day: %+v, %v", st, err)
+	}
+	if len(h.alerts.Sent()) != 1 {
+		t.Errorf("a clean day notified")
+	}
+}
+
 func TestAfterCloseMissingDayMakesNoSignals(t *testing.T) {
 	// The cross-check source has not published BBB's bar for the 24th, the
 	// day AAA breaks out.
@@ -434,7 +489,7 @@ func TestAfterCloseIsOffWithoutBothKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys := config.PriceKeys{TiingoToken: secret.New("made-up-token")}
-	if err := registerAfterClose(env{clock: clk}, sched, keys, acStrategy(t), s, log); err != nil {
+	if err := registerAfterClose(env{clock: clk}, sched, keys, acStrategy(t), s, nil, log); err != nil {
 		t.Fatal(err)
 	}
 	if err := sched.RunDue(ctx); err != nil {

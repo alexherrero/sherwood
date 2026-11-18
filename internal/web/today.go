@@ -10,7 +10,7 @@ import (
 
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
-	"github.com/alexherrero/sherwood/internal/prices"
+	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/store"
 )
 
@@ -18,25 +18,15 @@ import (
 type todayData struct {
 	// Live is true in live mode. The banner says which mode in words.
 	Live bool
-	// Halt is the halt found by the latest price check, or nil.
-	Halt *haltView
+	// Result is the outcome of the last stop switch action, if any.
+	Result *notice
+	// Switch is the stop switch: on or off, and the halts that turned it on.
+	Switch switchView
 	// PricesChecked is the date of the latest price check, or "" if prices
 	// have never been checked.
 	PricesChecked string
 	// Jobs is the last run of each job that has ever run, by name.
 	Jobs []jobView
-}
-
-// haltView is a halt and its cause.
-type haltView struct {
-	Date   string
-	Stocks []haltStock
-}
-
-// haltStock is one held stock whose price sources disagreed.
-type haltStock struct {
-	Symbol string
-	Detail string
 }
 
 // jobView is one job's last run.
@@ -73,7 +63,15 @@ func loadToday(s *Server, r *http.Request) (any, error) {
 	defer func() { _ = tx.Rollback() }()
 
 	d := todayData{Live: s.mode == config.ModeLive}
-	if d.PricesChecked, d.Halt, err = latestHalt(ctx, tx); err != nil {
+	if res, ok := switchResults[r.URL.Query().Get("switch")]; ok {
+		d.Result = &res
+	}
+	st, err := halt.Active(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	d.Switch = newSwitchView(st)
+	if d.PricesChecked, err = latestPriceCheck(ctx, tx); err != nil {
 		return nil, err
 	}
 	if d.Jobs, err = lastRuns(ctx, tx); err != nil {
@@ -82,39 +80,24 @@ func loadToday(s *Server, r *http.Request) (any, error) {
 	return d, nil
 }
 
-// latestHalt reads the latest price check. A held stock whose two sources
-// disagreed halts trading until you review it.
-//
-// The price check is the only halt recorded so far. Paper trading adds the
-// stop switch and its own record of halts, and this view will read that too.
-func latestHalt(ctx context.Context, tx *sql.Tx) (string, *haltView, error) {
+// latestPriceCheck reads the date of the latest price check. A disagreement
+// on a held stock is not read here: the after-close job throws the stop
+// switch for it, and the halt shows with its evidence.
+func latestPriceCheck(ctx context.Context, tx *sql.Tx) (string, error) {
 	var date string
 	err := tx.QueryRowContext(ctx,
 		`SELECT trading_date FROM price_days ORDER BY trading_date DESC LIMIT 1`).Scan(&date)
 	if errors.Is(err, sql.ErrNoRows) {
-		return "", nil, nil
+		return "", nil
 	}
 	if err != nil {
-		return "", nil, fmt.Errorf("web: reading the latest price check: %w", err)
+		return "", fmt.Errorf("web: reading the latest price check: %w", err)
 	}
 	at, err := time.ParseInLocation(clock.DateLayout, date, clock.Eastern)
 	if err != nil {
-		return "", nil, fmt.Errorf("web: reading the latest price check: %w", err)
+		return "", fmt.Errorf("web: reading the latest price check: %w", err)
 	}
-	pd, err := prices.LoadDay(ctx, tx, at)
-	if err != nil {
-		return "", nil, err
-	}
-	if !pd.Halt() {
-		return day(at), nil, nil
-	}
-	h := &haltView{Date: day(at)}
-	for _, c := range pd.Checks {
-		if c.Halt {
-			h.Stocks = append(h.Stocks, haltStock{Symbol: c.Symbol, Detail: c.Detail})
-		}
-	}
-	return day(at), h, nil
+	return day(at), nil
 }
 
 // lastRuns reads the newest run of each job, by trading date and then start

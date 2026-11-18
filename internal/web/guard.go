@@ -181,20 +181,26 @@ func (s *Server) checkChange(h http.Handler, devicesOnly bool) http.Handler {
 }
 
 // fromApprovalDevice reports whether the caller's tailnet address, as Serve
-// forwards it, is an approval device. Serve sets X-Forwarded-For to the
-// caller's address; should anything have been added before it, the last
-// entry is still the one Serve wrote.
+// forwards it, is an approval device.
 func (s *Server) fromApprovalDevice(r *http.Request) bool {
+	a, ok := callerAddr(r)
+	return ok && s.devices[a]
+}
+
+// callerAddr is the caller's tailnet address as Serve forwards it, unmapped.
+// Serve sets X-Forwarded-For to the caller's address; should anything have
+// been added before it, the last entry is still the one Serve wrote.
+func callerAddr(r *http.Request) (netip.Addr, bool) {
 	v := r.Header.Values(headerForwardedFor)
 	if len(v) == 0 {
-		return false
+		return netip.Addr{}, false
 	}
 	parts := strings.Split(v[len(v)-1], ",")
 	a, err := netip.ParseAddr(strings.TrimSpace(parts[len(parts)-1]))
 	if err != nil || a.Zone() != "" {
-		return false
+		return netip.Addr{}, false
 	}
-	return s.devices[a.Unmap()]
+	return a.Unmap(), true
 }
 
 // requestSession is the session a request belongs to, for issuing tokens.

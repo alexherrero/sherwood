@@ -17,7 +17,9 @@ import (
 
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/logging/loggingtest"
+	"github.com/alexherrero/sherwood/internal/notify/notifytest"
 	"github.com/alexherrero/sherwood/internal/store"
 )
 
@@ -37,6 +39,8 @@ type fixture struct {
 	store   *store.Store
 	clock   *clock.Fake
 	log     *loggingtest.Output
+	alerts  *notifytest.Fake // what the stop switch sent
+	stop    *halt.Switch
 	changes atomic.Int32 // how many times the test actions ran
 }
 
@@ -61,7 +65,9 @@ func newFixtureWith(t *testing.T, mode config.Mode, edit func(*fixture, *Config)
 		t.Fatal(err)
 	}
 	logger, out := loggingtest.New(t)
-	f := &fixture{t: t, store: openStore(t, start), clock: clock.NewFake(start), log: out}
+	f := &fixture{t: t, store: openStore(t, start), clock: clock.NewFake(start), log: out,
+		alerts: &notifytest.Fake{}}
+	f.stop = newSwitch(t, f.store, f.clock, f.alerts)
 	cfg := Config{
 		Login:           login,
 		ApprovalDevices: []netip.Addr{netip.MustParseAddr(phoneAddr), netip.MustParseAddr(phoneIPv6)},
@@ -69,6 +75,7 @@ func newFixtureWith(t *testing.T, mode config.Mode, edit func(*fixture, *Config)
 		Logger:          logger,
 		Store:           f.store,
 		Mode:            mode,
+		Switch:          f.stop,
 	}
 	if edit != nil {
 		edit(f, &cfg)
@@ -475,22 +482,35 @@ func TestNewRefusesAnIncompleteConfig(t *testing.T) {
 	clk := clock.NewFake(time.Unix(0, 0))
 	st := openStore(t, time.Unix(0, 0))
 	paper := config.ModePaper
+	sw := newSwitch(t, st, clk, &notifytest.Fake{})
 	for name, cfg := range map[string]Config{
-		"no login":     {Clock: clk, Logger: logger, Store: st, Mode: paper},
-		"no clock":     {Login: login, Logger: logger, Store: st, Mode: paper},
-		"no logger":    {Login: login, Clock: clk, Store: st, Mode: paper},
-		"short key":    {Login: login, Clock: clk, Logger: logger, Store: st, Mode: paper, Key: []byte("short")},
-		"no database":  {Login: login, Clock: clk, Logger: logger, Mode: paper},
-		"no mode":      {Login: login, Clock: clk, Logger: logger, Store: st},
-		"unknown mode": {Login: login, Clock: clk, Logger: logger, Store: st, Mode: "practice"},
+		"no login":     {Clock: clk, Logger: logger, Store: st, Mode: paper, Switch: sw},
+		"no clock":     {Login: login, Logger: logger, Store: st, Mode: paper, Switch: sw},
+		"no logger":    {Login: login, Clock: clk, Store: st, Mode: paper, Switch: sw},
+		"short key":    {Login: login, Clock: clk, Logger: logger, Store: st, Mode: paper, Switch: sw, Key: []byte("short")},
+		"no database":  {Login: login, Clock: clk, Logger: logger, Mode: paper, Switch: sw},
+		"no mode":      {Login: login, Clock: clk, Logger: logger, Store: st, Switch: sw},
+		"unknown mode": {Login: login, Clock: clk, Logger: logger, Store: st, Mode: "practice", Switch: sw},
+		"no switch":    {Login: login, Clock: clk, Logger: logger, Store: st, Mode: paper},
 	} {
 		if _, err := New(cfg); err == nil {
 			t.Errorf("%s: New accepted it", name)
 		}
 	}
-	if _, err := New(Config{Login: login, Clock: clk, Logger: logger, Store: st, Mode: config.ModeLive}); err != nil {
+	if _, err := New(Config{Login: login, Clock: clk, Logger: logger, Store: st, Mode: config.ModeLive, Switch: sw}); err != nil {
 		t.Errorf("a complete config was refused: %v", err)
 	}
+}
+
+// newSwitch builds a stop switch over st that sends to alerts.
+func newSwitch(t *testing.T, st *store.Store, clk clock.Clock, alerts *notifytest.Fake) *halt.Switch {
+	t.Helper()
+	logger, _ := loggingtest.New(t)
+	sw, err := halt.New(halt.Config{Store: st, Clock: clk, Notifier: alerts, Logger: logger})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return sw
 }
 
 // openStore opens a fresh database with every migration applied, closed when

@@ -14,28 +14,53 @@
 <header class="page-head">
 <h1>Today</h1>
 </header>
-{{if .Halt -}}
+{{with .Result -}}
+<section class="notice {{.Class}}" role="status" aria-label="Stop switch result">
+<p class="notice-title"><strong>{{.Title}}</strong></p>
+<p>{{.Body}}</p>
+</section>
+{{- end}}
+{{if .Switch.On -}}
 <section class="notice notice--halt" aria-label="Halt">
-<p class="notice-title"><strong>Trading is halted for your review.</strong></p>
-<p>The price check for {{.Halt.Date}} found that the two price sources disagree on a stock you hold. No rule acts until you have looked at it.</p>
+<p class="notice-title"><strong>Trading is halted.</strong></p>
+<p>Nothing is sent to the broker until you reset the stop switch. Rules still run and record their signals, so you can see what they would have done.</p>
 <ul class="rows">
-{{- range .Halt.Stocks}}
-<li class="row"><span class="row-label">{{.Symbol}}</span><span class="row-meta">{{.Detail}}</span></li>
+{{- range .Switch.Halts}}
+<li class="row"><span class="row-label">{{.Cause}}<span class="row-meta">{{.At}}</span><span class="row-meta">{{.Evidence}}</span></span></li>
 {{- end}}
 </ul>
 </section>
 {{- else -}}
 <section class="notice notice--info" aria-label="Halt">
 <p class="notice-title"><strong>Nothing is halted.</strong></p>
-<p>{{if .PricesChecked}}The latest price check, for {{.PricesChecked}}, found no halt.{{else}}Prices have not been checked yet, so there is no halt to show.{{end}}</p>
+<p>{{if .PricesChecked}}Prices were last checked for {{.PricesChecked}}.{{else}}Prices have not been checked yet.{{end}}</p>
 </section>
 {{- end}}
 <section class="card" aria-labelledby="stop-switch">
 <div class="card-head">
 <h2 class="card-title" id="stop-switch">Stop switch</h2>
-<span class="badge">Not built yet</span>
+<span class="badge {{if .Switch.On}}badge--blocked{{else}}badge--passed{{end}}">{{if .Switch.On}}On: trading halted{{else}}Off{{end}}</span>
 </div>
-<p class="card-body">The stop switch arrives with paper trading. Until then sherwood places no orders, so there is nothing to stop.</p>
+{{if .Switch.On -}}
+<form class="card-body stack" method="post" action="/stop-switch/reset">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<input type="hidden" name="through" value="{{.Switch.Newest}}">
+<p>Reset the switch only once you have looked at every halt above. The reset is recorded with your reason and this device.</p>
+<div class="field">
+<label class="field-label" for="reset-reason">Why you are resetting it</label>
+<textarea class="field-input" id="reset-reason" name="reason" rows="3" maxlength="500" required></textarea>
+<p class="field-hint">Required. Only an approval device can reset the switch.</p>
+</div>
+<button type="submit" class="button button--primary button--full">Reset the stop switch</button>
+</form>
+{{- else -}}
+<form class="card-body stack" method="post" action="/stop-switch/on">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<p>Stop all trading halts every strategy: nothing is sent to the broker until you reset the switch. Only an approval device can throw it.</p>
+{{with .Switch.LastReset}}<p class="field-hint">Last reset {{.At}} from {{.Device}}: {{.Reason}}</p>{{end}}
+<button type="submit" class="button button--destructive button--full">Stop all trading</button>
+</form>
+{{- end}}
 </section>
 <section class="card" aria-labelledby="jobs">
 <div class="card-head">
