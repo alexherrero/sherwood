@@ -68,6 +68,9 @@ type Config struct {
 	Store *store.Store
 	// Mode is the trading mode the settings file names, shown on Today.
 	Mode config.Mode
+	// Push is the web push channel. Leave it nil when notifications are not
+	// set up; Settings then says so.
+	Push PushChannel
 }
 
 // Server is the phone app's HTTP server.
@@ -79,6 +82,7 @@ type Server struct {
 	tokens  *tokener
 	store   *store.Store
 	mode    config.Mode
+	push    PushChannel
 	mux     *http.ServeMux
 	handler http.Handler
 	// reads lists every read pattern registered, for tests.
@@ -113,6 +117,7 @@ func New(cfg Config) (*Server, error) {
 		tokens:  tk,
 		store:   cfg.Store,
 		mode:    cfg.Mode,
+		push:    cfg.Push,
 		mux:     http.NewServeMux(),
 	}
 	for _, a := range cfg.ApprovalDevices {
@@ -121,6 +126,7 @@ func New(cfg Config) (*Server, error) {
 	s.handler = s.guard(s.mux)
 
 	s.mountShell()
+	s.mountPush()
 	s.HandleRead("/health", http.HandlerFunc(health))
 	return s, nil
 }

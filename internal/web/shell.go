@@ -71,8 +71,7 @@ var views = []view{
 		"candidate cases with their sources, and a button to add each one to your watchlist")},
 	{path: "/orders", name: "Orders", content: "placeholder", load: describe(
 		"every order and its full history")},
-	{path: "/settings", name: "Settings", content: "placeholder", load: describe(
-		"your limits, the mode and the paper record")},
+	{path: settingsPath, name: "Settings", content: "settings", load: loadSettings},
 }
 
 // describe is the load function of a view not built yet: its data is the

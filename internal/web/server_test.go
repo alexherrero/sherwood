@@ -49,20 +49,31 @@ func newFixture(t *testing.T) *fixture {
 // mode, over a fresh, empty database.
 func newFixtureMode(t *testing.T, mode config.Mode) *fixture {
 	t.Helper()
+	return newFixtureWith(t, mode, nil)
+}
+
+// newFixtureWith builds a fixture and lets edit change the server's Config
+// before the server is built.
+func newFixtureWith(t *testing.T, mode config.Mode, edit func(*fixture, *Config)) *fixture {
+	t.Helper()
 	start, err := time.Parse(time.RFC3339, startOfTest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	logger, out := loggingtest.New(t)
 	f := &fixture{t: t, store: openStore(t, start), clock: clock.NewFake(start), log: out}
-	f.srv, err = New(Config{
+	cfg := Config{
 		Login:           login,
 		ApprovalDevices: []netip.Addr{netip.MustParseAddr(phoneAddr), netip.MustParseAddr(phoneIPv6)},
 		Clock:           f.clock,
 		Logger:          logger,
 		Store:           f.store,
 		Mode:            mode,
-	})
+	}
+	if edit != nil {
+		edit(f, &cfg)
+	}
+	f.srv, err = New(cfg)
 	if err != nil {
 		t.Fatal(err)
 	}

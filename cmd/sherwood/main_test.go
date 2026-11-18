@@ -237,8 +237,11 @@ func TestStartsInPaperModeAndStopsCleanly(t *testing.T) {
 	for _, want := range []string{
 		`"msg":"strategy file loaded"`,
 		`"strategy_hash":"` + strategy.Hash + `"`,
-		`"msg":"database ready","migrations":4`,
+		`"msg":"database ready","migrations":5`,
 		`"msg":"paper mode: the broker helper is not started","mode":"paper"`,
+		// The example's placeholder VAPID keys turn notifications off
+		// rather than stop sherwood.
+		`"msg":"notifications are off","reason":"webpush: notifications.web_push.vapid_private_key is not a VAPID private key`,
 		`"msg":"web server listening","listen_address":"127.0.0.1:`,
 		`"msg":"request","method":"GET","route":"GET /health","status":200`,
 		`"msg":"request refused","method":"GET","route":"GET /health","status":403`,

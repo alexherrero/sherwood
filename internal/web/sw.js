@@ -3,6 +3,9 @@
 // always come fresh from the NAS, so a view is never shown from a saved copy
 // and no buy is ever approved from stale numbers.
 //
+// It also shows notifications. A push message carries only a few words and
+// the view to open; tapping the notification opens that view from the NAS.
+//
 // The server fills in VERSION from a hash of the shell files. When any of
 // them changes, this file changes too, the phone installs the new worker, and
 // the old cache is deleted.
@@ -67,6 +70,57 @@ self.addEventListener('fetch', function (event) {
   }
   // Anything else goes to the network and is never stored.
 });
+
+// A push message is {"text": "...", "path": "/view"}. Every push must show a
+// notification, so a message that cannot be read still shows a plain one.
+self.addEventListener('push', function (event) {
+  let text = 'Sherwood has an alert. Open the app to see it.';
+  let path = '/';
+  if (event.data) {
+    try {
+      const message = event.data.json();
+      if (typeof message.text === 'string' && message.text !== '') {
+        text = message.text.slice(0, 80);
+      }
+      path = viewPath(message.path);
+    } catch (e) {
+      // Keep the plain notification.
+    }
+  }
+  event.waitUntil(self.registration.showNotification('Sherwood', {
+    body: text,
+    icon: '/static/icon-192.png',
+    tag: 'sherwood' + path,
+    data: { path: path },
+  }));
+});
+
+// Tapping a notification brings the app forward on the alert's view, or
+// opens it there.
+self.addEventListener('notificationclick', function (event) {
+  event.notification.close();
+  const data = event.notification.data || {};
+  const target = new URL(viewPath(data.path), self.location.origin).href;
+  event.waitUntil(
+    self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then(function (windows) {
+      const open = windows.find(function (w) { return new URL(w.url).origin === self.location.origin; });
+      if (!open) {
+        return self.clients.openWindow(target);
+      }
+      return open.focus().then(function (w) {
+        return (w || open).navigate(target);
+      }).catch(function () {
+        return self.clients.openWindow(target);
+      });
+    })
+  );
+});
+
+// viewPath keeps a notification to one of the app's own views: a single
+// lower-case path segment, never another site.
+function viewPath(path) {
+  return typeof path === 'string' && /^\/[a-z]{0,20}$/.test(path) ? path : '/';
+}
 
 function offline() {
   const body = '<!doctype html><html lang="en"><head><meta charset="utf-8">' +
