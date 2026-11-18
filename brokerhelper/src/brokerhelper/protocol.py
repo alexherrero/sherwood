@@ -49,6 +49,19 @@ class ErrorCode:
     UNKNOWN_OP = "unknown_op"
     # The operation failed in a way the helper did not expect.
     INTERNAL = "internal"
+    # There is no usable broker session: nobody has logged in yet, the saved
+    # session has expired, or the broker refused it. Someone has to run the
+    # login command on the NAS again.
+    LOGIN_NEEDED = "login_needed"
+    # broker.yaml exists but cannot be used: it is unreadable, malformed, or
+    # readable by someone other than its owner.
+    BROKER_SETTINGS = "broker_settings"
+    # The call to the broker failed: the network, a timeout, or an HTTP error
+    # other than a refused session.
+    BROKER_ERROR = "broker_error"
+    # The broker answered, but not in the shape the helper expects, so the
+    # helper will not guess at what it meant.
+    BAD_BROKER_REPLY = "bad_broker_reply"
 
 
 class HelperError(Exception):
