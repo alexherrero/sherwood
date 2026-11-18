@@ -1,0 +1,193 @@
+/*
+ * Sherwood's layout, built for a phone held in one hand: large tap targets,
+ * readable text that follows the phone's text size, and high contrast in
+ * both the light and the dark theme. The page follows the phone's theme.
+ * No color carries meaning on its own; words always say it.
+ */
+
+:root {
+  color-scheme: light dark;
+  --bg: #ffffff;
+  --surface: #eef3ef;
+  --text: #0f1a13;
+  --muted: #34443a;
+  --line: #6b7d71;
+  --brand: #14532d;
+  --on-brand: #ffffff;
+  --accent: #14532d;
+  --on-accent: #ffffff;
+  --focus: #1d4ed8;
+  --tap: 3rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0b100d;
+    --surface: #17221b;
+    --text: #f1f6f2;
+    --muted: #c9d4cc;
+    --line: #8a9b8f;
+    --brand: #0f2417;
+    --on-brand: #f1f6f2;
+    --accent: #9ef0b8;
+    --on-accent: #0b100d;
+    --focus: #9cc3ff;
+  }
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  min-height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 1.0625rem;
+  line-height: 1.5;
+}
+
+.bar {
+  background: var(--brand);
+  color: var(--on-brand);
+  padding: calc(0.75rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 0.75rem calc(1rem + env(safe-area-inset-left));
+}
+
+.brand {
+  font-weight: 700;
+  font-size: 1.125rem;
+  letter-spacing: 0.01em;
+}
+
+main {
+  flex: 1;
+  width: 100%;
+  max-width: 40rem;
+  margin: 0 auto;
+  padding: 1rem calc(1rem + env(safe-area-inset-right)) 1.5rem calc(1rem + env(safe-area-inset-left));
+}
+
+h1 {
+  font-size: 1.75rem;
+  line-height: 1.2;
+  margin: 0.5rem 0 1rem;
+}
+
+h2 {
+  font-size: 1.3125rem;
+  line-height: 1.25;
+  margin: 1.5rem 0 0.75rem;
+}
+
+p {
+  margin: 0 0 1rem;
+}
+
+a {
+  color: var(--accent);
+  text-decoration-thickness: 0.1em;
+  text-underline-offset: 0.15em;
+}
+
+.notice {
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 0.5rem;
+  padding: 0.875rem 1rem;
+}
+
+/* Buttons and button-like links: at least 48px tall and clearly labelled. */
+button,
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0.5rem 1.25rem;
+  border: 2px solid var(--accent);
+  border-radius: 0.5rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* The views: a bar at the bottom, in reach of the thumb. Three to a row on
+ * a phone, all six in one row on a wider screen. */
+.views {
+  position: sticky;
+  bottom: 0;
+  background: var(--bg);
+  border-top: 2px solid var(--line);
+  padding: 0.25rem calc(0.25rem + env(safe-area-inset-right)) calc(0.25rem + env(safe-area-inset-bottom)) calc(0.25rem + env(safe-area-inset-left));
+}
+
+.views ul {
+  list-style: none;
+  margin: 0 auto;
+  padding: 0;
+  max-width: 40rem;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.25rem;
+}
+
+@media (min-width: 40rem) {
+  .views ul {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+.views a {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--tap);
+  padding: 0.25rem 0.5rem;
+  border: 2px solid transparent;
+  border-radius: 0.5rem;
+  color: var(--text);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  text-align: center;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+
+/* The current view is marked by shape and weight as well as color. */
+.views a[aria-current="page"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--on-accent);
+  text-decoration: underline;
+  text-decoration-thickness: 0.15em;
+  text-underline-offset: 0.25em;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
+}

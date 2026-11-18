@@ -221,9 +221,7 @@ func TestEveryResponseCarriesTheSecurityHeaders(t *testing.T) {
 			t.Errorf("%s = %q, want %q", k, got, want)
 		}
 	}
-	if strings.Contains(w.Body.String(), "<script") || strings.Contains(w.Body.String(), "style=") {
-		t.Error("the placeholder page has inline script or style")
-	}
+	// The views' own check for inline script and style is in shell_test.go.
 }
 
 func TestAChangeNeedsAValidToken(t *testing.T) {
