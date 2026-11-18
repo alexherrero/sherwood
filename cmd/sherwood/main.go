@@ -8,6 +8,10 @@
 // secret. Once started it serves the phone app and runs the scheduler until
 // SIGTERM or SIGINT, then shuts down cleanly: the web server stops first, then
 // the broker helper, then the database closes.
+//
+// "sherwood backtest" instead replays past bars from a folder of CSV files
+// through the strategy file's rules and prints a report; it starts nothing
+// else (see backtest.go).
 package main
 
 import (
@@ -128,6 +132,9 @@ func orDefault(v, def string) string {
 // run starts sherwood and blocks until ctx ends or something halts it. It
 // returns nil after a clean shutdown.
 func run(ctx context.Context, e env) (err error) {
+	if len(e.args) > 0 && e.args[0] == backtestCommand {
+		return runBacktest(e, e.args[1:])
+	}
 	opts, err := parseOptions(e)
 	if err != nil {
 		return err
