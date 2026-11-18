@@ -211,6 +211,8 @@ func run(ctx context.Context, e env) (err error) {
 		ApprovalDevices: settings.ApprovalAddrs(),
 		Clock:           e.clock,
 		Logger:          logger,
+		Store:           db,
+		Mode:            settings.Mode,
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)

@@ -9,13 +9,16 @@ import (
 	"net/http/httptest"
 	"net/netip"
 	"net/url"
+	"path/filepath"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/alexherrero/sherwood/internal/clock"
+	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/logging/loggingtest"
+	"github.com/alexherrero/sherwood/internal/store"
 )
 
 // Placeholders only: a login from the example domain and addresses from the
@@ -31,6 +34,7 @@ const (
 type fixture struct {
 	t       *testing.T
 	srv     *Server
+	store   *store.Store
 	clock   *clock.Fake
 	log     *loggingtest.Output
 	changes atomic.Int32 // how many times the test actions ran
@@ -38,17 +42,26 @@ type fixture struct {
 
 func newFixture(t *testing.T) *fixture {
 	t.Helper()
+	return newFixtureMode(t, config.ModePaper)
+}
+
+// newFixtureMode builds a fixture whose server reports the given trading
+// mode, over a fresh, empty database.
+func newFixtureMode(t *testing.T, mode config.Mode) *fixture {
+	t.Helper()
 	start, err := time.Parse(time.RFC3339, startOfTest)
 	if err != nil {
 		t.Fatal(err)
 	}
 	logger, out := loggingtest.New(t)
-	f := &fixture{t: t, clock: clock.NewFake(start), log: out}
+	f := &fixture{t: t, store: openStore(t, start), clock: clock.NewFake(start), log: out}
 	f.srv, err = New(Config{
 		Login:           login,
 		ApprovalDevices: []netip.Addr{netip.MustParseAddr(phoneAddr), netip.MustParseAddr(phoneIPv6)},
 		Clock:           f.clock,
 		Logger:          logger,
+		Store:           f.store,
+		Mode:            mode,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -449,16 +462,40 @@ func TestTokenOutsideTheServerIsEmpty(t *testing.T) {
 func TestNewRefusesAnIncompleteConfig(t *testing.T) {
 	logger, _ := loggingtest.New(t)
 	clk := clock.NewFake(time.Unix(0, 0))
+	st := openStore(t, time.Unix(0, 0))
+	paper := config.ModePaper
 	for name, cfg := range map[string]Config{
-		"no login":  {Clock: clk, Logger: logger},
-		"no clock":  {Login: login, Logger: logger},
-		"no logger": {Login: login, Clock: clk},
-		"short key": {Login: login, Clock: clk, Logger: logger, Key: []byte("short")},
+		"no login":     {Clock: clk, Logger: logger, Store: st, Mode: paper},
+		"no clock":     {Login: login, Logger: logger, Store: st, Mode: paper},
+		"no logger":    {Login: login, Clock: clk, Store: st, Mode: paper},
+		"short key":    {Login: login, Clock: clk, Logger: logger, Store: st, Mode: paper, Key: []byte("short")},
+		"no database":  {Login: login, Clock: clk, Logger: logger, Mode: paper},
+		"no mode":      {Login: login, Clock: clk, Logger: logger, Store: st},
+		"unknown mode": {Login: login, Clock: clk, Logger: logger, Store: st, Mode: "practice"},
 	} {
 		if _, err := New(cfg); err == nil {
 			t.Errorf("%s: New accepted it", name)
 		}
 	}
+	if _, err := New(Config{Login: login, Clock: clk, Logger: logger, Store: st, Mode: config.ModeLive}); err != nil {
+		t.Errorf("a complete config was refused: %v", err)
+	}
+}
+
+// openStore opens a fresh database with every migration applied, closed when
+// the test ends.
+func openStore(t *testing.T, now time.Time) *store.Store {
+	t.Helper()
+	st, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "sherwood.db"), now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := st.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	return st
 }
 
 // TestServeAnswersAndStopsWhenCancelled runs the real server on a loopback

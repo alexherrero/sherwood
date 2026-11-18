@@ -63,12 +63,10 @@ type view struct {
 }
 
 var views = []view{
-	{path: "/", name: "Today", content: "placeholder", load: describe(
-		"paper or live mode in a clear banner, the stop switch, any halt and its cause, and the last run of each job")},
+	{path: "/", name: "Today", content: "today", load: loadToday},
 	{path: "/approvals", name: "Approvals", content: "placeholder", load: describe(
 		"each buy waiting for you, with the rule's reason and the risk check's verdict, and an Approve and a Decline button for each")},
-	{path: "/portfolio", name: "Portfolio", content: "placeholder", load: describe(
-		"your holdings, their value and gain or loss, and each one's suggestion and latest AI note")},
+	{path: "/portfolio", name: "Portfolio", content: "portfolio", load: loadPortfolio},
 	{path: "/feed", name: "Feed", content: "placeholder", load: describe(
 		"candidate cases with their sources, and a button to add each one to your watchlist")},
 	{path: "/orders", name: "Orders", content: "placeholder", load: describe(

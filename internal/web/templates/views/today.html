@@ -1,0 +1,61 @@
+{{define "content" -}}
+{{with .Data -}}
+{{if .Live -}}
+<section class="mode-banner mode-banner--live" aria-label="Trading mode">
+<span class="mode-tag">Live</span>
+<p>Live trading: orders you approve are placed with the broker and use real money.</p>
+</section>
+{{- else -}}
+<section class="mode-banner mode-banner--paper" aria-label="Trading mode">
+<span class="mode-tag">Paper</span>
+<p>Paper trading: no real money moves. Orders are simulated against stored prices.</p>
+</section>
+{{- end}}
+<header class="page-head">
+<h1>Today</h1>
+</header>
+{{if .Halt -}}
+<section class="notice notice--halt" aria-label="Halt">
+<p class="notice-title"><strong>Trading is halted for your review.</strong></p>
+<p>The price check for {{.Halt.Date}} found that the two price sources disagree on a stock you hold. No rule acts until you have looked at it.</p>
+<ul class="rows">
+{{- range .Halt.Stocks}}
+<li class="row"><span class="row-label">{{.Symbol}}</span><span class="row-meta">{{.Detail}}</span></li>
+{{- end}}
+</ul>
+</section>
+{{- else -}}
+<section class="notice notice--info" aria-label="Halt">
+<p class="notice-title"><strong>Nothing is halted.</strong></p>
+<p>{{if .PricesChecked}}The latest price check, for {{.PricesChecked}}, found no halt.{{else}}Prices have not been checked yet, so there is no halt to show.{{end}}</p>
+</section>
+{{- end}}
+<section class="card" aria-labelledby="stop-switch">
+<div class="card-head">
+<h2 class="card-title" id="stop-switch">Stop switch</h2>
+<span class="badge">Not built yet</span>
+</div>
+<p class="card-body">The stop switch arrives with paper trading. Until then sherwood places no orders, so there is nothing to stop.</p>
+</section>
+<section class="card" aria-labelledby="jobs">
+<div class="card-head">
+<h2 class="card-title" id="jobs">Scheduled jobs</h2>
+</div>
+{{if .Jobs -}}
+<ul class="rows">
+{{- range .Jobs}}
+<li class="row">
+<span class="row-label">{{.Name}}<span class="row-meta">For {{.Date}}. Started {{.Started}}{{if .Finished}}, finished {{.Finished}}{{end}}.</span>{{if .Detail}}<span class="row-meta">{{.Detail}}</span>{{end}}</span>
+<span class="badge {{.Badge}}">{{.Outcome}}</span>
+</li>
+{{- end}}
+</ul>
+{{- else -}}
+<div class="empty-state">
+<p class="empty-title">No job has run yet.</p>
+<p class="empty-body">Each scheduled job's last run will show here once it has run.</p>
+</div>
+{{- end}}
+</section>
+{{- end}}
+{{- end}}
