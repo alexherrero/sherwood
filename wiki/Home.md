@@ -6,6 +6,11 @@ Sherwood is a small, self-hosted investment tool. It runs on a home NAS, keeps a
 
 - **[Sherwood Design](designs/sherwood)** — is the design for the rewrite. It explains why sherwood is built the way it is: the rules that make every trade, the risk check every order passes through, the approval step for buys, and why the AI never touches the broker. It is final and is being built in six parts, starting with the foundations.
 
+## How-to guides
+
+- **[Install sherwood on the NAS](how-to/install-sherwood-on-the-nas)** — takes you from a checkout of the repo to sherwood running in paper mode: the Compose file, the application-data folder and who owns it, the settings file, Tailscale Serve in front of the loopback port (and why it must stay on loopback), putting the app on your phone's home screen, and turning on notifications.
+- **[Log in to the broker on the NAS](how-to/log-in-to-the-broker-on-the-nas)** — saves a broker session on the NAS and runs the first read-only import of your holdings and cash, with what to compare against the broker's app and what each failure message means.
+
 ## Reference
 
 - **[Settings and strategy file reference](reference/settings-and-strategy-files)** — lists every field of `settings.yaml` and `strategy.yaml`: its type, whether it is required, the values it accepts, what it means, and the error you see when it is wrong. It also covers where the files live, why the limits have no defaults, and how a limit is tightened or loosened.
