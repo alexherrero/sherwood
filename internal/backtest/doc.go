@@ -35,7 +35,9 @@
 //
 // So a stop sell comes first, any sell beats a buy, and a trim beats a buy.
 // The reason recorded is the first rule's, in the file's rule order, that
-// gave the winning outcome.
+// gave the winning outcome. The combining itself is rules.Set.Combine, which
+// the rule runner (internal/signals) also uses, so a back-test and a live
+// day decide alike; the trim size and the orders are this package's own.
 //
 // Stop rules run on held stocks only. The highest stop any of them gives is
 // the holding's stop, resting from the next date. A new holding has no stop

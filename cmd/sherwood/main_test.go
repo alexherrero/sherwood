@@ -231,7 +231,7 @@ func TestStartsInPaperModeAndStopsCleanly(t *testing.T) {
 	for _, want := range []string{
 		`"msg":"strategy file loaded"`,
 		`"strategy_hash":"` + strategy.Hash + `"`,
-		`"msg":"database ready","migrations":3`,
+		`"msg":"database ready","migrations":4`,
 		`"msg":"paper mode: the broker helper is not started","mode":"paper"`,
 		`"msg":"web server listening","listen_address":"127.0.0.1:`,
 		`"msg":"request","method":"GET","route":"GET /health","status":200`,
@@ -287,6 +287,30 @@ func TestRefusesToStartWhenALimitIsMissing(t *testing.T) {
 				t.Errorf("the database was opened before validation finished: %v", err)
 			}
 		})
+	}
+}
+
+func TestRefusesToStartWithBadRuleSettings(t *testing.T) {
+	// The pullback rule loses a setting it needs. config.LoadStrategy cannot
+	// see that; rules.Validate at start-up must.
+	f := writeExamples(t, nil, func(s string) string {
+		return replaceOnce(t, s, "          high_days: 20\n", "")
+	})
+	log, err := startAndStop(t, testEnv(f, nil, clock.NewFake(covered)))
+	if !errors.Is(err, config.ErrInvalid) {
+		t.Fatalf("err = %v, want config.ErrInvalid", err)
+	}
+	if want := `strategy "example-pullback": rules[0] (pullback): high_days is missing`; !strings.Contains(err.Error(), want) {
+		t.Errorf("error %q does not name the setting (want %q)", err, want)
+	}
+	if !strings.HasPrefix(err.Error(), "refusing to start: ") {
+		t.Errorf("error %q does not say it refused to start", err)
+	}
+	if strings.Contains(log, "sherwood started") {
+		t.Error("it started anyway")
+	}
+	if _, err := os.Stat(f.database); !errors.Is(err, os.ErrNotExist) {
+		t.Errorf("the database was opened before the rules were checked: %v", err)
 	}
 }
 

@@ -23,6 +23,7 @@ var allowedKeys = []string{
 
 	// Signals, risk decisions and orders.
 	"strategy_hash", // hash of the strategy file in force
+	"strategy",      // a strategy's name in the strategy file
 	"rule",          // rule that produced a signal or a risk decision
 	"signal",        // signal kind
 	"symbol",        // stock symbol
