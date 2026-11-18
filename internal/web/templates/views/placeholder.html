@@ -1,5 +1,16 @@
 {{define "content" -}}
+<header class="page-head">
 <h1>{{.Title}}</h1>
-<p class="notice"><strong>Not built yet.</strong> This view is still being built, so there is nothing to show here today.</p>
-<p>When it is ready, it will show {{.Data}}.</p>
+<span class="badge">Coming later</span>
+</header>
+<section class="card empty-state" aria-label="View status">
+<div class="notice">
+<p class="notice-title"><strong>Not built yet.</strong></p>
+<p>This view is still being built, so there is nothing to show here today.</p>
+</div>
+<div class="field">
+<span class="field-label">What belongs here</span>
+<p class="field-value">When it is ready, it will show {{.Data}}.</p>
+</div>
+</section>
 {{- end}}

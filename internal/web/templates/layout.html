@@ -20,7 +20,15 @@
 </head>
 <body>
 <header class="bar">
+<div class="bar-inner">
+<span class="brand-lockup">
+<svg class="brand-mark" aria-hidden="true" width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+<path d="M12 2L5.5 11h3.8L5 17.5h5.5V22h3v-4.5H19L14.7 11h3.8L12 2z"/>
+</svg>
 <span class="brand">Sherwood</span>
+</span>
+<span class="bar-tagline">Personal investing</span>
+</div>
 </header>
 <main id="main">
 {{template "content" .}}
@@ -28,7 +36,7 @@
 <nav class="views" aria-label="Views">
 <ul>
 {{- range .Nav}}
-<li><a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a></li>
+<li><a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}><span class="views-label">{{.Name}}</span></a></li>
 {{- end}}
 </ul>
 </nav>

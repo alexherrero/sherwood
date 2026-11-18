@@ -1,37 +1,107 @@
 /*
- * Sherwood's layout, built for a phone held in one hand: large tap targets,
- * readable text that follows the phone's text size, and high contrast in
- * both the light and the dark theme. The page follows the phone's theme.
- * No color carries meaning on its own; words always say it.
+ * Sherwood App Shell & Component Stylesheet
+ *
+ * Built for one-handed phone use as a full-screen installed web app (PWA):
+ * - High contrast in light and dark themes (body/labels >= 10:1, UI >= 8:1,
+ *   borders/focus >= 5.2:1).
+ * - Minimum 48x48 CSS px tap targets (--tap: 3rem) with thumb-reach bottom nav.
+ * - Scalable rem typography: 17px (1.0625rem) body copy, 14px (0.875rem) floor.
+ * - Words, weight, and borders carry meaning; color only reinforces.
+ *
+ * Component Reference for View Templates:
+ * 1. Mode Banner (.mode-banner, .mode-banner--paper, .mode-banner--live, .mode-tag)
+ *    Top status bar on Today showing Paper vs Live mode. Live mode uses an
+ *    unmistakable double border, high-contrast warning surface, and inverted tag.
+ * 2. Notice / Callout (.notice, .notice--info, .notice--warning, .notice--halt,
+ *    .notice-title)
+ *    Structured callouts with a 6px start border for status notes, warnings,
+ *    and trading halts with their cause.
+ * 3. Cards (.card, .card-head, .card-title, .card-subtitle, .card-body,
+ *    .card-foot, .stack)
+ *    Bordered containers for candidate cases, approval items, and holdings.
+ * 4. List Rows & Tabular Figures (.rows, .row, .row-label, .row-meta,
+ *    .row-value, .num)
+ *    Key-value and schedule rows with lining, tabular numerals for alignment.
+ * 5. Value with Gain/Loss (.delta, .delta--up, .delta--down, .delta--flat)
+ *    Inline pill for price changes where markup carries sign and words
+ *    (e.g. "+3.4% (up $42.10)"); solid vs dashed borders reinforce direction.
+ * 6. Badges & Tags (.badge, .badge--passed, .badge--blocked, .badge--hold,
+ *    .badge--add, .badge--trim)
+ *    Pill and rectangular tags for risk-check verdicts and holding suggestions.
+ * 7. Buttons (button, .button, .button--primary, .button--secondary,
+ *    .button--destructive, .button--full, .button-row)
+ *    48px+ tap targets. Destructive buttons (Stop all trading, Decline) use a
+ *    tinted surface with a heavy border to contrast with solid primary buttons.
+ * 8. Form Fields (.field, .field-row, .field-label, .field-value, .field-hint,
+ *    .field-input)
+ *    Read-only limit displays (paired with a Tighten action) and form controls.
+ * 9. Empty State (.empty-state, .empty-title, .empty-body)
+ *    Calm container when a queue has no waiting items or a view is unbuilt.
  */
 
 :root {
   color-scheme: light dark;
-  --bg: #ffffff;
-  --surface: #eef3ef;
-  --text: #0f1a13;
-  --muted: #34443a;
-  --line: #6b7d71;
+
+  /* Light theme palette */
+  --bg: #f8faf8;
+  --surface: #edf2ee;
+  --surface-card: #ffffff;
+  --text: #0c1710;
+  --muted: #2c3e32;
+  --line: #55695c;
+  --line-subtle: #b8c7bd;
+
+  /* Brand & interactive accents (from pine icon #14532d / #dcfce7) */
   --brand: #14532d;
   --on-brand: #ffffff;
+  --brand-tint: #dcfce7;
   --accent: #14532d;
   --on-accent: #ffffff;
   --focus: #1d4ed8;
+
+  /* Semantic tones (calm, high-contrast, never neon) */
+  --gain: #14532d;
+  --gain-bg: #dcfce7;
+  --warn: #78350f;
+  --warn-bg: #fef3c7;
+  --danger: #8b1e1e;
+  --danger-bg: #fceeee;
+
+  /* Sizing, spacing & geometry tokens */
   --tap: 3rem;
+  --col-max: 40rem;
+  --radius-sm: 0.375rem;
+  --radius: 0.625rem;
+  --space-1: 0.25rem;
+  --space-2: 0.5rem;
+  --space-3: 0.75rem;
+  --space-4: 1rem;
+  --space-5: 1.5rem;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
     --bg: #0b100d;
     --surface: #17221b;
+    --surface-card: #121b15;
     --text: #f1f6f2;
-    --muted: #c9d4cc;
+    --muted: #c9d6cc;
     --line: #8a9b8f;
+    --line-subtle: #2e3d33;
+
     --brand: #0f2417;
     --on-brand: #f1f6f2;
+    --brand-tint: #9ef0b8;
     --accent: #9ef0b8;
     --on-accent: #0b100d;
     --focus: #9cc3ff;
+
+    --gain: #9ef0b8;
+    --gain-bg: #132a1c;
+    --warn: #fcd34d;
+    --warn-bg: #2b1d09;
+    --danger: #fca5a5;
+    --danger-bg: #2d1416;
   }
 }
 
@@ -54,15 +124,38 @@ body {
   flex-direction: column;
   background: var(--bg);
   color: var(--text);
-  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
   font-size: 1.0625rem;
-  line-height: 1.5;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
 }
 
+/* Top application bar */
 .bar {
   background: var(--brand);
   color: var(--on-brand);
-  padding: calc(0.75rem + env(safe-area-inset-top)) calc(1rem + env(safe-area-inset-right)) 0.75rem calc(1rem + env(safe-area-inset-left));
+  border-bottom: 1px solid var(--line);
+  padding: calc(var(--space-3) + env(safe-area-inset-top)) calc(var(--space-4) + env(safe-area-inset-right)) var(--space-3) calc(var(--space-4) + env(safe-area-inset-left));
+}
+
+.bar-inner {
+  max-width: var(--col-max);
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+}
+
+.brand-lockup {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.brand-mark {
+  color: var(--brand-tint);
+  flex-shrink: 0;
 }
 
 .brand {
@@ -71,60 +164,71 @@ body {
   letter-spacing: 0.01em;
 }
 
+.bar-tagline {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--on-brand);
+  opacity: 0.92;
+}
+
+/* Main reading column */
 main {
   flex: 1;
   width: 100%;
-  max-width: 40rem;
+  max-width: var(--col-max);
   margin: 0 auto;
-  padding: 1rem calc(1rem + env(safe-area-inset-right)) 1.5rem calc(1rem + env(safe-area-inset-left));
+  padding: var(--space-4) calc(var(--space-4) + env(safe-area-inset-right)) var(--space-5) calc(var(--space-4) + env(safe-area-inset-left));
+}
+
+.page-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  margin: var(--space-1) 0 var(--space-4);
+  padding-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line-subtle);
 }
 
 h1 {
   font-size: 1.75rem;
   line-height: 1.2;
-  margin: 0.5rem 0 1rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  margin: 0 0 var(--space-4);
+}
+
+.page-head h1 {
+  margin: 0;
 }
 
 h2 {
-  font-size: 1.3125rem;
+  font-size: 1.25rem;
   line-height: 1.25;
-  margin: 1.5rem 0 0.75rem;
+  font-weight: 700;
+  margin: var(--space-5) 0 var(--space-3);
+}
+
+h3 {
+  font-size: 1.0625rem;
+  line-height: 1.3;
+  font-weight: 600;
+  margin: var(--space-4) 0 var(--space-2);
 }
 
 p {
-  margin: 0 0 1rem;
+  margin: 0 0 var(--space-4);
+}
+
+p:last-child {
+  margin-bottom: 0;
 }
 
 a {
   color: var(--accent);
   text-decoration-thickness: 0.1em;
-  text-underline-offset: 0.15em;
-}
-
-.notice {
-  background: var(--surface);
-  border: 2px solid var(--line);
-  border-radius: 0.5rem;
-  padding: 0.875rem 1rem;
-}
-
-/* Buttons and button-like links: at least 48px tall and clearly labelled. */
-button,
-.button {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  min-height: var(--tap);
-  min-width: var(--tap);
-  padding: 0.5rem 1.25rem;
-  border: 2px solid var(--accent);
-  border-radius: 0.5rem;
-  background: var(--accent);
-  color: var(--on-accent);
-  font: inherit;
-  font-weight: 600;
-  text-decoration: none;
-  cursor: pointer;
+  text-underline-offset: 0.18em;
 }
 
 :focus-visible {
@@ -132,60 +236,442 @@ button,
   outline-offset: 2px;
 }
 
-/* The views: a bar at the bottom, in reach of the thumb. Three to a row on
- * a phone, all six in one row on a wider screen. */
+/* 1. Mode Banner (Paper vs Live trading) */
+.mode-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+  border-radius: var(--radius);
+  background: var(--surface);
+  border: 2px solid var(--line);
+}
+
+.mode-banner--paper {
+  background: var(--surface);
+  border-color: var(--line);
+}
+
+.mode-banner--live {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border: 3px double var(--warn);
+  font-weight: 600;
+}
+
+.mode-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1875rem 0.625rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.875rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  border: 1.5px solid currentColor;
+}
+
+.mode-banner--live .mode-tag {
+  background: var(--warn);
+  color: var(--warn-bg);
+  border-color: var(--warn);
+}
+
+/* 2. Notice / Callout (info, warning, halt) */
+.notice {
+  background: var(--surface);
+  color: var(--text);
+  border: 2px solid var(--line);
+  border-inline-start-width: 6px;
+  border-radius: var(--radius);
+  padding: var(--space-3) var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.notice--info {
+  background: var(--surface);
+  border-color: var(--accent);
+}
+
+.notice--warning {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.notice--halt {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border-color: var(--danger);
+}
+
+.notice-title {
+  font-weight: 700;
+  margin-bottom: var(--space-1);
+}
+
+/* 3. Cards & Vertical Stack */
+.stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.card {
+  background: var(--surface-card);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  padding: var(--space-4);
+  margin-bottom: var(--space-4);
+}
+
+.stack > .card {
+  margin-bottom: 0;
+}
+
+.card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2);
+  padding-bottom: var(--space-3);
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.card-title {
+  font-size: 1.1875rem;
+  font-weight: 700;
+  margin: 0;
+}
+
+.card-subtitle {
+  font-size: 0.9375rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.card-body {
+  margin-bottom: var(--space-3);
+}
+
+.card-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--line-subtle);
+}
+
+/* 4. List Rows & Tabular Figures */
+.rows {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--line-subtle);
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--space-2) var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.row-label {
+  font-weight: 600;
+  color: var(--text);
+}
+
+.row-meta {
+  display: block;
+  font-size: 0.875rem;
+  color: var(--muted);
+  font-weight: 400;
+}
+
+.row-value,
+.num {
+  font-variant-numeric: tabular-nums lining-nums;
+  font-weight: 600;
+  text-align: right;
+}
+
+/* 5. Value with Gain / Loss (markup carries sign and "up"/"down" words) */
+.delta {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 0.125rem 0.5rem;
+  border-radius: var(--radius-sm);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums lining-nums;
+  border: 1.5px solid var(--line);
+  background: var(--surface);
+  color: var(--text);
+}
+
+.delta--up {
+  background: var(--gain-bg);
+  color: var(--gain);
+  border-color: var(--gain);
+}
+
+.delta--down {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1.5px dashed var(--danger);
+}
+
+.delta--flat {
+  background: var(--surface);
+  color: var(--muted);
+  border-color: var(--line);
+}
+
+/* 6. Badges & Tags (verdicts and portfolio suggestions) */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1875rem 0.625rem;
+  border-radius: 999px;
+  font-size: 0.875rem;
+  line-height: 1.3;
+  font-weight: 600;
+  background: var(--surface);
+  color: var(--text);
+  border: 1.5px solid var(--line);
+  white-space: nowrap;
+}
+
+.badge--passed,
+.badge--add {
+  background: var(--gain-bg);
+  color: var(--gain);
+  border-color: var(--gain);
+}
+
+.badge--hold {
+  background: var(--surface);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+.badge--trim {
+  background: var(--warn-bg);
+  color: var(--warn);
+  border-color: var(--warn);
+}
+
+.badge--blocked {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 1.5px dashed var(--danger);
+  border-radius: var(--radius-sm);
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+/* 7. Buttons (at least 48x48px tap targets, clear visual separation) */
+button,
+.button,
+.button--primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  min-height: var(--tap);
+  min-width: var(--tap);
+  padding: 0.625rem 1.25rem;
+  border: 2px solid var(--accent);
+  border-radius: var(--radius-sm);
+  background: var(--accent);
+  color: var(--on-accent);
+  font: inherit;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.2;
+  text-align: center;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.button--secondary {
+  background: var(--surface-card);
+  color: var(--text);
+  border-color: var(--line);
+}
+
+/* Destructive actions use a tinted surface + heavy border so they never
+ * resemble solid primary Approve buttons even without color perception. */
+.button--destructive {
+  background: var(--danger-bg);
+  color: var(--danger);
+  border: 2px solid var(--danger);
+  font-weight: 700;
+}
+
+.button--full {
+  display: flex;
+  width: 100%;
+}
+
+.button-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.button-row > * {
+  flex: 1 1 8.5rem;
+}
+
+/* 8. Simple Form Fields & Read-Only Limits */
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--line-subtle);
+}
+
+.field-label {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--muted);
+}
+
+.field-value {
+  font-size: 1.0625rem;
+  font-weight: 600;
+  color: var(--text);
+  font-variant-numeric: tabular-nums lining-nums;
+  margin: 0;
+}
+
+.field-hint {
+  font-size: 0.875rem;
+  color: var(--muted);
+  margin: 0;
+}
+
+.field-input,
+input,
+select,
+textarea {
+  min-height: var(--tap);
+  padding: var(--space-2) var(--space-3);
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-card);
+  color: var(--text);
+  font: inherit;
+}
+
+/* 9. Empty State */
+.empty-state {
+  padding: var(--space-4);
+}
+
+.empty-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 var(--space-2);
+}
+
+.empty-body {
+  color: var(--muted);
+  margin: 0;
+}
+
+/* Bottom thumb-reach navigation bar */
 .views {
   position: sticky;
   bottom: 0;
-  background: var(--bg);
+  z-index: 10;
+  background: var(--surface-card);
   border-top: 2px solid var(--line);
-  padding: 0.25rem calc(0.25rem + env(safe-area-inset-right)) calc(0.25rem + env(safe-area-inset-bottom)) calc(0.25rem + env(safe-area-inset-left));
+  padding: var(--space-1) calc(var(--space-2) + env(safe-area-inset-right)) calc(var(--space-1) + env(safe-area-inset-bottom)) calc(var(--space-2) + env(safe-area-inset-left));
 }
 
 .views ul {
   list-style: none;
   margin: 0 auto;
   padding: 0;
-  max-width: 40rem;
+  max-width: var(--col-max);
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: 0.25rem;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: var(--space-1);
 }
 
 @media (min-width: 40rem) {
   .views ul {
-    grid-template-columns: repeat(6, 1fr);
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 }
 
+.views li {
+  display: flex;
+}
+
 .views a {
+  position: relative;
+  flex: 1;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: var(--tap);
-  padding: 0.25rem 0.5rem;
+  min-width: var(--tap);
+  padding: var(--space-1) var(--space-2);
   border: 2px solid transparent;
-  border-radius: 0.5rem;
+  border-radius: var(--radius-sm);
   color: var(--text);
   font-size: 0.9375rem;
   font-weight: 600;
+  line-height: 1.2;
   text-align: center;
   text-decoration: none;
   overflow-wrap: anywhere;
 }
 
-/* The current view is marked by shape and weight as well as color. */
+/* Current view is marked by solid fill, border, bold weight, and underline */
 .views a[aria-current="page"] {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--on-accent);
+  font-weight: 700;
   text-decoration: underline;
-  text-decoration-thickness: 0.15em;
-  text-underline-offset: 0.25em;
+  text-decoration-thickness: 0.14em;
+  text-underline-offset: 0.24em;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  * {
+  *,
+  *::before,
+  *::after {
     scroll-behavior: auto !important;
     transition: none !important;
     animation: none !important;
