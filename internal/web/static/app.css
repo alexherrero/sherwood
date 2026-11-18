@@ -376,6 +376,11 @@ a {
   border-top: 1px solid var(--line-subtle);
 }
 
+/* A card's head already draws the line above its rows. */
+.card-head + .rows {
+  border-top: 0;
+}
+
 .row {
   display: flex;
   flex-wrap: wrap;

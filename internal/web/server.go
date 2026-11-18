@@ -28,6 +28,8 @@ import (
 	"time"
 
 	"github.com/alexherrero/sherwood/internal/clock"
+	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/store"
 )
 
 // Server timeouts. A phone on the tailnet sends small forms and reads small
@@ -62,6 +64,10 @@ type Config struct {
 	// Key signs anti-forgery tokens. Leave it nil to draw a random key, which
 	// makes every token from an earlier run stale.
 	Key []byte
+	// Store is the database the views read from. The views only read it.
+	Store *store.Store
+	// Mode is the trading mode the settings file names, shown on Today.
+	Mode config.Mode
 }
 
 // Server is the phone app's HTTP server.
@@ -71,6 +77,8 @@ type Server struct {
 	clock   clock.Clock
 	logger  *slog.Logger
 	tokens  *tokener
+	store   *store.Store
+	mode    config.Mode
 	mux     *http.ServeMux
 	handler http.Handler
 	// reads lists every read pattern registered, for tests.
@@ -87,6 +95,12 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Clock == nil || cfg.Logger == nil {
 		return nil, errors.New("web: a clock and a logger are required")
 	}
+	if cfg.Store == nil {
+		return nil, errors.New("web: the database is required")
+	}
+	if cfg.Mode != config.ModePaper && cfg.Mode != config.ModeLive {
+		return nil, fmt.Errorf("web: the trading mode must be %q or %q", config.ModePaper, config.ModeLive)
+	}
 	tk, err := newTokener(cfg.Key)
 	if err != nil {
 		return nil, err
@@ -97,6 +111,8 @@ func New(cfg Config) (*Server, error) {
 		clock:   cfg.Clock,
 		logger:  cfg.Logger,
 		tokens:  tk,
+		store:   cfg.Store,
+		mode:    cfg.Mode,
 		mux:     http.NewServeMux(),
 	}
 	for _, a := range cfg.ApprovalDevices {

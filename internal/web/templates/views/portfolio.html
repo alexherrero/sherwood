@@ -1,0 +1,75 @@
+{{define "content" -}}
+{{with .Data -}}
+<header class="page-head">
+<h1>Portfolio</h1>
+{{if .Imported}}<span class="badge">{{.Count}} {{if eq .Count 1}}holding{{else}}holdings{{end}}</span>{{end}}
+</header>
+{{if not .Imported -}}
+<section class="card empty-state" aria-label="Holdings">
+<p class="empty-title">Holdings not imported yet.</p>
+<p class="empty-body">Your holdings show here once they have been imported from the broker. Nothing has been recorded so far.</p>
+</section>
+{{- else -}}
+{{if .OverLimit -}}
+<section class="notice notice--warning" aria-label="Over the limit">
+<p class="notice-title"><strong>Over the limit of {{.Limit}} holdings.</strong></p>
+<p>The current holdings list {{.Count}} stocks, more than the limit of {{.Limit}}. All {{.Count}} are shown below. Bring the count down to {{.Limit}} or fewer.</p>
+</section>
+{{- end}}
+<section class="card" aria-labelledby="summary">
+<div class="card-head">
+<h2 class="card-title" id="summary">Summary</h2>
+<p class="card-subtitle">As of {{.AsOf}}, {{.Source}}.</p>
+</div>
+<ul class="rows">
+{{- if .Unpriced}}
+<li class="row"><span class="row-label">Value<span class="row-meta">Not shown, because {{.Unpriced}} {{if eq .Unpriced 1}}holding has{{else}}holdings have{{end}} no checked closing price stored yet and a total would be wrong.</span></span><span class="row-value">Not available</span></li>
+{{- else}}
+<li class="row"><span class="row-label">Invested</span><span class="row-value">{{.Invested}}</span></li>
+<li class="row"><span class="row-label">Value at the latest close</span><span class="row-value">{{.Value}}</span></li>
+<li class="row"><span class="row-label">Gain or loss</span><span class="delta {{.Gain.Class}}">{{.Gain.Text}}</span></li>
+{{- end}}
+{{- if .HasCash}}
+<li class="row"><span class="row-label">Cash<span class="row-meta">As of {{.CashAsOf}}, {{.CashSource}}.</span></span><span class="row-value">{{.Cash}}</span></li>
+{{- else}}
+<li class="row"><span class="row-label">Cash<span class="row-meta">No cash reading has been recorded yet.</span></span><span class="row-value">Not available</span></li>
+{{- end}}
+{{- if .Total}}
+<li class="row"><span class="row-label">Total with cash</span><span class="row-value">{{.Total}}</span></li>
+{{- end}}
+</ul>
+</section>
+{{if .Holdings -}}
+<div class="stack">
+{{- range .Holdings}}
+<section class="card" aria-label="{{.Symbol}}">
+<div class="card-head">
+<h2 class="card-title">{{.Symbol}}</h2>
+{{if .Priced}}<span class="delta {{.Gain.Class}}">{{.Gain.Text}}</span>{{end}}
+</div>
+<ul class="rows">
+<li class="row"><span class="row-label">Shares</span><span class="row-value">{{.Quantity}}</span></li>
+<li class="row"><span class="row-label">Average cost</span><span class="row-value">{{.AverageCost}}</span></li>
+<li class="row"><span class="row-label">Invested</span><span class="row-value">{{.Invested}}</span></li>
+{{- if .Priced}}
+<li class="row"><span class="row-label">Latest close<span class="row-meta">Close of {{.CloseDate}}.</span></span><span class="row-value">{{.Close}}</span></li>
+<li class="row"><span class="row-label">Value</span><span class="row-value">{{.Value}}</span></li>
+{{- else}}
+<li class="row"><span class="row-label">Value<span class="row-meta">No checked closing price is stored for {{.Symbol}} yet.</span></span><span class="row-value">Not available</span></li>
+{{- end}}
+<li class="row"><span class="row-label">Held since</span><span class="row-value">{{.Opened}}</span></li>
+<li class="row"><span class="row-label">Suggestion</span><span class="row-value">{{if .Suggestion}}{{.Suggestion}}{{else}}Not yet available{{end}}</span></li>
+<li class="row"><span class="row-label">AI note</span><span class="row-value">{{if .Note}}{{.Note}}{{else}}Not yet available{{end}}</span></li>
+</ul>
+</section>
+{{- end}}
+</div>
+{{- else -}}
+<section class="card empty-state" aria-label="Holdings">
+<p class="empty-title">No stocks held.</p>
+<p class="empty-body">The current holdings record holds no stocks.</p>
+</section>
+{{- end}}
+{{- end}}
+{{- end}}
+{{- end}}
