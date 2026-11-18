@@ -302,7 +302,7 @@ The rule types are:
 | `size_fixed_amount` | Sizes a position by a fixed amount |
 | `size_by_risk` | Sizes a position by risk |
 
-`settings` holds the rule's own settings, such as `fast_days: 20`. Each value is kept as the exact text you wrote, so a number never becomes a floating-point value. Which settings each rule type takes, and what each one means, belongs to the rule library and will be described in the rule library reference when that part is built. The check described here confirms only that each setting is a single value.
+`settings` holds the rule's own settings, such as `fast_days: 20`. Each value is kept as the exact text you wrote, so a number never becomes a floating-point value. Which settings each rule type takes, the values each accepts and what each one means are in the [rule library reference](rule-library-and-back-tests). The loader confirms here that each setting is a single value, and sherwood then checks every rule's settings against the library before it starts.
 
 - `strategy "example-trend": rules[0].type is missing`
 - `strategy "example-trend": rules[0] has unknown rule type "moon_shot" (known types: [moving_average_cross breakout momentum_ranking pullback fixed_stop trailing_stop size_fixed_amount size_by_risk])`
@@ -310,5 +310,6 @@ The rule types are:
 
 ## Related
 
+- [Rule library and back-test reference](rule-library-and-back-tests) lists every rule type's settings and describes the back-tester.
 - [Sherwood Design](../designs/sherwood) explains why the limits exist, how the risk check uses them, and why the broker login is kept apart.
 - `settings.example.yaml`, `strategy.example.yaml` and `compose.example.yaml` at the repo root are commented examples with placeholder values.
