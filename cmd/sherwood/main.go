@@ -13,7 +13,9 @@
 // through the strategy file's rules and prints a report; it starts nothing
 // else (see backtest.go). "sherwood import-holdings" starts the broker
 // helper just long enough to read the holdings and cash once, read-only, and
-// records them (see importholdings.go).
+// records them (see importholdings.go). "sherwood rules", "sherwood
+// check-strategy" and "sherwood fetch-bars" serve the setup skill on the Mac
+// (see setup.go).
 package main
 
 import (
@@ -145,6 +147,16 @@ func run(ctx context.Context, e env) (err error) {
 	}
 	if len(e.args) > 0 && e.args[0] == importCommand {
 		return runImportHoldings(ctx, e, e.args[1:])
+	}
+	if len(e.args) > 0 {
+		switch e.args[0] {
+		case rulesCommand:
+			return runRules(e, e.args[1:])
+		case checkStrategyCommand:
+			return runCheckStrategy(e, e.args[1:])
+		case fetchBarsCommand:
+			return runFetchBars(ctx, e, e.args[1:])
+		}
 	}
 	opts, err := parseOptions(e)
 	if err != nil {

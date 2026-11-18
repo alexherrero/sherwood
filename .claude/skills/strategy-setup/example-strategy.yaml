@@ -1,0 +1,78 @@
+# An example of the strategy file the strategy-setup skill writes.
+#
+# Everything here is a placeholder that shows the shape of the skill's output.
+# The stock symbols (TECH1, HLTH1, ...) are made up and stand for "a stock in
+# that sector"; the amounts are round numbers. None of it is a recommendation,
+# anyone's real portfolio or financial advice.
+#
+# The skill writes your real file outside this repo (by default
+# ~/sherwood-setup/strategy.yaml), and you copy it to the NAS yourself. A test
+# in cmd/sherwood checks that this example passes the same validation
+# sherwood runs at start-up.
+
+version: 1
+
+limits:
+  max_stock_share: 0.10            # placeholder: at most 10% of the portfolio in one stock
+  max_order_value: "100.00"        # placeholder dollar amount
+  max_orders_per_day: 3
+  daily_loss_limit: "50.00"        # placeholder dollar amount
+  max_holdings: 12
+  max_sector_share: 0.30
+  max_limit_distance: 0.05
+  buy_limit_margin: 0.01
+  fractional_shares: false
+  price_cross_check_tolerance: 0.02
+  min_paper_weeks: 4
+
+watchlist: []
+
+# Three kinds of trade, spread across sectors, so the whole does not lean on
+# one market direction. The shares add up to 0.80, leaving the rest as cash.
+strategies:
+  - name: example-trend
+    portfolio_share: 0.30
+    stocks: [TECH1, TECH2, INDU1]
+    rules:
+      - type: moving_average_cross
+        settings:
+          fast_days: 20
+          slow_days: 50
+      - type: trailing_stop
+        settings:
+          distance: 0.10
+      - type: size_by_risk
+        settings:
+          risk_per_trade: 0.01
+
+  - name: example-pullback
+    portfolio_share: 0.25
+    stocks: [HLTH1, STPL1]
+    rules:
+      - type: pullback
+        settings:
+          trend_days: 100
+          high_days: 20
+          pullback: 0.05
+      - type: fixed_stop
+        settings:
+          distance: 0.08
+      - type: size_fixed_amount
+        settings:
+          amount: "100.00"
+
+  - name: example-momentum
+    portfolio_share: 0.25
+    stocks: [ENRG1, FINC1, UTIL1, HLTH2]
+    rules:
+      - type: momentum_ranking
+        settings:
+          days: 120
+          top: 2
+          exit_rank: 3
+      - type: trailing_stop
+        settings:
+          distance: 0.12
+      - type: size_fixed_amount
+        settings:
+          amount: "100.00"

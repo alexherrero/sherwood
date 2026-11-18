@@ -46,11 +46,11 @@ func runBacktest(e env, args []string) error {
 	if err != nil || !capital.IsPositive() || !capital.IsCents() {
 		return fmt.Errorf("backtest: -capital must be a dollar amount above zero with at most two places, such as 10000.00")
 	}
-	from, err := parseDate("from", *fromText)
+	from, err := parseDate(backtestCommand, "from", *fromText)
 	if err != nil {
 		return err
 	}
-	to, err := parseDate("to", *toText)
+	to, err := parseDate(backtestCommand, "to", *toText)
 	if err != nil {
 		return err
 	}
@@ -74,13 +74,13 @@ func runBacktest(e env, args []string) error {
 	return rep.Write(e.stdout, *trades)
 }
 
-func parseDate(name, s string) (time.Time, error) {
+func parseDate(command, name, s string) (time.Time, error) {
 	if s == "" {
 		return time.Time{}, nil
 	}
 	t, err := time.ParseInLocation(clock.DateLayout, s, clock.Eastern)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("backtest: -%s %q is not a YYYY-MM-DD date", name, s)
+		return time.Time{}, fmt.Errorf("%s: -%s %q is not a YYYY-MM-DD date", command, name, s)
 	}
 	return t, nil
 }
