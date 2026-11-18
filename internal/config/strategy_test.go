@@ -29,6 +29,10 @@ limits:
   price_cross_check_tolerance: 0.02
   min_paper_weeks: 4
 watchlist: [AAPL, MSFT, BRK.B]
+sectors:
+  AAPL: technology
+  MSFT: technology
+  BRK.B: financials
 strategies:
   - name: alpha
     portfolio_share: 0.60
@@ -262,6 +266,7 @@ func TestSharesAddingToExactlyOneAreAccepted(t *testing.T) {
 `
 	three = replaced(t, three, "portfolio_share: 0.60", "portfolio_share: 0.2")
 	three = replaced(t, three, "portfolio_share: 0.40", "portfolio_share: 0.7")
+	three = replaced(t, three, "BRK.B: financials", "BRK.B: financials\n  KO: consumer-staples")
 	if _, err := ParseStrategy([]byte(three)); err != nil {
 		t.Fatalf("0.2 + 0.7 + 0.1 refused: %v", err)
 	}
@@ -444,5 +449,72 @@ func TestDecimal(t *testing.T) {
 	}
 	if !(Decimal{}).IsZero() || MustDecimal("0").IsZero() {
 		t.Error("IsZero should mean unset, not zero-valued")
+	}
+}
+
+func TestSectorsAreRead(t *testing.T) {
+	s, err := ParseStrategy([]byte(validStrategy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := map[string]string{"AAPL": "technology", "MSFT": "technology", "BRK.B": "financials"}
+	if len(s.Sectors) != len(want) {
+		t.Fatalf("sectors = %v, want %v", s.Sectors, want)
+	}
+	for sym, sector := range want {
+		if s.Sectors[sym] != sector {
+			t.Errorf("sectors[%s] = %q, want %q", sym, s.Sectors[sym], sector)
+		}
+	}
+}
+
+func TestSectorsNeededWhenTheSectorLimitIsSet(t *testing.T) {
+	cases := []struct {
+		name, old, new, want string
+	}{
+		{"section missing", "sectors:\n  AAPL: technology\n  MSFT: technology\n  BRK.B: financials\n", "",
+			"sectors is missing, but limits.max_sector_share is set"},
+		{"watchlist stock missing", "  AAPL: technology\n", "",
+			"sectors has no sector for AAPL, but limits.max_sector_share is set"},
+		{"strategy stock missing", "  BRK.B: financials\n", "",
+			"sectors has no sector for BRK.B, but limits.max_sector_share is set"},
+		{"empty sector", "BRK.B: financials", `BRK.B: ""`, "sectors.BRK.B is empty"},
+		{"spaces round a sector", "BRK.B: financials", `BRK.B: " financials"`, "starts or ends with a space"},
+		{"long sector", "BRK.B: financials", "BRK.B: " + strings.Repeat("x", 41), "sectors.BRK.B is not a sector name"},
+		{"two-line sector", "BRK.B: financials", `BRK.B: "fin\nancials"`, "sectors.BRK.B is not a sector name"},
+		{"bad symbol", "BRK.B: financials", "BRK.B: financials\n  aapl: technology", `sectors has "aapl", which is not a stock symbol`},
+		{"list for a sector", "BRK.B: financials", "BRK.B: [financials]", "line"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if !strings.Contains(validStrategy, c.old) {
+				t.Fatalf("fixture has no %q", c.old)
+			}
+			doc := strings.Replace(validStrategy, c.old, c.new, 1)
+			_, err := ParseStrategy([]byte(doc))
+			if err == nil || !errors.Is(err, ErrInvalid) || !strings.Contains(err.Error(), c.want) {
+				t.Errorf("err = %v, want one containing %q", err, c.want)
+			}
+		})
+	}
+}
+
+func TestSectorsOptionalWithoutTheSectorLimit(t *testing.T) {
+	doc := withoutLine(t, validStrategy, "  max_sector_share:")
+	doc = strings.Replace(doc, "sectors:\n  AAPL: technology\n  MSFT: technology\n  BRK.B: financials\n", "", 1)
+	s, err := ParseStrategy([]byte(doc))
+	if err != nil {
+		t.Fatalf("no sector limit and no sectors refused: %v", err)
+	}
+	if len(s.Sectors) != 0 {
+		t.Errorf("sectors = %v, want none", s.Sectors)
+	}
+	// A partial map is fine without the limit, but still checked.
+	doc = withoutLine(t, validStrategy, "  max_sector_share:")
+	if _, err := ParseStrategy([]byte(strings.Replace(doc, "  AAPL: technology\n", "", 1))); err != nil {
+		t.Errorf("partial sectors without the limit refused: %v", err)
+	}
+	if _, err := ParseStrategy([]byte(strings.Replace(doc, "BRK.B: financials", `BRK.B: ""`, 1))); err == nil {
+		t.Error("an empty sector was accepted without the limit")
 	}
 }

@@ -59,7 +59,7 @@ Write `$WORK/strategy.yaml`. Start it with a comment saying it was written by th
 | `max_orders_per_day` | How many approvals a day they are happy with. |
 | `daily_loss_limit` | Their one-bad-day answer, in dollars with cents. |
 | `max_holdings` | Their answer, at most 20, and at least the stocks the strategies may hold at once. |
-| `max_sector_share` | Their answer, or leave it out to switch the sector limit off. |
+| `max_sector_share` | Their answer, or leave it out to switch the sector limit off. When it is set, add a `sectors:` map giving every stock on the watchlist and in a strategy its sector, or sherwood refuses to start. |
 | `max_limit_distance`, `buy_limit_margin`, `price_cross_check_tolerance` | Keep the example's 0.05, 0.01 and 0.02 unless they ask otherwise. `buy_limit_margin` must not exceed `max_limit_distance`. |
 | `fractional_shares`, `min_paper_weeks` | Their answers. |
 

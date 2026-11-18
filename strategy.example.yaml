@@ -34,6 +34,16 @@ watchlist:
   - MSFT
   - KO
 
+# Each stock's sector, for the sector limit. When max_sector_share is set,
+# every stock on the watchlist and in a strategy needs a sector here, or
+# sherwood refuses to start. Name sectors however you like, but spell each
+# one the same way every time. Leave this section out when there is no
+# sector limit.
+sectors:
+  AAPL: technology
+  MSFT: technology
+  KO: consumer-staples
+
 # Each strategy is a named set of rules, the stocks it may trade and its share
 # of the portfolio. The shares must add up to no more than 1.
 strategies:
