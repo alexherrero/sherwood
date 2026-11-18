@@ -1,92 +1,113 @@
 ---
 parent_design_doc: ../wiki/designs/sherwood.md
-parent_part_slug: prices-and-rules
+parent_part_slug: paper-trading
 ---
 
-# Plan: Prices, rules and the setup skill (from design sherwood)
+# Plan: Paper trading with the safety rails (from design sherwood)
 
 **Status:** in progress
-**Created:** 2026-11-15
-**Roadmap item:** part 3 of 6 of [Sherwood Design](../wiki/designs/sherwood.md); part file [prices-and-rules](../wiki/designs/sherwood/parts/prices-and-rules.md)
-**Brief:** Fetch free end-of-day prices with a cross-check, build the rule library and the rule runner that turns prices into signals, schedule the 16:30 ET job, build the back-tester, and write the setup skill that generates a strategy file on the Mac.
+**Created:** 2026-11-15 (refined 2026-11-18 against the merged phone-app and prices-and-rules code)
+**Roadmap item:** part 4 of 6 of [Sherwood Design](../wiki/designs/sherwood.md); part file [paper-trading](../wiki/designs/sherwood/parts/paper-trading.md)
+**Brief:** Turn signals into tracked orders that trade on paper, with the mandatory risk check, approvals, the protective-sell path, the stop switch, automatic halts, reconciliation, notifications and the nightly backup.
 
 ## Goal
 
-After each trading day's close, sherwood records prices and signals with plain reasons and the strategy file's hash, and you can back-test any strategy. The setup skill writes a valid strategy file for your install.
+Sherwood trades on paper every day by its rules. Buys wait for your tap; protective sells go through on their own; every order passes the risk check; and any doubt halts trading until you reset it.
 
 ## Constraints
 
 - The repo is public: placeholders only, nothing personal.
 - No agent signs in to, calls or tests against Robinhood or any broker, and no agent places, simulates against a live account, or scripts a trade. Broker tests use fakes; any check that needs the real account is run by the operator.
-- Decimals for money, an injected clock, no sleeping in tests, migrations numbered and forward-only.
-- Rules are pure functions of prices, holdings, the strategy file and the trading date.
-- No test reaches a price source over the network; recorded-shape fixtures use made-up values.
-- This plan runs alongside phone-app. Only one session at a time, across both plans, may add a migration; the coordinator names its number in the brief, because the runner refuses gaps and repeats.
-- `cmd/sherwood/main.go`, `internal/logging/allowlist.go` and `go.mod` are shared with phone-app: keep edits there small and rebase (never back-merge) when `main` moves.
+- Decimals for money, an injected clock, no sleeping in tests, migrations numbered and forward-only. Only one session at a time may add a migration, and the coordinator names its number (next free: `0006`).
+- The execution layer cannot be constructed without a risk check.
+- A failed send is never retried.
+- `cmd/sherwood/main.go`, `internal/logging/allowlist.go` and `go.mod` are shared by parallel tasks: keep edits there small and rebase (never back-merge) when `main` moves.
 
 ## Out of scope
 
-- Turning signals into orders (paper-trading). AI explanations (research-feed).
+- The Robinhood order calls and resting stops at the real broker (live-trading).
+- The research export and the Feed view (research-feed).
+
+## What the merged code already gives this part
+
+- `internal/signals`: signals and per-holding suggestions per strategy and date (migration `0004`), with `signals.Key(strategy, symbol, side, kind, date)` as the idempotency key, and the `stop_sell` kind for protective sells. Signals for a date may arrive at 16:30, 18:00 or 21:00 ET, so read them by date.
+- `internal/rules`: `Set.Combine`, `Set.Sizing` and `Set.InitialStop` — the sizing and initial-stop logic the back-tester already uses.
+- `internal/fill`: the paper fill model as a pure function (`BuyLimit`, `SellStop`, `SellAtOpen`).
+- `internal/holdings`: add-only snapshots with sources `import`, `fills` and `reconcile`; `Current`, `AsOf` and `LatestCash`.
+- `internal/notify`: a `Notifier` with fixed-wording alerts (`BuysWaiting`, `TradingHalted`, `Test`) and a fake.
+- `internal/web`: `HandleRead`, `HandleChange`, `ApprovalDevicesOnly`, the views table, and Today and Settings views with placeholder cards for the stop switch, limits and paper record.
+- `settings_changes` (migration `0001`) for recording limit changes. Its column comment names `limits.max_daily_loss`; the real key is `limits.daily_loss_limit`. Never edit an applied migration: record the correct key and say so in the runbook.
+- Known gaps this part closes: a broker helper error is only logged; `day.Halt()` from the after-close job is only an Error log line; the scheduler has only trading-day jobs (the 02:00 backup needs an every-day job).
 
 ## Tasks
 
-### 1. Price sources and cross-check
-- **What:** Add `internal/prices`: a price-source interface returning split-adjusted daily bars (open, high, low, close as `money.Price`, volume), a primary and a cross-check free end-of-day source (keyless or free-key, chosen on their terms and limits, recorded in the design's Document History), a fake for tests, a migration for a bars table, and fail-closed handling: a missing day gives no bars for anyone that day, and a held or watched stock whose sources disagree beyond `price_cross_check_tolerance` is marked so it gets no signals, with a held stock flagged for a halt.
-- **Verification:** Tests with fake sources show nothing stored as usable on a missing day, a disagreeing stock excluded and flagged, and parsing of each source's recorded response shape (fixtures hand-written with made-up values).
-- **Status:** [x] Shipped in [#89](https://github.com/alexherrero/sherwood/pull/89) (2026-11-16). `internal/prices` has the source interface, a fake, Tiingo as the primary (a documented API on a free personal-use plan with split factors) and Stooq as the cross-check (a free key since early 2026), both keys as `secret.Secret` settings under `prices:`, and the pick recorded in the design's Document History. Migration 0002 adds the bars, day and check tables. Only the trading date's own bar is compared across sources; any gap makes the whole day unusable, and a stock whose sources disagree beyond the tolerance is excluded, with a held one flagged for a halt that paper-trading will act on. History is re-fetched from the primary on each run, so it follows a split. Tests use hand-written fixtures and `httptest` only. Open points for the 16:30 job: a source may not have published the day's bar by 16:30, so a later retry may be needed, and Tiingo's 50 requests an hour bounds re-runs.
+### 1. Orders, order history and fills
+- **What:** Migration **`0006`**: an `orders` table (strategy, stock, side, signal kind, order type — day limit buy, stop, sell at open — quantity, limit or stop price, trading date it was made for, current state, the reason, the risk verdict text, the strategy hash, and the idempotency key from `signals.Key` under a UNIQUE constraint), an append-only `order_history` (every state change with time, actor and reason), and an append-only `fills` table. An `internal/orders` package with the design's states and the allowed transitions as one table, `Create` that finds the existing order on a duplicate key, and `Move` that appends history and updates the row in one transaction. An illegal transition returns a distinct error that callers turn into a halt (task 3).
+- **Verification:** Every allowed transition is tested and every other pair is refused; a duplicate key returns the existing order; an order's state can be rebuilt from its history; history and fills refuse UPDATE and DELETE.
+- **Status:** [ ]
 
-### 2. Rule library
-- **What:** Add `internal/rules`: moving-average cross, breakout, momentum ranking, pullback, fixed stop, trailing stop, and sizing by fixed amount and by risk, each a pure function with its own settings schema parsed from the strategy file's `config.Scalar` text, each outcome (buy, add, trim or sell, no change) carrying a short mechanical reason. Maths on `Decimal()` with an explicit precision, back through `money.RoundPrice` and the `QuantityPolicy`. The rule registry here and `config`'s known rule types must agree, checked by a test.
-- **Verification:** Table tests per rule cover signal and no-change days and bad settings; the registry test fails when a name is added to one side only.
-- **Status:** [x] Shipped in [#90](https://github.com/alexherrero/sherwood/pull/90) (2026-11-16). `internal/rules` implements all eight rule types as pure functions with their own settings schemas, parsed from the strategy file's text with errors naming the setting. Signal rules fire on the day their condition starts to hold, so a declined buy is not proposed again the next day; stops are levels and sell every day a holding sits at or below them. Comparisons cross-multiply instead of dividing, so every one is exact, and a no-float guard covers the package. `config.RuleTypes()` stays the one list of names and a test fails if the rule definitions drift from it. The example strategy file now passes `rules.Validate`, but nothing calls `Validate` at start-up yet; task 3 does that. Rules can need up to 302 bars of history.
+### 2. Risk check
+- **What:** An `internal/risk` package: a pure `Check(Order, Snapshot) Verdict` over every limit in the design's table, with the shorter list for protective sells (shares held, no more than held, market open or resting stop, max order value). `Snapshot` carries holdings, cash, the day's orders so far, the previous close's portfolio value, the last closes, the watchlist, the switch state and the clock. The verdict lists each check with pass or the refusal reason in plain words, so the approval card can show it. When `max_sector_share` is set, the strategy file must give each stock a sector (add a `sectors:` map to `internal/config`, refused at start-up if a limited stock has none). The execution layer's constructor (task 5) takes a `risk.Checker` and refuses nil.
+- **Verification:** Each limit has a passing and a refusing table test; protective sells pass on a day the loss limit, order count or switch would block a buy; a sell of more shares than held is refused; a no-float guard covers the package.
+- **Status:** [ ]
 
-### 3. Rule runner and signals
-- **What:** Run each strategy's rules for one trading date, recording signals with their reasons, the strategy file's hash and their idempotency keys (strategy, stock, side, signal kind, trading date) under a unique constraint (a migration), and the hold, add or trim suggestion per holding.
-- **Verification:** Two runs on the same inputs give identical signals and keys and a single row each; an excluded stock (task 1) gets no signal.
-- **Status:** [x] Shipped in [#98](https://github.com/alexherrero/sherwood/pull/98) (2026-11-18). Rule combining now lives once in `internal/rules/combine.go` (stop sell, other sell, trim, buy or add, no change, with the first rule's reason in file order and the highest stop), and the back-tester calls it. Migration `0004` adds append-only `signals` (with a SHA-256 idempotency key over strategy, stock, side, kind and date, unique) and `holding_suggestions`, where the first run's row stands, so a re-run writes nothing. `internal/signals` evaluates a strategy for one date as a pure function, gives no signal or suggestion on a missing day or for an excluded stock, and the runner writes the results in one transaction. `cmd/sherwood` now refuses to start when a strategy's rule settings are wrong, naming the field. Sizing and limit prices are left to paper-trading's order step; paper-trading should reuse the same key function for order keys.
+### 3. Halts, the stop switch state and reset
+- **What:** Migration **`0007`**: an append-only `halts` table (cause, evidence, time) and `halt_resets` (reason, time, device). An `internal/halt` package with `Throw(cause, evidence)` and `Reset(reason)`; throwing notifies through `notify.TradingHalted`. Wire every existing cause: a broker helper error or exit (supervisor `OnError`), `day.Halt()` from the after-close job, and an illegal order transition. The stop switch on Today becomes real: the current state, the active halts with their causes, a switch-on POST, and a reset POST with a required reason, both limited to approval devices. While halted, rules still run and record signals.
+- **Verification:** Tests throw each cause and see the switch on and a notification on the fake; reset needs a reason and an approval device and is recorded; a second throw while on adds a halt record without losing the first.
+- **Status:** [ ]
 
-### 4. The 16:30 ET job
-- **What:** Register the after-close job with the scheduler in `cmd/sherwood`: fetch and cross-check the day's bars, value the portfolio from the holdings and cash tables (phone-app task 3), run the rules, and record everything under the run's input hash. Publishing the research export is left to research-feed.
-- **Verification:** Fake-clock tests run it once per trading day, skip holidays, catch up after downtime with each run using its own date's bars, and produce no signals on a missing day.
-- **Status:** [x] Shipped in [#103](https://github.com/alexherrero/sherwood/pull/103) (2026-11-18). The after-close work runs as three scheduler jobs on each trading day, at 16:30, 18:00 and 21:00 Eastern, so a source that publishes late is caught by a later attempt; once one attempt succeeds the others skip, and a day still unusable at 21:00 is recorded as having no signals. Each attempt reads the holdings and cash in force at 16:30 on its own date (new `holdings.AsOf` and `holdings.CashAsOf`), fetches and cross-checks the day, values the portfolio only when every holding has an agreed close, and runs each strategy's rules through the signals runner. A halt cause is logged as an error but acted on only by paper-trading. Catch-up after downtime runs each date with its own bars. The retry times are a first guess; the operator should move them if the bars usually arrive later.
+### 4. Proposing orders from signals
+- **What:** After each successful after-close attempt (hook into the job, not a separate clock), turn the date's new signals into orders: buys and adds sized with `Set.Sizing` at a day limit of the close times `1 + buy_limit_margin`, with the initial stop from `Set.InitialStop`; trims and ordinary exits as sells at the next open; protective sells (`stop_sell`) as stop orders that skip approval. Buys and every non-protective sell go to `awaiting_approval` with the risk verdict stored; a refused order goes to `blocked` with its reason. Approvals expire at the end of the trading day they were made for. A catch-up run for an earlier session never proposes a buy into the wrong session. Notify once with `notify.BuysWaiting(n)` when buys are waiting.
+- **Verification:** Running the proposal twice for the same date creates one order per key; a catch-up date proposes no buy; a blocked order stores its reason; expiry moves an unapproved buy to `declined`; the notification carries only the count.
+- **Status:** [ ]
 
-### 5. Paper fill model and back-tester
-- **What:** Add the paper fill model as a pure function (a buy fills at the next open if the open is at or below its limit, otherwise at the limit if the day traded through it; a stop fills when the low reaches it, at the stop or at the open if it opened below), so paper-trading's paper broker reuses it. Then the back-tester: replay past bars through the same rule functions and fill model, and report return, drawdown, win rate and turnover per strategy, as a `sherwood backtest` subcommand.
-- **Verification:** Table tests for every fill case; the same inputs give the same report on every run.
-- **Status:** [x] Shipped in [#95](https://github.com/alexherrero/sherwood/pull/95) (2026-11-18). `internal/fill` is the paper fill model as a pure function: a buy limit fills at the open when the open is at or below the limit, otherwise at the limit only if the low went strictly below it (a touch is not a fill); a protective stop fills at the open on a gap, otherwise at the stop when the low reaches it; a rule exit or trim sells at the open. `internal/backtest` replays bars day by day with no look-ahead (a test proves a cut-short run matches), combines each stock's rules in a fixed order (stop sell, other sell, trim, buy or add) with the first rule's reason, sizes buys by the strategy's sizing rule at a limit above the close, keeps each strategy to its own cash and `max_holdings`, and reports return, maximum drawdown, win rate and turnover in exact decimals, byte-identical on every run. `sherwood backtest` reads split-adjusted CSV bars from a folder and needs no database or network. The order risk limits are not applied in a back-test, which task 7's docs must say. Task 3's runner must combine rules the same way.
+### 5. Broker interface, paper broker and the execution layer
+- **What:** `internal/broker` gains the design's adapter interface (place, cancel, look up, list open orders, list holdings, read cash and account value) with a scripted fake. The paper adapter wraps `fill.Apply`: orders sent in the 09:35 ET window rest as accepted, resting stops are kept for each holding and moved when a trailing rule raises them after the close, and fills are settled against that day's checked bar once the after-close attempt has it, writing `fills` and a new `holdings` snapshot with source `fills`. The execution layer is built only with a `risk.Checker`, re-checks every order immediately before sending, sends approved orders and protective stops at 09:35 ET, and on any adapter error or timeout moves the order to `unknown`, throws a halt and never retries. Nothing is sent while the switch is on, except that protective stops keep resting.
+- **Verification:** Fill tests cover a gap down through a stop, a buy limit not reached, a touch that does not fill, and an open below the limit; a failed fake call moves the order to `unknown`, halts and makes exactly one call; the constructor refuses a nil checker; a sell and a buy of the same stock on one day is refused.
+- **Status:** [ ]
 
-### 6. Setup skill
-- **What:** A skill in the repo that interviews you on the Mac (goals, amount, loss tolerance, sectors), writes a strategy file from the rule library, validates it with the real loader, and back-tests it. It never sees the broker login and never talks to the NAS, and says plainly that its output is not financial advice.
-- **Verification:** Its output passes validation; its examples use placeholders only; a privacy scan of the skill finds nothing personal.
-- **Status:** [x] Shipped in [#107](https://github.com/alexherrero/sherwood/pull/107) (2026-11-18). The `strategy-setup` skill in `.claude/skills/` interviews the operator on the Mac (goals, amount, loss tolerance, sectors), drafts a strategy file in a work folder it refuses to place inside the repo, validates it with the real loader, fetches split-adjusted bars and back-tests it, and says it is not financial advice at the start, at the results and at hand-over. Three new subcommands support it: `sherwood rules` prints every rule type and setting, `sherwood check-strategy` validates a file exactly as start-up does, and `sherwood fetch-bars` writes the back-tester's CSV folder through the same Tiingo source, reading the token only from an owner-only file or the environment. The example strategy uses made-up symbols and round placeholder amounts. Running it for real with a Tiingo token, and copying the result to the NAS, are the operator's.
+### 6. Approvals and Orders views
+- **What:** The Approvals view shows one card per waiting order with the rule's reason, the risk verdict re-run now, and approve and decline buttons (POST, anti-forgery token, approval devices only); an approval re-checks the order and refuses one that would now fail. The Orders view lists orders by date with their full history and fills. Today's banner links to waiting approvals.
+- **Verification:** Handler tests approve, decline and see expiry; a POST from a non-approval device is refused; an approval after expiry is refused; values render from money types without floats.
+- **Status:** [ ]
 
-### 7. Rule library reference and setup how-to
-- **What:** Wiki reference for every rule type and its settings, and a how-to for the setup skill.
-- **Verification:** Every rule type in code appears on the reference page, checked by a script.
+### 7. Stop switch actions, limits from the app and reconciliation
+- **What:** Throwing the switch declines every buy awaiting approval and cancels every open buy at the broker; a second, separate confirmation also cancels resting protective stops. Settings gains the limits with a form to tighten any of them: a tightening applies at once and is recorded in `settings_changes` with time and source, a loosening from the app is refused, and the effective limit is the tighter of the file and the app's tightenings recorded since the strategy file's hash last changed. Settings also shows the mode and the paper record (return, holdings, orders). Reconciliation runs at 09:00 ET and after the after-close attempt that succeeds: it compares holdings, cash and open orders with the adapter's, settles any `unknown` order by looking it up, and any difference throws a halt with the evidence.
+- **Verification:** A loosening attempt from the app is refused and a tightening is recorded and enforced; the switch test sees buys declined and cancelled while stops stay until the second confirmation; a reconciliation difference halts trading; an `unknown` order is settled by lookup without a resend.
+- **Status:** [ ]
+
+### 8. Nightly backup, job alerts and the runbook start
+- **What:** An every-day job kind in the scheduler (it runs on non-trading days too) and the 02:00 online backup through SQLite's backup or `VACUUM INTO` to the backup folder named in the settings, checked by opening the copy and matching row counts, keeping a configured number of copies. Add alert constructors for a failed or missed job, a failed backup check and a broker login needed, and send them. Start `wiki/operational/runbook.md`: halts and their reset, reconciliation differences, restoring a backup, and rolling back across a migration.
+- **Verification:** A test backs up, restores and matches row counts; a corrupted copy fails the check and alerts; the every-day job runs on a weekend under the fake clock; a failed job alerts once.
 - **Status:** [ ]
 
 ## Order and parallelism
 
-Tasks 1 and 2 can run together (only 1 adds a migration). Then 3 (after 1 and 2; adds a migration) and 5 (after 2). Task 4 waits for 3 and for phone-app task 3 (holdings tables). Then 6 (after 5), and 7 last.
+Tasks 1 and 2 can run together (only 1 adds a migration, `0006`). Then 3 (after 1; adds migration `0007`). Then 4 and 5 together (both after 1, 2 and 3; 4 owns the proposal hook in the after-close job and 5 owns the 09:35 send and the settlement hook, so agree file boundaries in the briefs). Then 6 (after 4), 7 (after 5 and 6), and 8, which only needs the scheduler and can run alongside 6 or 7.
 
 ## Risks / open questions
 
-- Free sources change terms and have gaps; the cross-check and fail-closed handling contain the damage, but a shared upstream error would pass.
-- Splits: a share-count change at the broker halts trading until confirmed (live-trading); the rule side uses split-adjusted bars.
-- The sector limit needs a sector source (SEC industry codes); it is optional, so it can wait for paper-trading's risk check.
+- Paper fills are approximate at end-of-day resolution; compare with live fills later.
+- A buy proposed at 21:00 after a late source still has to wait for the next 09:35 window, so a late day loses no session; a day still missing at 21:00 proposes nothing.
+- The sector limit needs sector data; this part takes it from the strategy file rather than a feed, and live-trading can revisit.
+- The 09:35 window assumes the after-close proposal finished the evening before; a container that was down overnight must not send stale approvals (expiry handles it).
 
 ## Verification strategy
 
-CI gates from foundations (task 10), plus determinism tests for the runner and the back-tester.
+CI gates from foundations, plus the idempotency, no-retry and halt tests named above, and a no-float guard on `internal/risk` and `internal/orders`.
 
 ## How to resume
 
-Read this file's task list and find the first task with `Status: [ ]`, then read the newest entries in `.harness/progress.md`. When the last task lands, close it out: status done, a summary in `progress.md`, and archive this file to `.harness/PLAN.archive.YYYYMMDD-prices-and-rules.md`.
+Read this file's task list and find the first task with `Status: [ ]`, then read the newest entries in `.harness/progress.md` and the hand-over notes for paper-trading tasks. When the last task lands, close it out: status done, a summary in `progress.md`, and archive this file to `.harness/PLAN.archive.YYYYMMDD-paper-trading.md`.
 
 ## Locked design calls
 
 See the final [Sherwood Design](../wiki/designs/sherwood.md). In short: Go application with Python only in the broker helper; SQLite; decimals; a mandatory risk check on every order; buys wait for approval and only protective sells go through on their own; any broker error halts trading with no retry; the AI never creates or sends an order; broker secrets only in the owner-only settings file on the NAS.
 
-Refinement calls (2026-11-16):
-- The paper fill model is built here as a pure function, because the back-tester needs it before the paper broker exists; paper-trading wraps it.
-- Signals get their idempotency keys here; paper-trading's orders reuse the same key under their own unique constraint.
+Refinement calls (2026-11-18):
+- Orders reuse `signals.Key` as their idempotency key, under the orders table's own unique constraint.
+- Proposal happens in the after-close attempt that succeeds, not on its own clock, so a late source never produces a proposal from a missing day.
+- Paper fills are settled against the day's checked bar after the close; sends happen at 09:35 ET, so a paper order is `accepted` during the day and filled or expired that evening.
+- Holdings change only through fills (source `fills`) and accepted reconciliations (source `reconcile`).
+- The effective limit is the tighter of the strategy file and the app's recorded tightenings since the file last changed, so a restart never silently loosens a limit set from the phone.
+- Sector data for the sector limit lives in the strategy file.
