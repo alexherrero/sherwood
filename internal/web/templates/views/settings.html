@@ -1,0 +1,51 @@
+{{define "content" -}}
+{{with .Data -}}
+<header class="page-head">
+<h1>Settings</h1>
+</header>
+{{with .Result -}}
+<section class="notice {{.Class}}" role="status" aria-label="Notifications">
+<p class="notice-title"><strong>{{.Title}}</strong></p>
+<p>{{.Body}}</p>
+</section>
+{{- end}}
+<section class="card" aria-labelledby="notifications">
+<div class="card-head">
+<h2 class="card-title" id="notifications">Notifications</h2>
+{{if .Push}}<span class="badge">{{if .Push.Devices}}On{{else}}Off{{end}}</span>{{end}}
+</div>
+{{if .Push -}}
+<div class="card-body stack">
+<p>Sherwood tells your phone when buys are waiting and when trading halts. Each notification is a few words only, never amounts, stocks or reasons; tap it to open the app.</p>
+<p>{{if eq .Push.Devices 0}}No device has notifications on yet.{{else if eq .Push.Devices 1}}1 device has notifications on.{{else}}{{.Push.Devices}} devices have notifications on.{{end}}</p>
+<form method="post" action="/notifications/subscribe" id="push-subscribe" data-key="{{.Push.PublicKey}}">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<input type="hidden" name="endpoint" value="">
+<input type="hidden" name="p256dh" value="">
+<input type="hidden" name="auth" value="">
+<button type="submit" class="button button--primary button--full">Turn on notifications on this device</button>
+</form>
+<p class="field-hint" id="push-status" role="status" aria-live="polite">On iPhone, add sherwood to your home screen first and open it from there; Safari can only show notifications for an installed app.</p>
+<form method="post" action="/notifications/test">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<button type="submit" class="button button--secondary button--full">Send a test notification</button>
+</form>
+</div>
+{{- else -}}
+<div class="card-body">
+<p>Notifications are not set up. Sherwood could not read the VAPID keys in its settings file; the line it logged when it started says which one.</p>
+</div>
+{{- end}}
+</section>
+<section class="card empty-state" aria-label="View status">
+<div class="notice">
+<p class="notice-title"><strong>Not built yet.</strong></p>
+<p>The rest of this view is still being built.</p>
+</div>
+<div class="field">
+<span class="field-label">What belongs here</span>
+<p class="field-value">When it is ready, it will show {{.Later}}.</p>
+</div>
+</section>
+{{- end}}
+{{- end}}

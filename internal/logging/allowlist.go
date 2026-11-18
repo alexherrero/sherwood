@@ -64,6 +64,13 @@ var allowedKeys = []string{
 	// The address the web server listens on, such as ":8080". It is the
 	// server's own address, never a caller's.
 	"listen_address",
+
+	// Notifications (counts and the alert's kind; never an endpoint or a key).
+	"push_alert",         // the alert's kind, such as trading_halted
+	"push_delivered",     // how many devices a push service accepted it for
+	"push_failed",        // how many sends failed
+	"push_removed",       // how many ended subscriptions were dropped
+	"push_subscriptions", // how many devices have notifications on
 }
 
 // allowed is allowedKeys as a set.

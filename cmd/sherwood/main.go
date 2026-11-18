@@ -34,6 +34,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/logging"
+	"github.com/alexherrero/sherwood/internal/notify/webpush"
 	"github.com/alexherrero/sherwood/internal/prices"
 	"github.com/alexherrero/sherwood/internal/rules"
 	"github.com/alexherrero/sherwood/internal/scheduler"
@@ -225,6 +226,7 @@ func run(ctx context.Context, e env) (err error) {
 		Logger:          logger,
 		Store:           db,
 		Mode:            settings.Mode,
+		Push:            newPush(settings, db, e.clock, logger),
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
@@ -261,6 +263,28 @@ func run(ctx context.Context, e env) (err error) {
 	}
 	logger.Error("scheduler halted", "error", err)
 	return fmt.Errorf("scheduler halted: %w", err)
+}
+
+// newPush builds the web push channel from the settings file's VAPID keys.
+// Keys it cannot read turn notifications off with a warning rather than stop
+// sherwood: trading never depends on a notification, and Settings says
+// notifications are not set up.
+func newPush(settings *config.Settings, db *store.Store, c clock.Clock, logger *slog.Logger) web.PushChannel {
+	wp := settings.Notifications.WebPush
+	sender, err := webpush.New(webpush.Config{
+		PublicKey:  wp.VAPIDPublicKey,
+		PrivateKey: wp.VAPIDPrivateKey,
+		Contact:    wp.Contact,
+		Client:     webpush.NewHTTPClient(),
+		Store:      db,
+		Clock:      c,
+		Logger:     logger,
+	})
+	if err != nil {
+		logger.Warn("notifications are off", "reason", err.Error())
+		return nil
+	}
+	return sender
 }
 
 // newSupervisor builds the broker helper's supervisor. Every helper failure is

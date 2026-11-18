@@ -66,8 +66,8 @@ database_path: /data/sherwood.db
 | `tailnet_login` | text | yes | A login with no spaces |
 | `approval_devices` | list of tailnet addresses | yes | At least one; each an IPv4 address in `100.64.0.0/10` or an IPv6 address in `fd7a:115c:a1e0::/48`; no repeats |
 | `feed_token` | secret text | yes | At least 32 characters |
-| `notifications.web_push.vapid_public_key` | text | yes | Any non-empty value |
-| `notifications.web_push.vapid_private_key` | secret text | yes | Any non-empty value |
+| `notifications.web_push.vapid_public_key` | text | yes | Any non-empty value; notifications work only with a real key (see below) |
+| `notifications.web_push.vapid_private_key` | secret text | yes | Any non-empty value; notifications work only with a real key (see below) |
 | `notifications.web_push.contact` | text | yes | Starts with `mailto:` or `https://` |
 | `mode` | `paper` or `live` | yes | Exactly `paper` or `live`, in lower case |
 | `data_dir` | path | yes | An absolute path |
@@ -109,7 +109,18 @@ The keys for web push notifications to the phone app.
 - **`vapid_private_key`** is the private half. It signs each notification, is kept as a secret like the feed token, and never reaches a log.
 - **`contact`** is the address push services may use to reach the sender: a `mailto:` address or an `https://` page.
 
-Generate your own key pair; the example's values are not keys.
+Generate your own key pair; the example's values are not keys. Both halves are base64url text without padding, the form most web push tools print: the public key is 87 characters (a 65-byte P-256 point) and the private key 43 characters (a 32-byte P-256 key). On the NAS, `openssl` makes a pair without any other tool:
+
+```sh
+openssl ecparam -name prime256v1 -genkey -noout -out vapid.pem
+openssl ec -in vapid.pem -outform DER | tail -c 65 | base64 | tr '/+' '_-' | tr -d '=\n'; echo   # vapid_public_key
+openssl ec -in vapid.pem -outform DER | head -c 39 | tail -c 32 | base64 | tr '/+' '_-' | tr -d '=\n'; echo   # vapid_private_key
+rm vapid.pem
+```
+
+`npx web-push generate-vapid-keys` prints a pair in the same form.
+
+The checks below only make sure each field is present. Sherwood checks the keys themselves when it starts: if the private key cannot be read, or the public key is not its other half, sherwood still starts but logs `notifications are off` with a reason naming the field, and the Settings view says notifications are not set up. Changing the key pair later means every device has to turn notifications on again.
 
 - `notifications.web_push.vapid_public_key is missing`
 - `notifications.web_push.vapid_private_key is missing`
