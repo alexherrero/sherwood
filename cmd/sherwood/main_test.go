@@ -20,6 +20,8 @@ import (
 
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/prices"
+	"github.com/alexherrero/sherwood/internal/prices/pricestest"
 	"github.com/alexherrero/sherwood/internal/store"
 )
 
@@ -50,6 +52,10 @@ func writeExamples(t *testing.T, editSettings, editStrategy func(string) string)
 	settings := readRepoFile(t, "settings.example.yaml")
 	settings = replaceOnce(t, settings, "data_dir: /data\n", "data_dir: "+dir+"\n")
 	settings = replaceOnce(t, settings, "database_path: /data/sherwood.db\n", "database_path: "+f.database+"\n")
+	// With no price keys the after-close job stays off, so no test reaches a
+	// price source; tests that want the job supply fake sources instead.
+	settings = replaceOnce(t, settings, "tiingo_token: \"replace-me-with-your-tiingo-token\"\n", "tiingo_token: \"\"\n")
+	settings = replaceOnce(t, settings, "stooq_api_key: \"replace-me-with-your-stooq-key\"\n", "stooq_api_key: \"\"\n")
 	strategy := readRepoFile(t, "strategy.example.yaml")
 	if editSettings != nil {
 		settings = editSettings(settings)
@@ -552,4 +558,36 @@ func TestBinary(t *testing.T) {
 			t.Errorf("stderr does not name the limit: %s", stderr.String())
 		}
 	})
+}
+
+// TestStartUpRegistersTheAfterCloseJob starts sherwood with fake price
+// sources that have no bars, on a Monday morning: the catch-up replays the
+// previous week's after-close runs, each finding its prices missing.
+func TestStartUpRegistersTheAfterCloseJob(t *testing.T) {
+	f := writeExamples(t, nil, nil)
+	out := newWatchWriter(`"msg":"job run skipped","job":"after-close-retry-2","trading_date":"2026-11-13"`)
+	e := testEnv(f, out, clock.NewFake(covered))
+	e.priceSources = func(config.PriceKeys) (prices.Source, prices.Source) {
+		return pricestest.New("primary"), pricestest.New("cross")
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- run(ctx, e) }()
+	out.wait(t, `"msg":"job run skipped","job":"after-close-retry-2","trading_date":"2026-11-13"`)
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatalf("run: %v\n%s", err, out.String())
+	}
+	for _, s := range []string{
+		`"msg":"job run skipped","job":"after-close","trading_date":"2026-11-10"`,
+		"prices not usable yet, so no signals; trying again at 18:00",
+	} {
+		if !strings.Contains(out.String(), s) {
+			t.Errorf("log lacks %q:\n%s", s, out.String())
+		}
+	}
+	if strings.Contains(out.String(), "after-close job is off") {
+		t.Error("the job was off with sources supplied")
+	}
 }

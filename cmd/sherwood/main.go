@@ -34,6 +34,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/logging"
+	"github.com/alexherrero/sherwood/internal/prices"
 	"github.com/alexherrero/sherwood/internal/rules"
 	"github.com/alexherrero/sherwood/internal/scheduler"
 	"github.com/alexherrero/sherwood/internal/store"
@@ -90,6 +91,9 @@ type env struct {
 
 	// helperCommand, when set, replaces the package's helperCommand.
 	helperCommand []string
+	// priceSources, when set, replaces newPriceSources, so tests never reach
+	// a price source.
+	priceSources func(config.PriceKeys) (primary, check prices.Source)
 	// started, when set by a test, is called once start-up has finished and
 	// the scheduler is about to run, with the web server's address.
 	started func(webAddr string)
@@ -208,6 +212,9 @@ func run(ctx context.Context, e env) (err error) {
 		Logger:   logger,
 	})
 	if err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	if err := registerAfterClose(e, sched, settings.Prices, strategy, db, logger); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
 
