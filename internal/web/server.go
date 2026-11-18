@@ -73,10 +73,13 @@ type Server struct {
 	tokens  *tokener
 	mux     *http.ServeMux
 	handler http.Handler
+	// reads lists every read pattern registered, for tests.
+	reads []string
 }
 
-// New builds a Server with the placeholder home page and health check. Views
-// are added with HandleRead and actions with HandleChange.
+// New builds a Server with the app shell (the six views, the static files
+// and the service worker) and the health check. Actions are added with
+// HandleChange.
 func New(cfg Config) (*Server, error) {
 	if cfg.Login == "" {
 		return nil, errors.New("web: the allowed tailnet login is empty")
@@ -101,7 +104,7 @@ func New(cfg Config) (*Server, error) {
 	}
 	s.handler = s.guard(s.mux)
 
-	s.HandleRead("/{$}", http.HandlerFunc(home))
+	s.mountShell()
 	s.HandleRead("/health", http.HandlerFunc(health))
 	return s, nil
 }
@@ -118,6 +121,7 @@ const ApprovalDevicesOnly ChangeOption = 1
 // "/portfolio".
 func (s *Server) HandleRead(pattern string, h http.Handler) {
 	s.mux.Handle(http.MethodGet+" "+pattern, h)
+	s.reads = append(s.reads, pattern)
 }
 
 // HandleChange registers an action. It answers POST only, after the request's
@@ -171,17 +175,6 @@ func (s *Server) Serve(ctx context.Context, ln net.Listener) error {
 		return fmt.Errorf("web server shutdown: %w", err)
 	}
 	return nil
-}
-
-// home is a placeholder until the app shell is built.
-func home(w http.ResponseWriter, _ *http.Request) {
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	_, _ = io.WriteString(w, `<!doctype html>
-<html lang="en"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Sherwood</title></head>
-<body><h1>Sherwood</h1><p>Sherwood is running. The app's views are still being built.</p></body></html>
-`)
 }
 
 // health answers "ok" so the operator can check the page is reachable.

@@ -1,0 +1,37 @@
+{{define "layout" -}}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#14532d" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#0f2417" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Sherwood">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>{{.Title}} · Sherwood</title>
+<link rel="manifest" href="/static/manifest.webmanifest">
+<link rel="icon" href="/static/icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/static/apple-touch-icon.png">
+<link rel="stylesheet" href="/static/app.css">
+<script src="/static/app.js" defer></script>
+</head>
+<body>
+<header class="bar">
+<span class="brand">Sherwood</span>
+</header>
+<main id="main">
+{{template "content" .}}
+</main>
+<nav class="views" aria-label="Views">
+<ul>
+{{- range .Nav}}
+<li><a href="{{.Path}}"{{if .Current}} aria-current="page"{{end}}>{{.Name}}</a></li>
+{{- end}}
+</ul>
+</nav>
+</body>
+</html>
+{{end}}
