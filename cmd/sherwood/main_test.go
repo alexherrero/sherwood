@@ -237,7 +237,7 @@ func TestStartsInPaperModeAndStopsCleanly(t *testing.T) {
 	for _, want := range []string{
 		`"msg":"strategy file loaded"`,
 		`"strategy_hash":"` + strategy.Hash + `"`,
-		`"msg":"database ready","migrations":5`,
+		`"msg":"database ready","migrations":6`,
 		`"msg":"paper mode: the broker helper is not started","mode":"paper"`,
 		// The example's placeholder VAPID keys turn notifications off
 		// rather than stop sherwood.

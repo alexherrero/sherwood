@@ -18,6 +18,10 @@ linters:
   settings:
     misspell:
       locale: US
+      # The design's order state is spelled "cancelled" (orders.Cancelled),
+      # and it is stored that way, so the word is allowed.
+      ignore-rules:
+        - cancelled
     revive:
       rules:
         - name: exported
