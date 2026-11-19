@@ -36,6 +36,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
+	"github.com/alexherrero/sherwood/internal/limits"
 	"github.com/alexherrero/sherwood/internal/logging"
 	"github.com/alexherrero/sherwood/internal/notify"
 	"github.com/alexherrero/sherwood/internal/notify/webpush"
@@ -199,6 +200,14 @@ func run(ctx context.Context, e env) (err error) {
 		}
 	}()
 	logger.Info("database ready", "migrations", len(db.Migrated()))
+	// A new strategy file is recorded with its limits; from then on the
+	// limits tightened from the phone app under the old file no longer apply.
+	if wrote, err := limits.Record(ctx, db, strategy, e.clock.Now()); err != nil {
+		return fmt.Errorf("refusing to start: recording the strategy file: %w", err)
+	} else if wrote {
+		logger.Info("strategy file recorded", "strategy_hash", strategy.Hash, "change_source", string(limits.NAS),
+			"reason", "its hash and changed limits are recorded; limits tightened from the phone app under an earlier file no longer apply")
+	}
 
 	push := newPush(settings, db, e.clock, logger)
 	stopSwitch, err := newStopSwitch(db, e.clock, push, logger)
@@ -240,14 +249,18 @@ func run(ctx context.Context, e env) (err error) {
 	if err := registerBackup(sched, settings.Backup, db, logger); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
-	paperBroker, err := registerTrading(e, sched, settings.Mode, strategy, db, stopSwitch, logger)
+	tr, err := registerTrading(e, sched, settings.Mode, strategy, db, stopSwitch, logger)
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
-	if err := registerAfterClose(e, sched, settings.Prices, strategy, db, stopSwitch, alertsOf(push), paperBroker, logger); err != nil {
+	if err := registerAfterClose(e, sched, settings.Prices, strategy, db, stopSwitch, alertsOf(push), tr, logger); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
 
+	var canceller web.OrderCanceller
+	if tr.exec != nil {
+		canceller = tr.exec
+	}
 	srv, err := web.New(web.Config{
 		Login:           settings.TailnetLogin,
 		ApprovalDevices: settings.ApprovalAddrs(),
@@ -261,6 +274,7 @@ func run(ctx context.Context, e env) (err error) {
 		Calendar:        clock.NYSE(),
 		Checker:         risk.Standard{},
 		BrokerHealthy:   paperBrokerHealthy,
+		Orders:          canceller,
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)

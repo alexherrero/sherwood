@@ -14,6 +14,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
+	"github.com/alexherrero/sherwood/internal/limits"
 	"github.com/alexherrero/sherwood/internal/logging/loggingtest"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/notify"
@@ -537,5 +538,25 @@ func TestExpiryLeavesApprovedOrdersAlone(t *testing.T) {
 	}
 	if st.On() {
 		t.Errorf("halts %+v", st.Active)
+	}
+}
+
+func TestATighteningFromThePhoneAppliesAtProposal(t *testing.T) {
+	h := newHarness(t)
+	if _, err := limits.Tighten(context.Background(), h.store, h.strategy, h.clock.Now(), limits.OrderValue, "50.00"); err != nil {
+		t.Fatal(err)
+	}
+	h.propose(t, h.day)
+	want := []string{
+		sessionDate + " BBB stop_sell stop approved 3 90.00",
+		sessionDate + " EEE sell sell_at_open awaiting_approval 4 -",
+		sessionDate + " AAA buy day_limit_buy blocked 9 11.11", // 99.99, within the file's 100.00
+	}
+	list := h.orders(t)
+	if got := orderText(list); !reflect.DeepEqual(got, want) {
+		t.Fatalf("orders:\n got %q\nwant %q", got, want)
+	}
+	if !strings.Contains(list[2].Verdict, "Refused: "+risk.CheckOrderValue) {
+		t.Errorf("the buy's verdict is %q, want refused on order value", list[2].Verdict)
 	}
 }

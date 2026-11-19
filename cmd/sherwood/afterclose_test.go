@@ -13,6 +13,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/broker/paper"
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/execution"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/logging/loggingtest"
@@ -20,6 +21,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/notify"
 	"github.com/alexherrero/sherwood/internal/notify/notifytest"
 	"github.com/alexherrero/sherwood/internal/prices/pricestest"
+	"github.com/alexherrero/sherwood/internal/risk"
 	"github.com/alexherrero/sherwood/internal/scheduler"
 	"github.com/alexherrero/sherwood/internal/secret"
 	"github.com/alexherrero/sherwood/internal/signals"
@@ -142,8 +144,13 @@ func newAC(t *testing.T, now time.Time, catchUpDays int, missing ...string) *acH
 	if err != nil {
 		t.Fatal(err)
 	}
+	ex, err := execution.New(execution.Config{Store: s, Clock: h.clock, Calendar: clock.NYSE(), Adapter: h.paper,
+		Checker: risk.Standard{}, Switch: h.halts, Strategy: acStrategy(t), Logger: log})
+	if err != nil {
+		t.Fatal(err)
+	}
 	a := &afterClose{store: s, clock: h.clock, calendar: clock.NYSE(), log: log, strategy: acStrategy(t),
-		halts: h.halts, alerts: h.alerts, paper: h.paper, primary: h.primary, check: h.check}
+		halts: h.halts, alerts: h.alerts, paper: h.paper, exec: ex, primary: h.primary, check: h.check}
 	if err := a.register(h.sched); err != nil {
 		t.Fatal(err)
 	}
@@ -556,7 +563,7 @@ func TestAfterCloseIsOffWithoutBothKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys := config.PriceKeys{TiingoToken: secret.New("made-up-token")}
-	if err := registerAfterClose(env{clock: clk}, sched, keys, acStrategy(t), s, nil, notify.Nowhere, nil, log); err != nil {
+	if err := registerAfterClose(env{clock: clk}, sched, keys, acStrategy(t), s, nil, notify.Nowhere, trading{}, log); err != nil {
 		t.Fatal(err)
 	}
 	if err := sched.RunDue(ctx); err != nil {

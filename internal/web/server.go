@@ -87,6 +87,11 @@ type Config struct {
 	// BrokerHealthy says whether the broker adapter is answering, for the
 	// approval's risk check. Required.
 	BrokerHealthy func(context.Context) bool
+	// Orders cancels open orders at the broker when the stop switch is
+	// thrown: the execution layer. Leave it nil when no broker adapter is
+	// built (live mode, until live trading): the switch still declines the
+	// waiting buys, and Today says open orders could not be cancelled.
+	Orders OrderCanceller
 }
 
 // Server is the phone app's HTTP server.
@@ -105,6 +110,7 @@ type Server struct {
 	calendar      *clock.Calendar
 	checker       risk.Checker
 	brokerHealthy func(context.Context) bool
+	orders        OrderCanceller
 	mux           *http.ServeMux
 	handler       http.Handler
 	// reads lists every read pattern registered, for tests.
@@ -152,6 +158,7 @@ func New(cfg Config) (*Server, error) {
 		calendar:      cfg.Calendar,
 		checker:       cfg.Checker,
 		brokerHealthy: cfg.BrokerHealthy,
+		orders:        cfg.Orders,
 		mux:           http.NewServeMux(),
 	}
 	for _, a := range cfg.ApprovalDevices {
@@ -163,6 +170,7 @@ func New(cfg Config) (*Server, error) {
 	s.mountPush()
 	s.mountStopSwitch()
 	s.mountApprovals()
+	s.mountLimits()
 	s.HandleRead("/health", http.HandlerFunc(health))
 	return s, nil
 }

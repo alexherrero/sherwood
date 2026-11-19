@@ -36,6 +36,10 @@ const (
 	Reconciliation Cause = "reconciliation"
 	// DailyLoss is the daily loss limit being reached.
 	DailyLoss Cause = "daily_loss"
+	// StopsCancelled is you confirming, a second time, that the resting
+	// protective stops are cancelled too. While a halt with this cause is
+	// active, no protective stop is placed or raised.
+	StopsCancelled Cause = "stops_cancelled"
 )
 
 // causeWords are the words Today shows for each cause.
@@ -47,6 +51,7 @@ var causeWords = map[Cause]string{
 	UnknownOrder:      "An order's state at the broker is unknown",
 	Reconciliation:    "Sherwood's records and the broker's differ",
 	DailyLoss:         "The daily loss limit was reached",
+	StopsCancelled:    "You cancelled the protective stops",
 }
 
 // Words is the cause in a few plain words, for the phone app. A cause this
@@ -105,6 +110,16 @@ type State struct {
 
 // On reports whether the switch is on: trading is halted.
 func (s State) On() bool { return len(s.Active) > 0 }
+
+// Has reports whether an active halt has cause c.
+func (s State) Has(c Cause) bool {
+	for _, h := range s.Active {
+		if h.Cause == c {
+			return true
+		}
+	}
+	return false
+}
 
 // Newest is the id of the newest active halt, which a reset must name, or 0
 // when the switch is off.

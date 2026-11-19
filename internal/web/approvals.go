@@ -13,6 +13,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
+	"github.com/alexherrero/sherwood/internal/limits"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/orders"
 	"github.com/alexherrero/sherwood/internal/prices"
@@ -405,11 +406,16 @@ func (s *Server) snapshot(ctx context.Context, tx *sql.Tx, o orders.Order, now t
 	if err != nil {
 		return risk.Snapshot{}, err
 	}
+	// The limits in force: the file's, tightened from the phone app.
+	lim, err := limits.Effective(ctx, tx, s.strategy)
+	if err != nil {
+		return risk.Snapshot{}, err
+	}
 	return risk.Snapshot{
 		Now:                now,
 		Calendar:           s.calendar,
 		Preview:            true,
-		Limits:             s.strategy.Limits,
+		Limits:             lim,
 		Sectors:            s.strategy.Sectors,
 		Watchlist:          s.strategy.Watchlist,
 		Held:               held,

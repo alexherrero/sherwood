@@ -40,9 +40,9 @@ func TestTheSendJobSkipsAPassedSessionAndRunsToday(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pb, err := registerTrading(env{clock: clk}, sched, config.ModePaper, acStrategy(t), s, sw, log)
-	if err != nil || pb == nil {
-		t.Fatalf("registerTrading = %v, %v", pb, err)
+	tr, err := registerTrading(env{clock: clk}, sched, config.ModePaper, acStrategy(t), s, sw, log)
+	if err != nil || tr.paper == nil || tr.exec == nil {
+		t.Fatalf("registerTrading = %+v, %v", tr, err)
 	}
 	clk.Set(at(t, "2026-11-24", 9, 35))
 	if err := sched.RunDue(ctx); err != nil {
@@ -60,6 +60,17 @@ func TestTheSendJobSkipsAPassedSessionAndRunsToday(t *testing.T) {
 	if !strings.Contains(out.String(), "0 sent, 0 blocked by the risk check") {
 		t.Errorf("no summary logged:\n%s", out.String())
 	}
+	got = h.strings(t, `SELECT trading_date || ' ' || outcome || ' ' || detail FROM job_runs WHERE job_name = ? ORDER BY id`, reconcileJob)
+	want = []string{
+		"2026-11-23 skipped this morning has passed; the next reconciliation compares the records as they are then",
+		"2026-11-24 succeeded ",
+	}
+	if strings.Join(got, "\n") != strings.Join(want, "\n") {
+		t.Errorf("reconcile runs:\n got %q\nwant %q", got, want)
+	}
+	if !strings.Contains(out.String(), "reconciled with the broker") {
+		t.Errorf("no reconciliation logged:\n%s", out.String())
+	}
 }
 
 func TestLiveModeRegistersNoSendJob(t *testing.T) {
@@ -76,9 +87,9 @@ func TestLiveModeRegistersNoSendJob(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	pb, err := registerTrading(env{clock: clk}, sched, config.ModeLive, acStrategy(t), s, nil, log)
-	if err != nil || pb != nil {
-		t.Fatalf("registerTrading = %v, %v, want nothing in live mode", pb, err)
+	tr, err := registerTrading(env{clock: clk}, sched, config.ModeLive, acStrategy(t), s, nil, log)
+	if err != nil || tr.paper != nil || tr.exec != nil {
+		t.Fatalf("registerTrading = %+v, %v, want nothing in live mode", tr, err)
 	}
 	if !strings.Contains(out.String(), "orders are not sent") {
 		t.Errorf("live mode did not say orders are not sent:\n%s", out.String())
@@ -118,6 +129,13 @@ func TestTheAfterCloseSettlesPaperFillsBeforeTheRules(t *testing.T) {
 	got, err := orders.Get(ctx, h.store.Reader(), buy.ID)
 	if err != nil || got.State != orders.Filled {
 		t.Fatalf("buy is %s, %v, want filled", got.State, err)
+	}
+	// The successful attempt ends with a reconciliation, which agrees.
+	if !strings.Contains(h.logs.String(), "reconciled with the broker") {
+		t.Errorf("no reconciliation after the close:\n%s", h.logs.String())
+	}
+	if st, err := halt.Active(ctx, h.store.Reader()); err != nil || st.On() {
+		t.Errorf("halts = %+v, %v; want none", st, err)
 	}
 	set, err := holdings.Current(ctx, h.store.Reader())
 	if err != nil {

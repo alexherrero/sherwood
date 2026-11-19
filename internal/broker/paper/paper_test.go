@@ -379,3 +379,18 @@ func storeDay(t *testing.T, h *harness, date, c string) {
 		t.Fatalf("FetchDay = %+v, %v", day, err)
 	}
 }
+
+func TestCashIsReadEvenWhenAHoldingCannotBeValued(t *testing.T) {
+	ctx := context.Background()
+	h := newHarness(t)
+	if c, err := h.pb.Cash(ctx); err != nil || !c.IsZero() {
+		t.Fatalf("Cash with nothing recorded = %s, %v; want zero", c, err)
+	}
+	h.hold(t, "1234.50", map[string]string{"ZZZ": "3"}) // ZZZ has no checked close
+	if _, err := h.pb.Account(ctx); err == nil {
+		t.Fatal("Account valued a holding with no close")
+	}
+	if c, err := h.pb.Cash(ctx); err != nil || c.String() != "1234.50" {
+		t.Fatalf("Cash = %s, %v; want 1234.50", c, err)
+	}
+}

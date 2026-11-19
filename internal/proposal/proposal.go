@@ -16,6 +16,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
+	"github.com/alexherrero/sherwood/internal/limits"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/notify"
 	"github.com/alexherrero/sherwood/internal/orders"
@@ -202,6 +203,11 @@ func (p *Proposer) Propose(ctx context.Context, d Day) (Result, error) {
 		if err != nil {
 			return err
 		}
+		// The limits in force: the file's, tightened from the phone app.
+		lim, err := limits.Effective(ctx, tx, p.cfg.Strategy)
+		if err != nil {
+			return err
+		}
 		for _, pl := range plans {
 			o, created, err := orders.Create(ctx, tx, pl.order, orders.Proposer, now)
 			if err != nil {
@@ -215,7 +221,7 @@ func (p *Proposer) Propose(ctx context.Context, d Day) (Result, error) {
 			if err != nil {
 				return err
 			}
-			snap := p.snapshot(now, in, sw, healthy, dayOrders(day, o.ID, in.closes))
+			snap := p.snapshot(now, in, lim, sw, healthy, dayOrders(day, o.ID, in.closes))
 			v := p.cfg.Checker.Check(pl.risk, snap)
 			ch := orders.Change{Actor: orders.Risk, Verdict: v.String(), At: now}
 			switch {
@@ -475,12 +481,13 @@ func percent(f decimal.Decimal) string {
 
 // snapshot is the risk check's view at proposal: a preview for the order's
 // session, from the holdings, cash and closes the rules ran with.
-func (p *Proposer) snapshot(now time.Time, in *inputs, sw halt.State, healthy bool, day []risk.DayOrder) risk.Snapshot {
+func (p *Proposer) snapshot(now time.Time, in *inputs, lim config.Limits, sw halt.State, healthy bool,
+	day []risk.DayOrder) risk.Snapshot {
 	return risk.Snapshot{
 		Now:       now,
 		Calendar:  p.cfg.Calendar,
 		Preview:   true,
-		Limits:    p.cfg.Strategy.Limits,
+		Limits:    lim,
 		Sectors:   p.cfg.Strategy.Sectors,
 		Watchlist: p.cfg.Strategy.Watchlist,
 		Held:      in.held,

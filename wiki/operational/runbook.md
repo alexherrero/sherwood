@@ -26,6 +26,17 @@ A halt turns the stop switch on. While it is on, sherwood sends no buys and no o
 
 The switch comes on in one of two ways: you press **Stop all trading** on the Today view, or sherwood throws it itself when something is in doubt. Either way you get one "Trading halted" notification, and Today lists every active halt with its cause, what sherwood saw, and when.
 
+When you press **Stop all trading**, sherwood also clears the way for nothing to buy:
+
+- Every buy waiting for your approval is declined, and every approved buy not yet sent is called off. The Orders view shows each one as stopped by the stop switch.
+- Every open buy at the broker is cancelled, with one call each. If the broker does not confirm a cancellation, that order becomes unknown and trading halts for it too (see `unknown_order` below); sherwood never tries the call again.
+- Sells waiting for approval are left alone. Nothing is sent while the switch is on, and they expire with their trading day.
+- Resting protective stops stay in place, so your holdings stay protected.
+
+While the switch is on, Today shows a **Protective stops** card. Tick its box and press **Cancel protective stops too** only if you mean to leave every holding without a stop. This second, separate confirmation cancels each resting stop at the broker, sets aside any stop not yet sent, and adds a halt of its own (`stops_cancelled`), so the 09:35 send places no new stop until you reset the switch. When you reset, the next 09:35 send puts a stop back on every holding. In live mode, until live trading is built, sherwood has no broker connection to cancel through: it declines the waiting buys and tells you to cancel open orders in the broker's own app.
+
+Automatic halts do not decline or cancel anything. They only stop new orders being sent, and the approval check refuses a buy while the switch is on.
+
 The same failure seen again while the switch is already on is recorded only once. That matters for the broker helper, which is restarted every second while it keeps failing: you get one halt and one notification, not one a second. A different cause, or the same cause with different details, always adds a halt of its own.
 
 ### What each cause means and what to check
@@ -39,6 +50,7 @@ The same failure seen again while the switch is already on is recorded only once
 | An order's state at the broker is unknown | `unknown_order` | A call to the broker failed or timed out after the order was sent, so sherwood cannot tell whether the broker has it. Look the order up in the broker's own app. Never place a replacement by hand until you know what happened to the first one. Reconciliation (below) settles these orders by looking them up. |
 | Sherwood's records and the broker's differ | `reconciliation` | See [Reconciliation differences](#reconciliation-differences). |
 | The daily loss limit was reached | `daily_loss` | The account lost more today than `limits.daily_loss_limit` allows. Look at what moved before you decide anything; this check runs in live mode only. |
+| You cancelled the protective stops | `stops_cancelled` | You confirmed, a second time, that the resting stops are cancelled. No stop is placed while it is active. Once you reset, the next 09:35 send places a stop on every holding again; reset only when you want them back. |
 
 ### Resetting the switch
 
@@ -61,7 +73,16 @@ After a reset, the same failure halts trading again if it happens again. Only ex
 
 Reconciliation compares sherwood's records with the broker's: holdings, cash and open orders. When they differ, sherwood throws the switch with the cause `reconciliation`, and the details say what differed. The broker is treated as the record, but only after you have looked at the difference. Sherwood never quietly copies the broker's numbers over its own.
 
-The twice-daily comparison with the broker is still being built. Until it lands, the one thing that halts with this cause is the paper settlement in the after-close run: if the day's paper fills cannot be settled (for example, a sell of more shares than are held, or holdings recorded after the close by a later import), nothing is written and trading halts.
+Reconciliation runs at 09:00 US Eastern on every trading day, as the `reconcile` job, and again at the end of the after-close run that succeeds. Each run does two things, through the broker connection:
+
+1. It settles every order whose answer was never recorded: each `unknown` order, and each order left `submitted` by a send that never got its answer. It looks each one up at the broker, once, and records what the broker says. It never sends an order again. A fill the broker reports is recorded at the broker's own fill price; if the broker gives no price, sherwood does not guess one and reports a difference instead.
+2. It compares the shares held in each stock, the cash and the open orders (which ones, their state and their filled shares) with the broker's.
+
+Any difference throws the switch with this cause, and the details list every difference found. A failed broker call during reconciliation halts too, as every broker error does, and the job's run fails, so you also get "A scheduled job failed". A made-up 09:00 run for a morning that has passed is skipped, because the next run compares the records as they are then.
+
+The paper settlement in the after-close run also halts with this cause: if the day's paper fills cannot be settled (for example, a sell of more shares than are held, or holdings recorded after the close by a later import), nothing is written and trading halts.
+
+In paper mode the broker is sherwood's own paper book, so a difference points at the records themselves, such as an import that landed after the close. Live mode does not run reconciliation until live trading is built.
 
 When you see a reconciliation halt:
 

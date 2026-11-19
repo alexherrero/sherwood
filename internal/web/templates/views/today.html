@@ -68,6 +68,28 @@
 </form>
 {{- end}}
 </section>
+{{if .Switch.On -}}
+<section class="card" aria-labelledby="protective-stops">
+<div class="card-head">
+<h2 class="card-title" id="protective-stops">Protective stops</h2>
+<span class="badge {{if .Switch.StopsCancelled}}badge--blocked{{else}}badge--passed{{end}}">{{if .Switch.StopsCancelled}}Cancelled{{else}}In place{{end}}</span>
+</div>
+{{if .Switch.StopsCancelled -}}
+<div class="card-body stack">
+<p>You cancelled the protective stops. {{if .Switch.Resting}}{{if eq .Switch.Resting 1}}1 stop is{{else}}{{.Switch.Resting}} stops are{{end}} still open at the broker; the halts above say why.{{else}}Your holdings have no stop orders.{{end}} No stop is placed until you reset the switch.</p>
+</div>
+{{- else -}}
+<form class="card-body stack" method="post" action="/stop-switch/stops">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<p>{{if eq .Switch.Resting 0}}No protective stop is resting at the broker.{{else if eq .Switch.Resting 1}}1 protective stop is resting at the broker.{{else}}{{.Switch.Resting}} protective stops are resting at the broker.{{end}} They stay in place while the switch is on, so your holdings stay protected. Cancel them only if you mean to leave every holding without a stop.</p>
+<div class="field">
+<label class="field-label" for="confirm-stops"><input type="checkbox" id="confirm-stops" name="confirm" value="yes" required> I understand my holdings will have no stop orders until I reset the switch.</label>
+</div>
+<button type="submit" class="button button--destructive button--full">Cancel protective stops too</button>
+</form>
+{{- end}}
+</section>
+{{- end}}
 <section class="card" aria-labelledby="jobs">
 <div class="card-head">
 <h2 class="card-title" id="jobs">Scheduled jobs</h2>

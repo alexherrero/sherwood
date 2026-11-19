@@ -41,6 +41,14 @@ type Health interface {
 	Healthy() bool
 }
 
+// CashReader is what an adapter that can read the cash on its own offers.
+// Reconciliation compares only the cash, so it prefers this to Account: the
+// paper adapter can read its cash even while a holding has no checked close
+// to value it at.
+type CashReader interface {
+	Cash(ctx context.Context) (money.Money, error)
+}
+
 // Side is an order's side.
 type Side string
 
@@ -148,6 +156,10 @@ type Report struct {
 	Status Status
 	// Filled is the shares filled so far.
 	Filled money.Quantity
+	// FillPrice is the average price of the shares filled so far, when the
+	// broker says; nil otherwise. Reconciliation needs it to record a fill
+	// it finds by lookup, and refuses to guess one.
+	FillPrice *money.Price
 	// Detail is the broker's reason, in plain words, for a refusal or a
 	// status it could not change; empty otherwise.
 	Detail string

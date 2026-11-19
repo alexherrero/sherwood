@@ -269,8 +269,8 @@ A missing limit gives `limits.<name> is missing`, for example `limits.max_order_
 
 Limits can move in only one direction from the phone, and that is on purpose.
 
-- **Tightening from the phone.** The phone app's Settings screen shows the limits read-only with a Tighten action. A tightened limit applies at once and is recorded in the database with its time, its old and new values, and its source. The strategy file itself is not changed.
-- **Loosening at the NAS.** To loosen a limit, edit the strategy file on the NAS and restart sherwood. A loosening is therefore always a deliberate act at the NAS, never a tap on the phone. The edit gives the file a new hash, so later signals show the new version.
+- **Tightening from the phone.** The phone app's Settings screen shows each risk check limit with the strategy file's value and the value in force, and a form to tighten one: `max_stock_share`, `max_order_value`, `max_orders_per_day`, `daily_loss_limit`, `max_holdings`, `max_sector_share` (which may be set from the phone even when the file leaves it out) and `max_limit_distance` (never below `buy_limit_margin`). Only an approval device can tighten a limit. A tightened limit applies at once, to the proposal, the approval check and the 09:35 send alike, and is recorded in the database with its time, its old and new values, and the source `phone`. A value that is not tighter than the one in force is refused. The strategy file itself is not changed. `buy_limit_margin`, `fractional_shares`, `price_cross_check_tolerance` and `min_paper_weeks` are shown but change only in the file.
+- **Loosening at the NAS.** To loosen a limit, edit the strategy file on the NAS and restart sherwood. A loosening is therefore always a deliberate act at the NAS, never a tap on the phone. The edit gives the file a new hash, so later signals show the new version. At start-up, sherwood records the new hash and every limit the edit changed, with the source `nas`, and the tightenings made from the phone under the earlier file stop applying: the limits in force are the new file's until you tighten one again.
 
 ### `watchlist`
 
