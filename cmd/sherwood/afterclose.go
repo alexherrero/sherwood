@@ -10,8 +10,10 @@ import (
 	"strings"
 	"time"
 
+	"github.com/alexherrero/sherwood/internal/broker/paper"
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/execution"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/money"
@@ -67,6 +69,7 @@ type afterClose struct {
 	strategy *config.Strategy // loaded and validated at start-up
 	halts    *halt.Switch     // thrown when the sources disagree on a held stock
 	alerts   notify.Notifier  // says when buys are waiting; notify.Nowhere when off
+	paper    *paper.Broker    // settles the day's paper fills; nil in live mode
 	primary  prices.Source
 	check    prices.Source
 }
@@ -85,7 +88,7 @@ func newPriceSources(keys config.PriceKeys) (primary, check prices.Source) {
 // says so; once the keys are set, the next start catches up the last few
 // dates.
 func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys, strategy *config.Strategy,
-	db *store.Store, halts *halt.Switch, alerts notify.Notifier, logger *slog.Logger) error {
+	db *store.Store, halts *halt.Switch, alerts notify.Notifier, paperBroker *paper.Broker, logger *slog.Logger) error {
 	build := e.priceSources
 	if build == nil {
 		build = newPriceSources
@@ -97,7 +100,7 @@ func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys
 		return nil
 	}
 	a := &afterClose{store: db, clock: e.clock, calendar: clock.NYSE(), log: logger, strategy: strategy,
-		halts: halts, alerts: alerts, primary: primary, check: check}
+		halts: halts, alerts: alerts, paper: paperBroker, primary: primary, check: check}
 	return a.register(sched)
 }
 
@@ -230,6 +233,9 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 	if _, err := prop.Expire(ctx, r.TradingDate); err != nil {
 		return err
 	}
+	if _, err := execution.ExpireUnsent(ctx, a.store, a.halts, a.clock, log, r.TradingDate); err != nil {
+		return err
+	}
 	in, err := a.gather(ctx, r)
 	if err != nil {
 		return err
@@ -261,6 +267,11 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 				at.hour, at.minute, day.Detail))
 		}
 		return scheduler.Skip("prices not usable, so this date has no signals: " + day.Detail)
+	}
+	// The day's paper fills settle first, so the valuation and the rules see
+	// the holdings after them.
+	if err := a.settle(ctx, log, r, in); err != nil {
+		return err
 	}
 
 	if err := a.value(ctx, log, day, in); err != nil {

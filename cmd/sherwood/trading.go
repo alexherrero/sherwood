@@ -1,0 +1,113 @@
+package main
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"log/slog"
+
+	"github.com/alexherrero/sherwood/internal/broker/paper"
+	"github.com/alexherrero/sherwood/internal/clock"
+	"github.com/alexherrero/sherwood/internal/config"
+	"github.com/alexherrero/sherwood/internal/execution"
+	"github.com/alexherrero/sherwood/internal/halt"
+	"github.com/alexherrero/sherwood/internal/money"
+	"github.com/alexherrero/sherwood/internal/prices"
+	"github.com/alexherrero/sherwood/internal/risk"
+	"github.com/alexherrero/sherwood/internal/scheduler"
+	"github.com/alexherrero/sherwood/internal/store"
+)
+
+// sendJob is the 09:35 ET job that sends the session's approved orders and
+// keeps the resting stops. Never rename it once it has run: job_runs keys on
+// the name.
+const sendJob = "send-orders"
+
+// registerTrading builds the paper broker and the execution layer, and
+// registers the 09:35 send job. In live mode there is no adapter to send
+// through until live trading is built, so it registers nothing and says so,
+// and it returns a nil paper broker.
+func registerTrading(e env, sched *scheduler.Scheduler, mode config.Mode, strategy *config.Strategy,
+	db *store.Store, halts *halt.Switch, logger *slog.Logger) (*paper.Broker, error) {
+	if mode != config.ModePaper {
+		logger.Warn("orders are not sent", "mode", string(mode),
+			"reason", "live mode has no broker adapter yet, so the 09:35 send job is off")
+		return nil, nil
+	}
+	cal := clock.NYSE()
+	pb, err := paper.New(paper.Config{Store: db, Clock: e.clock, Calendar: cal,
+		Policy: money.PolicyFor(strategy.Limits.FractionalShares)})
+	if err != nil {
+		return nil, err
+	}
+	ex, err := execution.New(execution.Config{Store: db, Clock: e.clock, Calendar: cal, Adapter: pb,
+		Checker: risk.Standard{}, Switch: halts, Strategy: strategy, Logger: logger})
+	if err != nil {
+		return nil, err
+	}
+	return pb, sched.Register(scheduler.Job{
+		Name:   sendJob,
+		Hour:   9,
+		Minute: 35,
+		Run: func(ctx context.Context, r scheduler.Run) error {
+			return send(ctx, ex, logger.With("job", r.Job, "trading_date", r.Date()), r)
+		},
+	})
+}
+
+// send is one 09:35 run. A run for a session that has passed, or made once
+// the market has shut, sends nothing: a send never goes into the wrong
+// session, and the session's approvals expire with it.
+func send(ctx context.Context, ex *execution.Executor, log *slog.Logger, r scheduler.Run) error {
+	if r.CatchUp {
+		return scheduler.Skip("this session has passed, so nothing was sent")
+	}
+	res, err := ex.Send(ctx, r.TradingDate)
+	if errors.Is(err, execution.ErrNotOpen) {
+		return scheduler.Skip("the market is not open now, so nothing was sent")
+	}
+	if res != nil {
+		log.Info("orders sent", "reason", fmt.Sprintf("%d sent, %d blocked by the risk check, %d held by the stop switch, %d stops called off",
+			len(res.Sent), len(res.Blocked), len(res.Held), len(res.Called)))
+	}
+	return err
+}
+
+// settle works the date's open paper orders against its checked bars, once
+// the after-close attempt has them, and hands the holdings and cash after the
+// fills to the rest of the attempt. It does nothing in live mode. A failed
+// settlement halts trading, because the records can no longer be trusted.
+func (a *afterClose) settle(ctx context.Context, log *slog.Logger, r scheduler.Run, in *afterCloseInputs) error {
+	if a.paper == nil {
+		return nil
+	}
+	bars, err := prices.UsableBars(ctx, a.store.Reader(), r.TradingDate)
+	if err != nil {
+		return err
+	}
+	res, err := a.paper.Settle(ctx, r.TradingDate, bars)
+	if err != nil {
+		_, _, herr := a.halts.Throw(ctx, halt.Reconciliation,
+			fmt.Sprintf("Settling the paper fills for %s failed: %v", r.Date(), err))
+		return errors.Join(err, herr)
+	}
+	for _, f := range res.Fills {
+		log.Info("paper order filled", "order_key", f.Order.Key, "symbol", f.Order.Symbol,
+			"side", string(f.Order.Side), "quantity", f.Fill.Quantity, "price", f.Fill.Price,
+			"state", string(f.Order.State), "reason", f.Fill.Reason)
+	}
+	for _, w := range res.Unfilled {
+		log.Info("paper order not filled", "order_key", w.Order.Key, "symbol", w.Order.Symbol, "reason", w.Reason)
+	}
+	for _, o := range res.Expired {
+		log.Info("paper order expired unfilled", "order_key", o.Key, "symbol", o.Symbol, "state", string(o.State))
+	}
+	for _, w := range res.Skipped {
+		log.Warn("paper order not worked", "order_key", w.Order.Key, "symbol", w.Order.Symbol, "reason", w.Reason)
+	}
+	if res.Holdings != nil {
+		in.set, in.SnapshotID = *res.Holdings, res.Holdings.ID
+		in.cash, in.CashID, in.Cash = res.Cash, res.Cash.ID, &res.Cash.Amount
+	}
+	return nil
+}

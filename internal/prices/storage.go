@@ -169,3 +169,31 @@ func queryBars(ctx context.Context, q Querier, query string, args ...any) ([]Bar
 	}
 	return out, nil
 }
+
+// LatestCloses returns each stock's latest usable close on or before a
+// trading date: the close of the newest date whose bar the rules may use.
+// A stock that has never had a usable bar is absent.
+func LatestCloses(ctx context.Context, q Querier, through time.Time) (map[string]money.Price, error) {
+	rows, err := q.QueryContext(ctx,
+		`SELECT b.symbol, b.close FROM usable_bars b
+		 WHERE b.trading_date = (SELECT max(u.trading_date) FROM usable_bars u
+		                         WHERE u.symbol = b.symbol AND u.trading_date <= ?)`,
+		clock.DateOf(through).Format(clock.DateLayout))
+	if err != nil {
+		return nil, fmt.Errorf("prices: reading the latest closes: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]money.Price{}
+	for rows.Next() {
+		var sym string
+		var c money.Price
+		if err := rows.Scan(&sym, &c); err != nil {
+			return nil, fmt.Errorf("prices: reading the latest closes: %w", err)
+		}
+		out[sym] = c
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("prices: reading the latest closes: %w", err)
+	}
+	return out, nil
+}
