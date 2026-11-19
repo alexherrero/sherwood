@@ -116,6 +116,9 @@ func (a *afterClose) register(sched *scheduler.Scheduler) error {
 			Name:   at.name,
 			Hour:   at.hour,
 			Minute: at.minute,
+			// The attempts are one piece of work: a date whose 16:30 run
+			// failed sends one alert, however its retries go.
+			AlertGroup: afterCloseAttempts[0].name,
 			Inputs: func(ctx context.Context, r scheduler.Run) ([]byte, error) {
 				in, err := a.gather(ctx, r)
 				if err != nil {

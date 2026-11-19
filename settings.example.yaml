@@ -39,3 +39,12 @@ mode: paper
 # The application-data folder inside the container, and the database file.
 data_dir: /data
 database_path: /data/sherwood.db
+
+# The nightly backup, at 02:00 US Eastern every day. dir is the backup folder
+# as the container sees it: mount your NAS backup share there in the Compose
+# file. Sherwood never creates the folder, so an unmounted share fails the
+# backup and tells you, instead of filling the container's own disk. keep is
+# how many nightly copies to keep (1 to 366; 7 if you leave it out).
+backup:
+  dir: /backup
+  keep: 14

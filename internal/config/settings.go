@@ -23,6 +23,13 @@ const (
 // MinFeedTokenLen is the shortest feed token accepted.
 const MinFeedTokenLen = 32
 
+// DefaultBackupKeep is how many nightly backup copies are kept when the
+// settings file does not say, and MaxBackupKeep the most it may ask for.
+const (
+	DefaultBackupKeep = 7
+	MaxBackupKeep     = 366
+)
+
 // Settings is a validated app settings file. It holds no broker secrets; those
 // are the broker helper's alone.
 type Settings struct {
@@ -47,6 +54,22 @@ type Settings struct {
 	DataDir string `yaml:"data_dir"`
 	// DatabasePath is the SQLite database file.
 	DatabasePath string `yaml:"database_path"`
+	// Backup says where the nightly backup goes and how many copies to keep.
+	Backup Backup `yaml:"backup"`
+}
+
+// Backup is the nightly backup's settings. The whole section may be left out
+// so the file still loads, but then every nightly backup fails, and says so,
+// until Dir is set.
+type Backup struct {
+	// Dir is the backup folder as the container sees it: an absolute path,
+	// ideally on a different disk or share from the database. Sherwood never
+	// creates it, so an unmounted share fails the backup instead of filling
+	// the container's own disk.
+	Dir string `yaml:"dir"`
+	// Keep is how many copies to keep, newest first. ParseSettings sets it to
+	// DefaultBackupKeep when the file leaves it out.
+	Keep int `yaml:"keep"`
 }
 
 // Notifications holds the keys for each notification channel.
@@ -145,6 +168,15 @@ func ParseSettings(data []byte) (*Settings, error) {
 
 	checkAbsPath(p, "data_dir", s.DataDir)
 	checkAbsPath(p, "database_path", s.DatabasePath)
+	if s.Backup.Dir != "" && !filepath.IsAbs(s.Backup.Dir) {
+		p.add("backup.dir is %q, but it must be an absolute path", s.Backup.Dir)
+	}
+	switch {
+	case s.Backup.Keep == 0:
+		s.Backup.Keep = DefaultBackupKeep
+	case s.Backup.Keep < 0 || s.Backup.Keep > MaxBackupKeep:
+		p.add("backup.keep is %d, but it must be from 1 to %d", s.Backup.Keep, MaxBackupKeep)
+	}
 
 	if err := p.err(); err != nil {
 		return nil, err

@@ -44,7 +44,7 @@ A few rules apply to the whole of both files:
 
 ## Settings file
 
-Every field in the settings file is required. There are no defaults.
+Every field in the table below is required, and none has a default. The one exception is the `backup` section, which the file may leave out; [its own section](#backup) explains what happens then.
 
 ```yaml
 tailnet_login: you@example.com
@@ -59,6 +59,9 @@ notifications:
 mode: paper
 data_dir: /data
 database_path: /data/sherwood.db
+backup:
+  dir: /backup
+  keep: 14
 ```
 
 | Field | Type | Required | Accepted values |
@@ -72,6 +75,8 @@ database_path: /data/sherwood.db
 | `mode` | `paper` or `live` | yes | Exactly `paper` or `live`, in lower case |
 | `data_dir` | path | yes | An absolute path |
 | `database_path` | path | yes | An absolute path |
+| `backup.dir` | path | no, but every nightly backup fails without it | An absolute path to a folder that already exists |
+| `backup.keep` | whole number | no; 7 when left out | 1 to 366 |
 
 ### `tailnet_login`
 
@@ -142,6 +147,27 @@ Whether orders go to the paper ledger or to the broker. Sherwood starts in `pape
 - `data_dir is "data", but it must be an absolute path`
 - `database_path is missing`
 - `database_path is "sherwood.db", but it must be an absolute path`
+
+### `backup`
+
+Every night at 02:00 US Eastern, on every day of the week including weekends and holidays, sherwood copies its database into the folder named by `backup.dir`. It makes the copy while it keeps running, then opens the copy and checks that every table holds the same number of rows as the live database did at the moment of the copy. Only a copy that passes is kept, under the name `sherwood-YYYY-MM-DD.db`, and only then is the oldest copy beyond `backup.keep` removed. A copy that fails is deleted, so the older good copies always stay.
+
+`backup.dir` is the folder as the container sees it. Mount your NAS backup share into the container in the Compose file, ideally from a different disk or share than the data folder, and point `backup.dir` at the place you mounted it. For example, with this line under `volumes` in `compose.yaml`:
+
+```yaml
+      - /path/to/your/backup-share/sherwood:/backup
+```
+
+the settings file says `dir: /backup`. The container's user (10001, unless you set `user:` in the Compose file) must be able to write to that folder.
+
+Sherwood never creates the backup folder. If the share is not mounted, the backup fails and tells you, rather than quietly writing copies onto the container's own disk.
+
+If you leave `backup` out, or leave out `dir`, sherwood still starts. It logs a warning at start-up, and every nightly backup then fails, so the Today view shows the backup job as failed and your phone gets "The nightly backup failed" once a night until you set the folder. `keep` defaults to 7 copies.
+
+When a backup fails for any reason, your phone gets one "The nightly backup failed" notification for that night, however many times it is retried, and the Today view shows what went wrong in the backup job's last run. To restore from a copy, follow the [runbook](../operational/runbook#restoring-a-backup).
+
+- `backup.dir is "backup", but it must be an absolute path`
+- `backup.keep is 400, but it must be from 1 to 366`
 
 ## Strategy file
 

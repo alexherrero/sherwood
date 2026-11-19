@@ -22,7 +22,7 @@ cd sherwood
 cp compose.example.yaml compose.yaml
 ```
 
-The example mounts `/mnt/user/appdata/sherwood` as the container's `/data`. If your application-data folder lives somewhere else, change the left-hand side of that `volumes` line. Leave the rest of the file as it is, and in particular leave the `ports` line alone; the section on Tailscale Serve below explains why.
+The example mounts `/mnt/user/appdata/sherwood` as the container's `/data`. If your application-data folder lives somewhere else, change the left-hand side of that `volumes` line. The second `volumes` line mounts your backup share as `/backup` for the nightly backup; change its left-hand side to a folder on your backup share, which must already exist and be writable by the container's user (see [`backup`](../reference/settings-and-strategy-files#backup) in the settings reference). Leave the rest of the file as it is, and in particular leave the `ports` line alone; the section on Tailscale Serve below explains why.
 
 ## 2. Make the application-data folder
 
