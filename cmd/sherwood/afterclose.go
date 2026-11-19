@@ -15,7 +15,10 @@ import (
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/money"
+	"github.com/alexherrero/sherwood/internal/notify"
 	"github.com/alexherrero/sherwood/internal/prices"
+	"github.com/alexherrero/sherwood/internal/proposal"
+	"github.com/alexherrero/sherwood/internal/risk"
 	"github.com/alexherrero/sherwood/internal/scheduler"
 	"github.com/alexherrero/sherwood/internal/signals"
 	"github.com/alexherrero/sherwood/internal/store"
@@ -63,6 +66,7 @@ type afterClose struct {
 	log      *slog.Logger
 	strategy *config.Strategy // loaded and validated at start-up
 	halts    *halt.Switch     // thrown when the sources disagree on a held stock
+	alerts   notify.Notifier  // says when buys are waiting; notify.Nowhere when off
 	primary  prices.Source
 	check    prices.Source
 }
@@ -81,7 +85,7 @@ func newPriceSources(keys config.PriceKeys) (primary, check prices.Source) {
 // says so; once the keys are set, the next start catches up the last few
 // dates.
 func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys, strategy *config.Strategy,
-	db *store.Store, halts *halt.Switch, logger *slog.Logger) error {
+	db *store.Store, halts *halt.Switch, alerts notify.Notifier, logger *slog.Logger) error {
 	build := e.priceSources
 	if build == nil {
 		build = newPriceSources
@@ -93,13 +97,16 @@ func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys
 		return nil
 	}
 	a := &afterClose{store: db, clock: e.clock, calendar: clock.NYSE(), log: logger, strategy: strategy,
-		halts: halts, primary: primary, check: check}
+		halts: halts, alerts: alerts, primary: primary, check: check}
 	return a.register(sched)
 }
 
 func (a *afterClose) register(sched *scheduler.Scheduler) error {
 	if a.halts == nil {
 		return errors.New("the after-close job needs the stop switch")
+	}
+	if _, err := a.proposer(a.log); err != nil {
+		return err
 	}
 	for i, at := range afterCloseAttempts {
 		err := sched.Register(scheduler.Job{
@@ -214,6 +221,15 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 			return scheduler.Skip("an earlier attempt already recorded this date's prices and signals")
 		}
 	}
+	prop, err := a.proposer(log)
+	if err != nil {
+		return err
+	}
+	// The date's session is over, so its unapproved orders expire, whether
+	// or not its prices are in yet.
+	if _, err := prop.Expire(ctx, r.TradingDate); err != nil {
+		return err
+	}
 	in, err := a.gather(ctx, r)
 	if err != nil {
 		return err
@@ -258,8 +274,21 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 	if res.Missing != "" {
 		return fmt.Errorf("the rules found the prices missing after they were checked: %s", res.Missing)
 	}
-	return nil
+	_, err = prop.Propose(ctx, proposal.Day{Date: r.TradingDate, CatchUp: r.CatchUp, Holdings: in.set, Cash: in.cash})
+	return err
 }
+
+// proposer builds the step that turns the date's signals into orders and
+// expires the unapproved ones, logging through log.
+func (a *afterClose) proposer(log *slog.Logger) (*proposal.Proposer, error) {
+	return proposal.New(proposal.Config{Store: a.store, Clock: a.clock, Calendar: a.calendar, Strategy: a.strategy,
+		Checker: risk.Standard{}, Switch: a.halts, Notifier: a.alerts, BrokerHealthy: paperBrokerHealthy, Logger: log})
+}
+
+// paperBrokerHealthy is the broker's health for the proposal's preview check.
+// The paper broker always answers; the execution layer checks the real
+// adapter's health again just before it sends.
+func paperBrokerHealthy(context.Context) bool { return true }
 
 // disagreement is a price halt's evidence: the date, and each held stock
 // whose sources disagreed with what differed.
