@@ -38,10 +38,14 @@ const (
 	kindTest          kind = "test"
 	kindBuysWaiting   kind = "buys_waiting"
 	kindTradingHalted kind = "trading_halted"
+	kindJobFailed     kind = "job_failed"
+	kindJobMissed     kind = "job_missed"
+	kindBackupFailed  kind = "backup_failed"
+	kindBrokerLogin   kind = "broker_login_needed"
 )
 
-// Alert is one notification. Make one with Test, BuysWaiting or
-// TradingHalted; the zero Alert is not valid and is never sent.
+// Alert is one notification. Make one with a constructor in this package; the
+// zero Alert is not valid and is never sent.
 type Alert struct {
 	kind  kind
 	count int
@@ -68,11 +72,27 @@ const maxCount = 100
 // the Today view.
 func TradingHalted() Alert { return Alert{kind: kindTradingHalted} }
 
+// JobFailed says that a scheduled job failed. It never says which job or why:
+// the Today view lists every job's last run with what went wrong.
+func JobFailed() Alert { return Alert{kind: kindJobFailed} }
+
+// JobMissed says that scheduled jobs did not run at their time, usually
+// because sherwood was not running, and are being made up late.
+func JobMissed() Alert { return Alert{kind: kindJobMissed} }
+
+// BackupFailed says that the nightly backup was not made or failed its check.
+// The reason is on the Today view, in the backup job's last run.
+func BackupFailed() Alert { return Alert{kind: kindBackupFailed} }
+
+// BrokerLoginNeeded says that the broker refused the saved session, so you
+// need to log in to the broker again on the NAS.
+func BrokerLoginNeeded() Alert { return Alert{kind: kindBrokerLogin} }
+
 // Valid reports whether a was made by one of the constructors with sensible
 // values.
 func (a Alert) Valid() bool {
 	switch a.kind {
-	case kindTest, kindTradingHalted:
+	case kindTest, kindTradingHalted, kindJobFailed, kindJobMissed, kindBackupFailed, kindBrokerLogin:
 		return a.count == 0
 	case kindBuysWaiting:
 		return a.count >= 1 && a.count <= maxCount
@@ -99,6 +119,14 @@ func (a Alert) Text() string {
 		}
 	case kindTradingHalted:
 		return "Trading halted"
+	case kindJobFailed:
+		return "A scheduled job failed"
+	case kindJobMissed:
+		return "Scheduled jobs ran late"
+	case kindBackupFailed:
+		return "The nightly backup failed"
+	case kindBrokerLogin:
+		return "Broker login needed"
 	}
 	return ""
 }

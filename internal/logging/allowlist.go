@@ -20,6 +20,7 @@ var allowedKeys = []string{
 	"duration",     // how long a run or call took
 	"attempt",      // attempt number for a retried run
 	"missed_dates", // how many trading dates a catch-up covers
+	"missed_runs",  // how many runs a pass found missed and ran late
 
 	// Signals, risk decisions and orders.
 	"strategy_hash", // hash of the strategy file in force
@@ -54,8 +55,10 @@ var allowedKeys = []string{
 	"code", // helper error code
 
 	// Start-up and storage.
-	"version",    // build version
-	"migrations", // number of database migrations applied
+	"version",     // build version
+	"migrations",  // number of database migrations applied
+	"backup_file", // a backup copy's file name, never its folder
+	"backup_kept", // how many backup copies are kept after a backup
 
 	// Web requests (never headers, cookies, query strings or bodies).
 	"method", // HTTP method

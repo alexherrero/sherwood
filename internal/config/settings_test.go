@@ -221,3 +221,29 @@ func TestSettingsExampleValidates(t *testing.T) {
 		t.Errorf("the example should start in paper mode, got %q", s.Mode)
 	}
 }
+
+func TestBackupSettings(t *testing.T) {
+	s, err := ParseSettings([]byte(validSettings))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Backup.Dir != "" || s.Backup.Keep != DefaultBackupKeep {
+		t.Errorf("backup with the section left out = %+v, want no folder and keep %d", s.Backup, DefaultBackupKeep)
+	}
+
+	s, err = ParseSettings([]byte(validSettings + "backup:\n  dir: /backup\n  keep: 14\n"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Backup.Dir != "/backup" || s.Backup.Keep != 14 {
+		t.Errorf("backup = %+v, want /backup keeping 14", s.Backup)
+	}
+
+	refuseSettings(t, validSettings+"backup:\n  dir: backup\n",
+		`backup.dir is "backup", but it must be an absolute path`)
+	refuseSettings(t, validSettings+"backup:\n  dir: /backup\n  keep: -1\n",
+		"backup.keep is -1, but it must be from 1 to 366")
+	refuseSettings(t, validSettings+"backup:\n  dir: /backup\n  keep: 400\n",
+		"backup.keep is 400, but it must be from 1 to 366")
+	refuseSettings(t, validSettings+"backup:\n  folder: /backup\n", "folder")
+}

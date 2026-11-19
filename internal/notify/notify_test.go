@@ -22,6 +22,10 @@ func TestEveryAlertCarriesOnlyShortFixedWords(t *testing.T) {
 	}{
 		{notify.Test(), "Notifications are working", "/settings"},
 		{notify.TradingHalted(), "Trading halted", "/"},
+		{notify.JobFailed(), "A scheduled job failed", "/"},
+		{notify.JobMissed(), "Scheduled jobs ran late", "/"},
+		{notify.BackupFailed(), "The nightly backup failed", "/"},
+		{notify.BrokerLoginNeeded(), "Broker login needed", "/"},
 		{notify.BuysWaiting(1), "1 buy waiting", "/approvals"},
 		{notify.BuysWaiting(2), "2 buys waiting", "/approvals"},
 		{notify.BuysWaiting(99), "99 buys waiting", "/approvals"},

@@ -17,4 +17,8 @@ Sherwood is a small, self-hosted investment tool. It runs on a home NAS, keeps a
 - **[Settings and strategy file reference](reference/settings-and-strategy-files)** — lists every field of `settings.yaml` and `strategy.yaml`: its type, whether it is required, the values it accepts, what it means, and the error you see when it is wrong. It also covers where the files live, why the limits have no defaults, and how a limit is tightened or loosened.
 - **[Rule library and back-test reference](reference/rule-library-and-back-tests)** — lists every rule type and every setting it takes, with the values each accepts, how a strategy's rules combine into one answer per stock, the `rules`, `check-strategy`, `fetch-bars` and `backtest` commands, the bars file format, how a back-test fills orders, and which limits it does not apply.
 
+## Operational
+
+- **[Runbook](operational/runbook)** — what to do when something needs you: the notifications sherwood sends, what each halt cause means and what to check before you reset the stop switch, reconciliation differences, restoring the database from a nightly backup, and rolling back across a migration.
+
 The original proof-of-concept is archived in [`v1/`](https://github.com/alexherrero/sherwood/tree/main/v1).

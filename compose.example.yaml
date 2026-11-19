@@ -38,6 +38,11 @@ services:
       # Host folder : container folder. /data is where sherwood looks by
       # default; settings.yaml's data_dir and database_path must point inside it.
       - /mnt/user/appdata/sherwood:/data
+      # The nightly backup folder, on a different share or disk from the data
+      # folder if you can. Change the left-hand side to your backup share;
+      # settings.yaml's backup.dir must be /backup. User 10001 (or the user
+      # above) must be able to write to it.
+      - /path/to/your/backup-share/sherwood:/backup
 
     # The web port, published on the host's loopback address only, so Tailscale
     # Serve on the host is the one way in. Never publish it on 0.0.0.0: sherwood

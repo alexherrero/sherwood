@@ -232,8 +232,12 @@ func run(ctx context.Context, e env) (err error) {
 		Clock:    e.clock,
 		Calendar: clock.NYSE(),
 		Logger:   logger,
+		Alerts:   alertsOf(push),
 	})
 	if err != nil {
+		return fmt.Errorf("refusing to start: %w", err)
+	}
+	if err := registerBackup(sched, settings.Backup, db, logger); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
 	paperBroker, err := registerTrading(e, sched, settings.Mode, strategy, db, stopSwitch, logger)

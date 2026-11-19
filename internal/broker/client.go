@@ -36,7 +36,18 @@ const (
 	CodeBadRequest = "bad_request"
 	CodeUnknownOp  = "unknown_op"
 	CodeInternal   = "internal"
+	// CodeLoginNeeded means there is no usable broker session: nobody has
+	// logged in, or the saved session expired or was refused. Someone has to
+	// run the helper's login command on the NAS again.
+	CodeLoginNeeded = "login_needed"
 )
+
+// LoginNeeded reports whether err is the helper saying the broker session
+// needs a new login.
+func LoginNeeded(err error) bool {
+	var he *HelperError
+	return errors.As(err, &he) && he.Code == CodeLoginNeeded
+}
 
 // HelperError is an error the helper itself reported in its reply.
 type HelperError struct {
