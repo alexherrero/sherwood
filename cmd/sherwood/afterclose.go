@@ -66,10 +66,11 @@ type afterClose struct {
 	clock    clock.Clock
 	calendar *clock.Calendar
 	log      *slog.Logger
-	strategy *config.Strategy // loaded and validated at start-up
-	halts    *halt.Switch     // thrown when the sources disagree on a held stock
-	alerts   notify.Notifier  // says when buys are waiting; notify.Nowhere when off
-	paper    *paper.Broker    // settles the day's paper fills; nil in live mode
+	strategy *config.Strategy    // loaded and validated at start-up
+	halts    *halt.Switch        // thrown when the sources disagree on a held stock
+	alerts   notify.Notifier     // says when buys are waiting; notify.Nowhere when off
+	paper    *paper.Broker       // settles the day's paper fills; nil in live mode
+	exec     *execution.Executor // reconciles after a successful attempt; nil in live mode
 	primary  prices.Source
 	check    prices.Source
 }
@@ -88,7 +89,7 @@ func newPriceSources(keys config.PriceKeys) (primary, check prices.Source) {
 // says so; once the keys are set, the next start catches up the last few
 // dates.
 func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys, strategy *config.Strategy,
-	db *store.Store, halts *halt.Switch, alerts notify.Notifier, paperBroker *paper.Broker, logger *slog.Logger) error {
+	db *store.Store, halts *halt.Switch, alerts notify.Notifier, tr trading, logger *slog.Logger) error {
 	build := e.priceSources
 	if build == nil {
 		build = newPriceSources
@@ -100,7 +101,7 @@ func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys
 		return nil
 	}
 	a := &afterClose{store: db, clock: e.clock, calendar: clock.NYSE(), log: logger, strategy: strategy,
-		halts: halts, alerts: alerts, paper: paperBroker, primary: primary, check: check}
+		halts: halts, alerts: alerts, paper: tr.paper, exec: tr.exec, primary: primary, check: check}
 	return a.register(sched)
 }
 
@@ -288,8 +289,16 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 	if res.Missing != "" {
 		return fmt.Errorf("the rules found the prices missing after they were checked: %s", res.Missing)
 	}
-	_, err = prop.Propose(ctx, proposal.Day{Date: r.TradingDate, CatchUp: r.CatchUp, Holdings: in.set, Cash: in.cash})
-	return err
+	if _, err = prop.Propose(ctx, proposal.Day{Date: r.TradingDate, CatchUp: r.CatchUp, Holdings: in.set, Cash: in.cash}); err != nil {
+		return err
+	}
+	// The attempt's work is done: reconcile with the broker after the
+	// close. A failure here fails the attempt, and a later attempt for the
+	// date redoes it all, which changes nothing already recorded.
+	if a.exec == nil {
+		return nil
+	}
+	return reconcile(ctx, a.exec)
 }
 
 // proposer builds the step that turns the date's signals into orders and

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/alexherrero/sherwood/internal/broker"
@@ -14,6 +15,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
+	"github.com/alexherrero/sherwood/internal/limits"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/orders"
 	"github.com/alexherrero/sherwood/internal/prices"
@@ -35,8 +37,9 @@ type Config struct {
 	// Checker is the risk check every order passes before it is sent.
 	Checker risk.Checker
 	Switch  *halt.Switch
-	// Strategy is the loaded strategy file: its limits, sectors, watchlist
-	// and each strategy's stocks.
+	// Strategy is the loaded strategy file: its sectors, watchlist and each
+	// strategy's stocks. Its limits, tightened from the phone app, are read
+	// afresh for every send (see limits.Effective).
 	Strategy *config.Strategy
 	Logger   *slog.Logger
 	// CallTimeout bounds each broker call; zero means DefaultCallTimeout.
@@ -55,8 +58,12 @@ var (
 	ErrHalted = errors.New("execution: trading halted during the send")
 )
 
-// Executor sends orders.
+// Executor sends orders, cancels them when the stop switch is thrown and
+// reconciles with the broker. One of those runs at a time: each holds mu for
+// its whole run, so a cancel never misses an order a send is placing, and a
+// reconciliation never compares while orders are moving.
 type Executor struct {
+	mu       sync.Mutex
 	store    *store.Store
 	clock    clock.Clock
 	calendar *clock.Calendar
@@ -117,6 +124,8 @@ type Result struct {
 // wrapping ErrHalted when a broker call halted trading; the Result says what
 // was done before that.
 func (e *Executor) Send(ctx context.Context, session time.Time) (*Result, error) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
 	session = clock.DateOf(session)
 	sess, err := e.calendar.Session(session)
 	if err != nil {
@@ -154,6 +163,9 @@ type run struct {
 	// suggested is the highest stop the strategies' stop rules gave each
 	// holding at the previous close, and the strategy that gave it.
 	suggested map[string]suggestion
+	// noStops is set while you have cancelled the protective stops from
+	// the phone app: no stop is placed or raised until the switch is reset.
+	noStops bool
 }
 
 type suggestion struct {
@@ -256,9 +268,13 @@ func (e *Executor) load(ctx context.Context, session time.Time) (*run, error) {
 	if h, ok := e.adapter.(broker.Health); ok {
 		healthy = h.Healthy()
 	}
+	lim, err := limits.Effective(ctx, q, e.strategy)
+	if err != nil {
+		return nil, fmt.Errorf("execution: %w", err)
+	}
 	r.snap = risk.Snapshot{
 		Calendar:           e.calendar,
-		Limits:             e.strategy.Limits,
+		Limits:             lim,
 		Sectors:            e.strategy.Sectors,
 		Watchlist:          e.strategy.Watchlist,
 		Cash:               cash,
@@ -337,7 +353,10 @@ func (r *run) work(ctx context.Context) error {
 			}
 		}
 	}
-	if err := r.protect(ctx); err != nil {
+	if r.noStops {
+		r.e.log.Warn("protective stops not placed", "halt_cause", string(halt.StopsCancelled),
+			"reason", "you cancelled the protective stops; none is placed until the stop switch is reset")
+	} else if err := r.protect(ctx); err != nil {
 		return err
 	}
 	for _, o := range r.buys {
@@ -362,6 +381,7 @@ func (r *run) switchOn(ctx context.Context) (bool, error) {
 		return false, fmt.Errorf("execution: %w", err)
 	}
 	r.snap.SwitchOff = !st.On()
+	r.noStops = st.Has(halt.StopsCancelled)
 	return st.On(), nil
 }
 
@@ -563,7 +583,7 @@ func (r *run) restop(ctx context.Context, sym string) error {
 // callOff cancels each resting stop at the broker, one call each.
 func (r *run) callOff(ctx context.Context, sym string, rest []orders.Order, why string) error {
 	for _, o := range rest {
-		o, err := r.e.cancel(ctx, o, why)
+		o, err := r.e.cancel(ctx, o, orders.Broker, why)
 		if err != nil {
 			return err
 		}
@@ -717,8 +737,8 @@ func (e *Executor) send(ctx context.Context, o orders.Order, v risk.Verdict) (or
 }
 
 // cancel calls off one resting order at the broker, exactly once, and records
-// the answer.
-func (e *Executor) cancel(ctx context.Context, o orders.Order, why string) (orders.Order, error) {
+// the answer, with actor as the actor of the cancellation.
+func (e *Executor) cancel(ctx context.Context, o orders.Order, actor orders.Actor, why string) (orders.Order, error) {
 	rep, err := call(ctx, e.timeout, func(ctx context.Context) (broker.Report, error) { return e.adapter.Cancel(ctx, o.Key) })
 	switch {
 	case err != nil:
@@ -727,7 +747,7 @@ func (e *Executor) cancel(ctx context.Context, o orders.Order, why string) (orde
 		return orders.Order{}, e.unknown(ctx, o, fmt.Sprintf("%s was being called off, but the broker answered %q.",
 			describe(o), rep.Status), nil)
 	}
-	return e.move(ctx, o, orders.Change{To: orders.Cancelled, Actor: orders.Broker, Reason: why})
+	return e.move(ctx, o, orders.Change{To: orders.Cancelled, Actor: actor, Reason: why})
 }
 
 func orDefault(s, def string) string {

@@ -80,10 +80,11 @@ func TestSettingsOffersNotificationsWithTheVAPIDKeyAndToken(t *testing.T) {
 			t.Errorf("Settings lacks %q", want)
 		}
 	}
-	// Both forms carry the token for this session.
+	// Both notification forms, and the tighten form, carry the token for
+	// this session.
 	tokens := regexp.MustCompile(`name="csrf_token" value="([^"]+)"`).FindAllStringSubmatch(body, -1)
-	if len(tokens) != 2 {
-		t.Fatalf("found %d token fields, want 2", len(tokens))
+	if len(tokens) != 3 {
+		t.Fatalf("found %d token fields, want 3", len(tokens))
 	}
 	resp := f.postForm(testPushPath, c, url.Values{TokenField: {tokens[1][1]}})
 	wantRedirect(t, resp, "/settings?push=none")

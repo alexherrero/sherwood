@@ -19,33 +19,60 @@ import (
 )
 
 // sendJob is the 09:35 ET job that sends the session's approved orders and
-// keeps the resting stops. Never rename it once it has run: job_runs keys on
-// the name.
-const sendJob = "send-orders"
+// keeps the resting stops, and reconcileJob the 09:00 ET reconciliation with
+// the broker. Never rename either once it has run: job_runs keys on the name.
+const (
+	sendJob      = "send-orders"
+	reconcileJob = "reconcile"
+)
+
+// trading is what registerTrading built. Both are nil in live mode.
+type trading struct {
+	// paper settles the day's paper fills after the close.
+	paper *paper.Broker
+	// exec sends, cancels and reconciles through the broker adapter.
+	exec *execution.Executor
+}
 
 // registerTrading builds the paper broker and the execution layer, and
-// registers the 09:35 send job. In live mode there is no adapter to send
-// through until live trading is built, so it registers nothing and says so,
-// and it returns a nil paper broker.
+// registers the 09:00 reconciliation and the 09:35 send job. In live mode
+// there is no adapter to send through until live trading is built, so it
+// registers nothing and says so, and it returns nothing.
 func registerTrading(e env, sched *scheduler.Scheduler, mode config.Mode, strategy *config.Strategy,
-	db *store.Store, halts *halt.Switch, logger *slog.Logger) (*paper.Broker, error) {
+	db *store.Store, halts *halt.Switch, logger *slog.Logger) (trading, error) {
 	if mode != config.ModePaper {
 		logger.Warn("orders are not sent", "mode", string(mode),
-			"reason", "live mode has no broker adapter yet, so the 09:35 send job is off")
-		return nil, nil
+			"reason", "live mode has no broker adapter yet, so the 09:35 send and 09:00 reconciliation jobs are off")
+		return trading{}, nil
 	}
 	cal := clock.NYSE()
 	pb, err := paper.New(paper.Config{Store: db, Clock: e.clock, Calendar: cal,
 		Policy: money.PolicyFor(strategy.Limits.FractionalShares)})
 	if err != nil {
-		return nil, err
+		return trading{}, err
 	}
 	ex, err := execution.New(execution.Config{Store: db, Clock: e.clock, Calendar: cal, Adapter: pb,
 		Checker: risk.Standard{}, Switch: halts, Strategy: strategy, Logger: logger})
 	if err != nil {
-		return nil, err
+		return trading{}, err
 	}
-	return pb, sched.Register(scheduler.Job{
+	err = sched.Register(scheduler.Job{
+		Name:   reconcileJob,
+		Hour:   9,
+		Minute: 0,
+		// One alert a date, should retries ever be added.
+		AlertGroup: reconcileJob,
+		Run: func(ctx context.Context, r scheduler.Run) error {
+			if r.CatchUp {
+				return scheduler.Skip("this morning has passed; the next reconciliation compares the records as they are then")
+			}
+			return reconcile(ctx, ex)
+		},
+	})
+	if err != nil {
+		return trading{}, err
+	}
+	err = sched.Register(scheduler.Job{
 		Name:   sendJob,
 		Hour:   9,
 		Minute: 35,
@@ -53,6 +80,14 @@ func registerTrading(e env, sched *scheduler.Scheduler, mode config.Mode, strate
 			return send(ctx, ex, logger.With("job", r.Job, "trading_date", r.Date()), r)
 		},
 	})
+	return trading{paper: pb, exec: ex}, err
+}
+
+// reconcile runs one reconciliation. A difference halts trading and is not
+// an error; a broker call that failed halted trading too, and fails the run.
+func reconcile(ctx context.Context, ex *execution.Executor) error {
+	_, err := ex.Reconcile(ctx)
+	return err
 }
 
 // send is one 09:35 run. A run for a session that has passed, or made once

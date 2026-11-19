@@ -43,4 +43,14 @@
 //
 // A failed call to call off a resting stop does the same to that stop. An
 // illegal state change halts trading through halt.Switch.OrderError.
+//
+// # The stop switch and reconciliation
+//
+// The same layer does what the stop switch asks of orders (StopBuys and
+// CancelOpen, in stopswitch.go) and reconciles sherwood's records with the
+// broker's (Reconcile, in reconcile.go). Send, CancelOpen and Reconcile hold
+// one lock, so they never run over each other. Every check reads the limits
+// in force afresh: the strategy file's, tightened from the phone app
+// (limits.Effective). While a stops_cancelled halt is active, Send places no
+// protective stop.
 package execution

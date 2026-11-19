@@ -74,7 +74,17 @@ func loadToday(s *Server, r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
-	d.Switch = newSwitchView(st)
+	resting, err := orders.InState(ctx, tx, orders.Accepted, orders.PartiallyFilled)
+	if err != nil {
+		return nil, err
+	}
+	stops := 0
+	for _, o := range resting {
+		if o.Type == orders.Stop {
+			stops++
+		}
+	}
+	d.Switch = newSwitchView(st, stops)
 	waiting, err := orders.InState(ctx, tx, orders.AwaitingApproval)
 	if err != nil {
 		return nil, err

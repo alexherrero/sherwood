@@ -206,6 +206,20 @@ func (b *Broker) Holdings(ctx context.Context) ([]broker.Position, error) {
 	return out, nil
 }
 
+var _ broker.CashReader = (*Broker)(nil)
+
+// Cash reads the newest cash reading, or zero if none has been recorded.
+func (b *Broker) Cash(ctx context.Context) (money.Money, error) {
+	cash, err := holdings.LatestCash(ctx, b.store.Reader())
+	switch {
+	case errors.Is(err, holdings.ErrNone):
+		return money.Money{}, nil
+	case err != nil:
+		return money.Money{}, fmt.Errorf("paper: reading cash: %w", err)
+	}
+	return cash.Amount, nil
+}
+
 // Account reads the newest cash reading (zero if none) and values the
 // holdings at their latest checked closes. A holding with no checked close is
 // an error, because the value would be wrong.

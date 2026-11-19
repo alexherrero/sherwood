@@ -37,15 +37,88 @@
 </div>
 {{- end}}
 </section>
-<section class="card empty-state" aria-label="View status">
-<div class="notice">
-<p class="notice-title"><strong>Not built yet.</strong></p>
-<p>The rest of this view is still being built.</p>
+<section class="card" aria-labelledby="mode">
+<div class="card-head">
+<h2 class="card-title" id="mode">Mode</h2>
+<span class="badge {{if .Live}}badge--blocked{{else}}badge--passed{{end}}">{{if .Live}}Live{{else}}Paper{{end}}</span>
+</div>
+<div class="card-body">
+<p>{{if .Live}}Live trading: orders you approve are placed with the broker and use real money.{{else}}Paper trading: no real money moves. Orders are simulated against stored prices.{{end}} The mode is set in the settings file on the NAS.</p>
+</div>
+</section>
+<section class="card" aria-labelledby="limits">
+<div class="card-head">
+<h2 class="card-title" id="limits">Limits</h2>
+</div>
+<div class="card-body stack">
+<p>Every order passes the risk check against these limits just before it is sent. You can tighten any of them here, and the change applies at once. Loosening one means editing the strategy file on the NAS and restarting; a change to the file also clears the tightenings made here.</p>
+</div>
+<ul class="rows">
+{{- range .Limits}}
+<li class="row">
+<span class="row-label">{{.Words}}<span class="row-meta">In force: {{.InForce}}{{if .Tightened}}, tightened {{.Tightened}}{{end}}</span><span class="row-meta">Strategy file: {{.File}}</span></span>
+</li>
+{{- end}}
+</ul>
+<form class="card-body stack" method="post" action="/settings/limits">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<div class="field">
+<label class="field-label" for="tighten-limit">Limit to tighten</label>
+<select class="field-input" id="tighten-limit" name="limit" required>
+{{- range .Limits}}
+<option value="{{.Name}}">{{.Words}} (now {{if .Current}}{{.Current}}{{else}}not set{{end}})</option>
+{{- end}}
+</select>
 </div>
 <div class="field">
-<span class="field-label">What belongs here</span>
-<p class="field-value">When it is ready, it will show {{.Later}}.</p>
+<label class="field-label" for="tighten-value">New value</label>
+<input class="field-input" id="tighten-value" name="value" type="text" inputmode="decimal" autocomplete="off" maxlength="20" required>
+<p class="field-hint">Write a share like 0.10 for 10%, an amount like 500.00, or a whole number. Only a tighter value is accepted. Only an approval device can tighten a limit.</p>
 </div>
+<button type="submit" class="button button--primary button--full">Tighten the limit</button>
+</form>
+<div class="card-body stack">
+<p class="field-label">Set only in the strategy file</p>
+</div>
+<ul class="rows">
+{{- range .Other}}
+<li class="row"><span class="row-label">{{.Words}}</span><span class="row-value">{{.Value}}</span></li>
+{{- end}}
+</ul>
+{{if .Changes -}}
+<div class="card-body stack">
+<p class="field-label">Recent changes</p>
+</div>
+<ul class="rows">
+{{- range .Changes}}
+<li class="row"><span class="row-label">{{.Setting}}{{if .From}}: {{.From}} to {{.To}}{{else}} {{.To}}{{end}}<span class="row-meta">{{.At}}, from {{.Source}}</span></span></li>
+{{- end}}
+</ul>
+{{- end}}
+</section>
+<section class="card" aria-labelledby="paper-record">
+<div class="card-head">
+<h2 class="card-title" id="paper-record">Paper record</h2>
+</div>
+{{with .Paper -}}
+{{if .Started -}}
+<ul class="rows">
+<li class="row"><span class="row-label">Began<span class="row-meta">With cash and holdings at cost</span></span><span class="row-value">{{.Since}}: {{.Start}}</span></li>
+<li class="row"><span class="row-label">Now<span class="row-meta">Cash and holdings at their latest checked closes</span></span><span class="row-value">{{if .Now}}{{.Now}}{{else}}Not valued: a holding has no checked close yet{{end}}</span></li>
+{{if .Now}}<li class="row"><span class="row-label">Return</span><span class="row-value delta {{.Return.Class}}">{{.Return.Text}}</span></li>{{end}}
+<li class="row"><span class="row-label">Holdings<span class="row-meta"><a href="/portfolio">Open Portfolio</a></span></span><span class="row-value">{{.Holdings}}</span></li>
+<li class="row"><span class="row-label">Orders filled<span class="row-meta">{{.Fills}} fills in all</span></span><span class="row-value">{{.Filled}}</span></li>
+<li class="row"><span class="row-label">Orders approved or open</span><span class="row-value">{{.Open}}</span></li>
+<li class="row"><span class="row-label">Orders waiting for approval</span><span class="row-value">{{.Waiting}}</span></li>
+<li class="row"><span class="row-label">Orders that did not trade<span class="row-meta">Declined, blocked, cancelled, rejected or expired. <a href="/orders">Open Orders</a></span></span><span class="row-value">{{.NoTrade}}</span></li>
+</ul>
+{{- else -}}
+<div class="empty-state">
+<p class="empty-title">No paper record yet.</p>
+<p class="empty-body">The record begins once your holdings and cash are imported.</p>
+</div>
+{{- end}}
+{{- end}}
 </section>
 {{- end}}
 {{- end}}

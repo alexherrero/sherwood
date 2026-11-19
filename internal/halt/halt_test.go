@@ -113,7 +113,7 @@ func TestTheSwitchStartsOff(t *testing.T) {
 
 func TestEachCauseTurnsTheSwitchOnAndNotifies(t *testing.T) {
 	for _, c := range []Cause{Operator, BrokerError, PriceDisagreement, IllegalTransition,
-		UnknownOrder, Reconciliation, DailyLoss} {
+		UnknownOrder, Reconciliation, DailyLoss, StopsCancelled} {
 		t.Run(string(c), func(t *testing.T) {
 			h := newHarness(t)
 			got := h.throw(t, c, "made-up evidence for "+string(c))

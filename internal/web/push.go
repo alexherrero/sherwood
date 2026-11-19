@@ -52,10 +52,16 @@ type pushResult struct {
 type settingsData struct {
 	// Push is nil when notifications are not set up.
 	Push *pushView
-	// Result is the outcome of the last notification action, if any.
+	// Result is the outcome of the last notification or limit action, if
+	// any.
 	Result *pushResult
-	// Later is the sentence on what else the view will show.
-	Later string
+	// Live is true in live mode.
+	Live bool
+	// Limits, Other, Changes and Paper are described in settings.go.
+	Limits  []limitView
+	Other   []otherView
+	Changes []changeView
+	Paper   paperRecord
 }
 
 type pushView struct {
@@ -64,9 +70,15 @@ type pushView struct {
 }
 
 func loadSettings(s *Server, r *http.Request) (any, error) {
-	d := settingsData{Later: "your limits, the mode and the paper record"}
+	d := settingsData{}
 	if res, ok := pushResults[r.URL.Query().Get("push")]; ok {
 		d.Result = &res
+	}
+	if res, ok := limitResults[r.URL.Query().Get("limit")]; ok {
+		d.Result = &res
+	}
+	if err := s.loadLimits(r.Context(), &d); err != nil {
+		return nil, err
 	}
 	if s.push == nil {
 		return d, nil
