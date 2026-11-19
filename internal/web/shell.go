@@ -64,13 +64,11 @@ type view struct {
 
 var views = []view{
 	{path: "/", name: "Today", content: "today", load: loadToday},
-	{path: "/approvals", name: "Approvals", content: "placeholder", load: describe(
-		"each buy waiting for you, with the rule's reason and the risk check's verdict, and an Approve and a Decline button for each")},
+	{path: approvalsPath, name: "Approvals", content: "approvals", load: loadApprovals},
 	{path: "/portfolio", name: "Portfolio", content: "portfolio", load: loadPortfolio},
 	{path: "/feed", name: "Feed", content: "placeholder", load: describe(
 		"candidate cases with their sources, and a button to add each one to your watchlist")},
-	{path: "/orders", name: "Orders", content: "placeholder", load: describe(
-		"every order and its full history")},
+	{path: ordersPath, name: "Orders", content: "orders", load: loadOrders},
 	{path: settingsPath, name: "Settings", content: "settings", load: loadSettings},
 }
 

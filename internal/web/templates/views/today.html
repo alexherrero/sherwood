@@ -20,6 +20,12 @@
 <p>{{.Body}}</p>
 </section>
 {{- end}}
+{{if .Waiting -}}
+<section class="notice notice--warning" aria-label="Waiting for approval">
+<p class="notice-title"><strong>{{if eq .Waiting 1}}1 order is{{else}}{{.Waiting}} orders are{{end}} waiting for your approval.</strong></p>
+<p>Approve or decline before 9:35 am ET on the order's trading day. <a href="/approvals">Open Approvals</a></p>
+</section>
+{{- end}}
 {{if .Switch.On -}}
 <section class="notice notice--halt" aria-label="Halt">
 <p class="notice-title"><strong>Trading is halted.</strong></p>

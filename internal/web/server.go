@@ -30,6 +30,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
+	"github.com/alexherrero/sherwood/internal/risk"
 	"github.com/alexherrero/sherwood/internal/store"
 )
 
@@ -75,6 +76,17 @@ type Config struct {
 	// Switch is the stop switch, which Today shows and its two actions throw
 	// and reset. Required.
 	Switch *halt.Switch
+	// Strategy is the loaded strategy file, whose limits, sectors and
+	// watchlist the approval re-check reads. Required.
+	Strategy *config.Strategy
+	// Calendar is the market calendar the risk check uses. Required.
+	Calendar *clock.Calendar
+	// Checker is the risk check an approval runs again, risk.Standard{}
+	// outside tests. Required.
+	Checker risk.Checker
+	// BrokerHealthy says whether the broker adapter is answering, for the
+	// approval's risk check. Required.
+	BrokerHealthy func(context.Context) bool
 }
 
 // Server is the phone app's HTTP server.
@@ -88,8 +100,13 @@ type Server struct {
 	mode    config.Mode
 	push    PushChannel
 	stop    *halt.Switch
-	mux     *http.ServeMux
-	handler http.Handler
+	// What an approval's risk check needs.
+	strategy      *config.Strategy
+	calendar      *clock.Calendar
+	checker       risk.Checker
+	brokerHealthy func(context.Context) bool
+	mux           *http.ServeMux
+	handler       http.Handler
 	// reads lists every read pattern registered, for tests.
 	reads []string
 }
@@ -110,6 +127,9 @@ func New(cfg Config) (*Server, error) {
 	if cfg.Switch == nil {
 		return nil, errors.New("web: the stop switch is required")
 	}
+	if cfg.Strategy == nil || cfg.Calendar == nil || cfg.Checker == nil || cfg.BrokerHealthy == nil {
+		return nil, errors.New("web: the strategy file, the calendar, the risk check and the broker's health are required")
+	}
 	if cfg.Mode != config.ModePaper && cfg.Mode != config.ModeLive {
 		return nil, fmt.Errorf("web: the trading mode must be %q or %q", config.ModePaper, config.ModeLive)
 	}
@@ -127,7 +147,12 @@ func New(cfg Config) (*Server, error) {
 		mode:    cfg.Mode,
 		push:    cfg.Push,
 		stop:    cfg.Switch,
-		mux:     http.NewServeMux(),
+
+		strategy:      cfg.Strategy,
+		calendar:      cfg.Calendar,
+		checker:       cfg.Checker,
+		brokerHealthy: cfg.BrokerHealthy,
+		mux:           http.NewServeMux(),
 	}
 	for _, a := range cfg.ApprovalDevices {
 		s.devices[a.Unmap()] = true
@@ -137,6 +162,7 @@ func New(cfg Config) (*Server, error) {
 	s.mountShell()
 	s.mountPush()
 	s.mountStopSwitch()
+	s.mountApprovals()
 	s.HandleRead("/health", http.HandlerFunc(health))
 	return s, nil
 }

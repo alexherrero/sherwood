@@ -41,6 +41,7 @@ type fixture struct {
 	log     *loggingtest.Output
 	alerts  *notifytest.Fake // what the stop switch sent
 	stop    *halt.Switch
+	checker *fakeChecker // the risk check approvals run
 	changes atomic.Int32 // how many times the test actions ran
 }
 
@@ -66,7 +67,7 @@ func newFixtureWith(t *testing.T, mode config.Mode, edit func(*fixture, *Config)
 	}
 	logger, out := loggingtest.New(t)
 	f := &fixture{t: t, store: openStore(t, start), clock: clock.NewFake(start), log: out,
-		alerts: &notifytest.Fake{}}
+		alerts: &notifytest.Fake{}, checker: &fakeChecker{}}
 	f.stop = newSwitch(t, f.store, f.clock, f.alerts)
 	cfg := Config{
 		Login:           login,
@@ -76,6 +77,10 @@ func newFixtureWith(t *testing.T, mode config.Mode, edit func(*fixture, *Config)
 		Store:           f.store,
 		Mode:            mode,
 		Switch:          f.stop,
+		Strategy:        &config.Strategy{},
+		Calendar:        clock.NYSE(),
+		Checker:         f.checker,
+		BrokerHealthy:   func(context.Context) bool { return true },
 	}
 	if edit != nil {
 		edit(f, &cfg)
@@ -483,21 +488,32 @@ func TestNewRefusesAnIncompleteConfig(t *testing.T) {
 	st := openStore(t, time.Unix(0, 0))
 	paper := config.ModePaper
 	sw := newSwitch(t, st, clk, &notifytest.Fake{})
+	complete := func(edit func(*Config)) Config {
+		c := Config{Login: login, Clock: clk, Logger: logger, Store: st, Mode: paper, Switch: sw,
+			Strategy: &config.Strategy{}, Calendar: clock.NYSE(), Checker: &fakeChecker{},
+			BrokerHealthy: func(context.Context) bool { return true }}
+		edit(&c)
+		return c
+	}
 	for name, cfg := range map[string]Config{
-		"no login":     {Clock: clk, Logger: logger, Store: st, Mode: paper, Switch: sw},
-		"no clock":     {Login: login, Logger: logger, Store: st, Mode: paper, Switch: sw},
-		"no logger":    {Login: login, Clock: clk, Store: st, Mode: paper, Switch: sw},
-		"short key":    {Login: login, Clock: clk, Logger: logger, Store: st, Mode: paper, Switch: sw, Key: []byte("short")},
-		"no database":  {Login: login, Clock: clk, Logger: logger, Mode: paper, Switch: sw},
-		"no mode":      {Login: login, Clock: clk, Logger: logger, Store: st, Switch: sw},
-		"unknown mode": {Login: login, Clock: clk, Logger: logger, Store: st, Mode: "practice", Switch: sw},
-		"no switch":    {Login: login, Clock: clk, Logger: logger, Store: st, Mode: paper},
+		"no login":         complete(func(c *Config) { c.Login = "" }),
+		"no clock":         complete(func(c *Config) { c.Clock = nil }),
+		"no logger":        complete(func(c *Config) { c.Logger = nil }),
+		"short key":        complete(func(c *Config) { c.Key = []byte("short") }),
+		"no database":      complete(func(c *Config) { c.Store = nil }),
+		"no mode":          complete(func(c *Config) { c.Mode = "" }),
+		"unknown mode":     complete(func(c *Config) { c.Mode = "practice" }),
+		"no switch":        complete(func(c *Config) { c.Switch = nil }),
+		"no strategy file": complete(func(c *Config) { c.Strategy = nil }),
+		"no calendar":      complete(func(c *Config) { c.Calendar = nil }),
+		"no risk check":    complete(func(c *Config) { c.Checker = nil }),
+		"no broker health": complete(func(c *Config) { c.BrokerHealthy = nil }),
 	} {
 		if _, err := New(cfg); err == nil {
 			t.Errorf("%s: New accepted it", name)
 		}
 	}
-	if _, err := New(Config{Login: login, Clock: clk, Logger: logger, Store: st, Mode: config.ModeLive, Switch: sw}); err != nil {
+	if _, err := New(complete(func(c *Config) { c.Mode = config.ModeLive })); err != nil {
 		t.Errorf("a complete config was refused: %v", err)
 	}
 }
