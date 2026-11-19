@@ -1,0 +1,63 @@
+{{define "content" -}}
+{{with .Data -}}
+<header class="page-head">
+<h1>Orders</h1>
+</header>
+{{if .Days -}}
+{{- range .Days}}
+<section class="stack" aria-label="Orders for {{.Date}}">
+<h2 class="card-title">{{.Date}}</h2>
+{{- range .Orders}}
+<section class="card" aria-label="{{.Symbol}} {{.Action}}">
+<div class="card-head">
+<h3 class="card-title">{{.Symbol}} <span class="badge {{.Badge}}">{{.Action}}</span></h3>
+<span class="badge {{.StateBox}}">{{.State}}</span>
+</div>
+<ul class="rows">
+<li class="row"><span class="row-label">Shares</span><span class="row-value num">{{.Shares}}</span></li>
+<li class="row"><span class="row-label">How it trades</span><span class="row-value">{{.Price}}</span></li>
+<li class="row"><span class="row-label">Strategy</span><span class="row-value">{{.Strategy}}</span></li>
+{{- if .Filled}}
+<li class="row"><span class="row-label">Filled</span><span class="row-value">{{.Filled}}</span></li>
+{{- end}}
+<li class="row"><span class="row-label">Why the rule proposed it<span class="row-meta">{{.Reason}}</span></span></li>
+</ul>
+<div class="card-body stack">
+<h4 class="field-label">History</h4>
+<ul class="rows">
+{{- range .History}}
+<li class="row"><span class="row-label">{{.Change}}<span class="row-meta">{{.At}}</span><span class="row-meta">{{.Reason}}</span></span></li>
+{{- end}}
+</ul>
+<h4 class="field-label">Fills</h4>
+{{if .Fills -}}
+<ul class="rows">
+{{- range .Fills}}
+<li class="row"><span class="row-label">{{.Shares}} shares at {{.Price}}<span class="row-meta">On {{.Date}}, recorded {{.At}}.</span><span class="row-meta">{{.Reason}}</span></span><span class="row-value">{{.Value}}</span></li>
+{{- end}}
+</ul>
+{{- else -}}
+<p class="field-hint">No fills.</p>
+{{- end}}
+{{if .Verdict -}}
+<h4 class="field-label">Latest risk check</h4>
+<ul class="rows">
+{{- range .Verdict}}
+<li class="row"><span class="row-label">{{.Text}}</span><span class="badge {{if .Passed}}badge--passed{{else}}badge--blocked{{end}}">{{if .Passed}}Passed{{else}}Refused{{end}}</span></li>
+{{- end}}
+</ul>
+{{- end}}
+</div>
+</section>
+{{- end}}
+</section>
+{{- end}}
+{{if .More}}<p class="field-hint">Only the newest {{.Limit}} trading days with orders are shown.</p>{{end}}
+{{- else -}}
+<section class="card empty-state" aria-label="Orders">
+<p class="empty-title">No orders yet.</p>
+<p class="empty-body">Each order the rules propose shows here by trading day, with its full history and its fills.</p>
+</section>
+{{- end}}
+{{- end}}
+{{- end}}

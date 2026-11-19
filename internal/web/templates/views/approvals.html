@@ -1,0 +1,90 @@
+{{define "content" -}}
+{{with .Data -}}
+<header class="page-head">
+<h1>Approvals</h1>
+{{if .Cards}}<span class="badge">{{len .Cards}} waiting</span>{{end}}
+</header>
+{{with .Result -}}
+<section class="notice {{.Class}}" role="status" aria-label="Approval result">
+<p class="notice-title"><strong>{{.Title}}</strong></p>
+<p>{{.Body}}</p>
+</section>
+{{- end}}
+{{if .Cards -}}
+<section class="notice notice--info" aria-label="When to approve">
+<p class="notice-title"><strong>Approve before 9:35 am ET on the order's trading day.</strong></p>
+<p>Approved orders are sent at 9:35 am ET, after one more risk check. An order approved after that is never sent: it expires at that evening's after-close. One you leave waiting is declined then too.</p>
+</section>
+<div class="stack">
+{{- range .Cards}}
+<section class="card" aria-labelledby="order-{{.ID}}">
+<div class="card-head">
+<h2 class="card-title" id="order-{{.ID}}">{{.Symbol}}</h2>
+<span class="badge {{.Badge}}">{{.Action}}</span>
+</div>
+<ul class="rows">
+<li class="row"><span class="row-label">Shares</span><span class="row-value num">{{.Shares}}</span></li>
+<li class="row"><span class="row-label">How it trades</span><span class="row-value">{{.Price}}</span></li>
+{{- if .Value}}
+<li class="row"><span class="row-label">Value</span><span class="row-value">{{.Value}}</span></li>
+{{- end}}
+<li class="row"><span class="row-label">Strategy</span><span class="row-value">{{.Strategy}}</span></li>
+<li class="row"><span class="row-label">Trading day<span class="row-meta">Approve by {{.Deadline}}.</span></span><span class="row-value">{{.Session}}</span></li>
+<li class="row"><span class="row-label">Why the rule proposed it<span class="row-meta">{{.Reason}}</span></span></li>
+</ul>
+<div class="card-body stack">
+<h3 class="field-label">Risk check now</h3>
+<p class="field-hint">Run again for this page. Approving runs it once more.</p>
+<ul class="rows">
+{{- range .Now}}
+<li class="row"><span class="row-label">{{.Text}}</span><span class="badge {{if .Passed}}badge--passed{{else}}badge--blocked{{end}}">{{if .Passed}}Passed{{else}}Refused{{end}}</span></li>
+{{- end}}
+</ul>
+<h3 class="field-label">Risk check when it was proposed</h3>
+{{if .Stored -}}
+<ul class="rows">
+{{- range .Stored}}
+<li class="row"><span class="row-label">{{.Text}}</span><span class="badge {{if .Passed}}badge--passed{{else}}badge--blocked{{end}}">{{if .Passed}}Passed{{else}}Refused{{end}}</span></li>
+{{- end}}
+</ul>
+{{- else -}}
+<p class="field-hint">No verdict was stored.</p>
+{{- end}}
+</div>
+{{if .Late -}}
+<div class="notice notice--warning">
+<p class="notice-title"><strong>Too late to approve.</strong></p>
+<p>The 9:35 am ET send on {{.Session}} has passed, so approving it now would send nothing. It is declined at that evening's after-close. You can decline it now.</p>
+</div>
+{{- else if not .NowPassed -}}
+<div class="notice notice--warning">
+<p class="notice-title"><strong>The risk check refuses it now.</strong></p>
+<p>Approving it would block it, and it would not be sent. You can decline it instead.</p>
+</div>
+{{- end}}
+<div class="card-foot button-row">
+<form method="post" action="/approvals/decline">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<input type="hidden" name="order" value="{{.ID}}">
+<button type="submit" class="button button--destructive">Decline</button>
+</form>
+{{if not .Late -}}
+<form method="post" action="/approvals/approve">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<input type="hidden" name="order" value="{{.ID}}">
+<button type="submit" class="button button--primary">Approve</button>
+</form>
+{{- end}}
+</div>
+<p class="card-foot field-hint">Only an approval device can approve or decline.</p>
+</section>
+{{- end}}
+</div>
+{{- else -}}
+<section class="card empty-state" aria-label="Waiting orders">
+<p class="empty-title">Nothing is waiting for your approval.</p>
+<p class="empty-body">Buys and ordinary sells the rules propose after the close show here, with the rule's reason and the risk check's verdict.</p>
+</section>
+{{- end}}
+{{- end}}
+{{- end}}

@@ -40,6 +40,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/notify"
 	"github.com/alexherrero/sherwood/internal/notify/webpush"
 	"github.com/alexherrero/sherwood/internal/prices"
+	"github.com/alexherrero/sherwood/internal/risk"
 	"github.com/alexherrero/sherwood/internal/rules"
 	"github.com/alexherrero/sherwood/internal/scheduler"
 	"github.com/alexherrero/sherwood/internal/store"
@@ -252,6 +253,10 @@ func run(ctx context.Context, e env) (err error) {
 		Mode:            settings.Mode,
 		Push:            push,
 		Switch:          stopSwitch,
+		Strategy:        strategy,
+		Calendar:        clock.NYSE(),
+		Checker:         risk.Standard{},
+		BrokerHealthy:   paperBrokerHealthy,
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)

@@ -11,6 +11,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
+	"github.com/alexherrero/sherwood/internal/orders"
 	"github.com/alexherrero/sherwood/internal/store"
 )
 
@@ -22,6 +23,9 @@ type todayData struct {
 	Result *notice
 	// Switch is the stop switch: on or off, and the halts that turned it on.
 	Switch switchView
+	// Waiting counts the orders waiting for your approval; the banner links
+	// to Approvals when there are any.
+	Waiting int
 	// PricesChecked is the date of the latest price check, or "" if prices
 	// have never been checked.
 	PricesChecked string
@@ -71,6 +75,11 @@ func loadToday(s *Server, r *http.Request) (any, error) {
 		return nil, err
 	}
 	d.Switch = newSwitchView(st)
+	waiting, err := orders.InState(ctx, tx, orders.AwaitingApproval)
+	if err != nil {
+		return nil, err
+	}
+	d.Waiting = len(waiting)
 	if d.PricesChecked, err = latestPriceCheck(ctx, tx); err != nil {
 		return nil, err
 	}
