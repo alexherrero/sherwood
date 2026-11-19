@@ -39,6 +39,7 @@ func acStrategy(t *testing.T) *config.Strategy {
 	}
 	s, err := config.ParseStrategy([]byte(head + `
 watchlist:
+  - AAA
   - EEE
 sectors:
   AAA: sector-a
@@ -136,7 +137,7 @@ func newAC(t *testing.T, now time.Time, catchUpDays int, missing ...string) *acH
 		t.Fatal(err)
 	}
 	a := &afterClose{store: s, clock: h.clock, calendar: clock.NYSE(), log: log, strategy: acStrategy(t),
-		halts: h.halts, primary: h.primary, check: h.check}
+		halts: h.halts, alerts: h.alerts, primary: h.primary, check: h.check}
 	if err := a.register(h.sched); err != nil {
 		t.Fatal(err)
 	}
@@ -474,6 +475,66 @@ func TestAfterCloseMissingDayMakesNoSignals(t *testing.T) {
 	})
 }
 
+// orderText is "date symbol kind state" per order, oldest first.
+func (h *acHarness) orderText(t *testing.T) []string {
+	return h.strings(t, `SELECT trading_date || ' ' || symbol || ' ' || kind || ' ' || state FROM orders ORDER BY id`)
+}
+
+// recordCash records made-up cash and no holdings as of 10:00 on date.
+func (h *acHarness) recordCash(t *testing.T, date, amount string) {
+	t.Helper()
+	if _, _, err := holdings.Record(context.Background(), h.store, holdings.Snapshot{Source: holdings.SourceImport,
+		AsOf: at(t, date, 10, 0), Cash: money.MustParseMoney(amount)}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAfterCloseProposesOrdersAndExpiresThemNextClose(t *testing.T) {
+	h := newAC(t, at(t, "2026-11-24", 9, 0), 1)
+	h.recordCash(t, "2026-11-24", "1000.00")
+
+	// The 24th's breakout becomes a buy for the 25th, waiting for approval,
+	// and one alert says so. The later attempts skip and propose nothing.
+	for _, hm := range [][2]int{{16, 30}, {18, 0}, {21, 0}} {
+		h.runAt(t, at(t, "2026-11-24", hm[0], hm[1]))
+	}
+	if got, want := h.orderText(t), []string{"2026-11-25 AAA buy awaiting_approval"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("orders %q, want %q", got, want)
+	}
+	if got := h.alerts.Sent(); !reflect.DeepEqual(got, []notify.Alert{notify.BuysWaiting(1)}) {
+		t.Errorf("alerts %v, want one buys-waiting alert for 1", got)
+	}
+
+	// Nobody approves it, so the 25th's close expires it.
+	h.runAt(t, at(t, "2026-11-25", 16, 30))
+	if got, want := h.orderText(t), []string{"2026-11-25 AAA buy declined"}; !reflect.DeepEqual(got, want) {
+		t.Errorf("orders %q, want %q", got, want)
+	}
+	if got := h.strings(t, `SELECT actor FROM order_history ORDER BY id DESC LIMIT 1`); got[0] != "expiry" {
+		t.Errorf("last move by %q, want expiry", got[0])
+	}
+}
+
+func TestAfterCloseCatchUpProposesNoBuy(t *testing.T) {
+	// Down from before the 24th's close until the next morning, before the
+	// 25th's session opens.
+	h := newAC(t, at(t, "2026-11-25", 8, 0), 2)
+	h.recordCash(t, "2026-11-24", "1000.00")
+	h.runAt(t, at(t, "2026-11-25", 8, 0))
+	if got, want := h.signalText(t), []string{"2026-11-24 test-breakout AAA buy"}; !reflect.DeepEqual(got, want) {
+		t.Fatalf("signals %q, want %q", got, want)
+	}
+	if got := h.orderText(t); len(got) != 0 {
+		t.Errorf("orders %q, want none", got)
+	}
+	if !strings.Contains(h.logs.String(), "this run is catching up a date whose day has gone") {
+		t.Errorf("log:\n%s", h.logs.String())
+	}
+	if len(h.alerts.Sent()) != 0 {
+		t.Errorf("alerts %v, want none", h.alerts.Sent())
+	}
+}
+
 func TestAfterCloseIsOffWithoutBothKeys(t *testing.T) {
 	ctx := context.Background()
 	now := at(t, "2026-11-24", 23, 0)
@@ -489,7 +550,7 @@ func TestAfterCloseIsOffWithoutBothKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys := config.PriceKeys{TiingoToken: secret.New("made-up-token")}
-	if err := registerAfterClose(env{clock: clk}, sched, keys, acStrategy(t), s, nil, log); err != nil {
+	if err := registerAfterClose(env{clock: clk}, sched, keys, acStrategy(t), s, nil, notify.Nowhere, log); err != nil {
 		t.Fatal(err)
 	}
 	if err := sched.RunDue(ctx); err != nil {

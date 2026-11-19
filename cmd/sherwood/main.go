@@ -235,7 +235,7 @@ func run(ctx context.Context, e env) (err error) {
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
-	if err := registerAfterClose(e, sched, settings.Prices, strategy, db, stopSwitch, logger); err != nil {
+	if err := registerAfterClose(e, sched, settings.Prices, strategy, db, stopSwitch, alertsOf(push), logger); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
 
@@ -311,11 +311,15 @@ func newPush(settings *config.Settings, db *store.Store, c clock.Clock, logger *
 // newStopSwitch builds the stop switch, which notifies through push, or
 // nowhere when notifications are not set up.
 func newStopSwitch(db *store.Store, c clock.Clock, push web.PushChannel, logger *slog.Logger) (*halt.Switch, error) {
-	n := notify.Nowhere
-	if push != nil { // newPush returns a literal nil when notifications are off
-		n = push
+	return halt.New(halt.Config{Store: db, Clock: c, Notifier: alertsOf(push), Logger: logger})
+}
+
+// alertsOf is push as a notifier, or nowhere when notifications are off.
+func alertsOf(push web.PushChannel) notify.Notifier {
+	if push == nil { // newPush returns a literal nil when notifications are off
+		return notify.Nowhere
 	}
-	return halt.New(halt.Config{Store: db, Clock: c, Notifier: n, Logger: logger})
+	return push
 }
 
 // haltOnBrokerFailure is the supervisor's failure hook: any helper failure is
