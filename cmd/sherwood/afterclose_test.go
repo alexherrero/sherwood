@@ -10,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alexherrero/sherwood/internal/broker/paper"
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
@@ -92,6 +93,7 @@ type acHarness struct {
 	logs    *loggingtest.Output
 	alerts  *notifytest.Fake
 	halts   *halt.Switch
+	paper   *paper.Broker
 }
 
 // newAC builds a store, two fake sources and a scheduler with the
@@ -136,8 +138,12 @@ func newAC(t *testing.T, now time.Time, catchUpDays int, missing ...string) *acH
 	if err != nil {
 		t.Fatal(err)
 	}
+	h.paper, err = paper.New(paper.Config{Store: s, Clock: h.clock, Calendar: clock.NYSE(), Policy: money.WholeShares})
+	if err != nil {
+		t.Fatal(err)
+	}
 	a := &afterClose{store: s, clock: h.clock, calendar: clock.NYSE(), log: log, strategy: acStrategy(t),
-		halts: h.halts, alerts: h.alerts, primary: h.primary, check: h.check}
+		halts: h.halts, alerts: h.alerts, paper: h.paper, primary: h.primary, check: h.check}
 	if err := a.register(h.sched); err != nil {
 		t.Fatal(err)
 	}
@@ -550,7 +556,7 @@ func TestAfterCloseIsOffWithoutBothKeys(t *testing.T) {
 		t.Fatal(err)
 	}
 	keys := config.PriceKeys{TiingoToken: secret.New("made-up-token")}
-	if err := registerAfterClose(env{clock: clk}, sched, keys, acStrategy(t), s, nil, notify.Nowhere, log); err != nil {
+	if err := registerAfterClose(env{clock: clk}, sched, keys, acStrategy(t), s, nil, notify.Nowhere, nil, log); err != nil {
 		t.Fatal(err)
 	}
 	if err := sched.RunDue(ctx); err != nil {
