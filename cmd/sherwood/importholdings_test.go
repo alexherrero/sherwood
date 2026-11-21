@@ -32,6 +32,11 @@ func TestMain(m *testing.M) {
 	if path := os.Getenv(fakeHelperEnv); path != "" {
 		os.Exit(fakeHelperMain(path, os.Args[1:]))
 	}
+	// The research job's dry run runs the test binary as sherwood itself.
+	if os.Getenv(asSherwoodEnv) != "" {
+		main()
+		os.Exit(0)
+	}
 	os.Exit(m.Run())
 }
 

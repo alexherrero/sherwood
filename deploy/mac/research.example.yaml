@@ -1,0 +1,12 @@
+# The research job's config file, for "sherwood research-export" and
+# "sherwood research-upload" on the Mac. Copy it OUTSIDE the repo (the job
+# expects RESEARCH_DIR/research.yaml), fill in both values, and make it
+# readable only by you: chmod 600 research.yaml. sherwood refuses it
+# otherwise, and refuses these placeholder values.
+
+# sherwood's Tailscale Serve address. https only.
+nas_url: "https://sherwood.example-tailnet.ts.net"
+
+# The feed_token from the NAS settings file. It can read the research export
+# and upload a feed, and nothing else. Never commit it or paste it into chat.
+feed_token: "replace-me-with-the-feed-token-from-the-nas"

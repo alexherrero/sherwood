@@ -15,7 +15,8 @@
 // helper just long enough to read the holdings and cash once, read-only, and
 // records them (see importholdings.go). "sherwood rules", "sherwood
 // check-strategy" and "sherwood fetch-bars" serve the setup skill on the Mac
-// (see setup.go).
+// (see setup.go), and "sherwood research-export" and "sherwood
+// research-upload" serve the nightly research job there (see research.go).
 package main
 
 import (
@@ -160,6 +161,10 @@ func run(ctx context.Context, e env) (err error) {
 			return runCheckStrategy(e, e.args[1:])
 		case fetchBarsCommand:
 			return runFetchBars(ctx, e, e.args[1:])
+		case researchExportCommand:
+			return runResearchExport(ctx, e, e.args[1:])
+		case researchUploadCommand:
+			return runResearchUpload(ctx, e, e.args[1:])
 		}
 	}
 	opts, err := parseOptions(e)
