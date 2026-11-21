@@ -1,8 +1,9 @@
 # Sherwood's checks. Every job runs on every pull request and on every push to
-# main. The job names are stable on purpose, so any of them can be made a
-# required check in the repository ruleset. Dependabot's auto-merge
-# (dependabot-auto-merge.yml) waits on every job here by name: add, rename or
-# remove a job and update its list too, or its gate times out and refuses.
+# main. The job names are stable on purpose: the "Branch Rules" ruleset on main
+# requires every job here by name except Go vulnerability check, which
+# Dependabot's auto-merge (dependabot-auto-merge.yml) holds by name instead.
+# Add, rename or remove a job and update the ruleset (or that workflow's list)
+# to match, or pull requests wait forever on a check that never reports.
 #
 # Supply-chain rules: every action is pinned by commit, with its version in a
 # comment. Tools fetched outside an action are pinned too: govulncheck by
@@ -33,8 +34,7 @@ env:
   PYTHON_VERSION: "3.15"
 
 jobs:
-  # The archived v1 module. The repository ruleset requires this check by name,
-  # so keep the job and its name.
+  # The archived v1 module.
   build:
     name: Build (v1)
     runs-on: ubuntu-latest
