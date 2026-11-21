@@ -106,6 +106,17 @@ The token the research job presents to read the research export and upload a new
 - `feed_token is missing`
 - `feed_token is too short; use at least 32 random characters`
 
+#### What the token opens
+
+The token opens two routes, and nothing else. Each one is reached the same way as the app, through Tailscale Serve, so the Mac must be signed in to the tailnet as your `tailnet_login`; a tagged device or another login is refused before the token is looked at. The script then sends `Authorization: Bearer <feed_token>`. These routes keep no session cookie and need no form token, and a request from a browser is refused.
+
+| Route | What it does |
+|---|---|
+| `GET /research/export` | Answers with the research export as JSON, built at that moment: each stock you hold or watch, once, with whether it is held or watched and its last 30 checked closing prices, plus the signals of the latest rules run with their keys and the rules' own reasons. It never holds share counts, costs, cash, balances, orders or account details. |
+| `POST /feed/upload` | Takes a feed file as `application/json`, up to 1 MiB. A file that does not match the feed schema is refused with `400` and nothing is stored. Otherwise each item that breaks a rule (no source, a link that is not http or https, a note on a stock you do not hold, and so on) is dropped, the rest are stored with the upload in one go, and the answer gives the upload's number, how many items were kept, and each dropped item with its reason. An upload only ever adds to the feed. |
+
+A missing or wrong token gets `401`. The request log names the route, the status and a short reason, and never the token or the file's contents.
+
 ### `notifications.web_push`
 
 The keys for web push notifications to the phone app.

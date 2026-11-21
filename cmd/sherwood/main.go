@@ -274,6 +274,7 @@ func run(ctx context.Context, e env) (err error) {
 		Calendar:        clock.NYSE(),
 		Checker:         risk.Standard{},
 		BrokerHealthy:   paperBrokerHealthy,
+		FeedToken:       settings.FeedToken,
 		Orders:          canceller,
 	})
 	if err != nil {

@@ -59,7 +59,8 @@ func (w *statusWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
 type refusal string
 
 // guard is the outermost handler: security headers, the login check, the
-// method check, the session cookie and the request log, in that order.
+// method check, the session cookie (not for a machine route) and the request
+// log, in that order.
 func (s *Server) guard(next *http.ServeMux) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := s.clock.Now()
@@ -99,13 +100,19 @@ func (s *Server) guard(next *http.ServeMux) http.Handler {
 			return
 		}
 
-		session, ok := sessionFrom(r)
-		if !ok {
-			session = newSession()
-			http.SetCookie(sw, sessionCookie(session))
+		ctx := r.Context()
+		// A machine route has no session: the research job's script keeps
+		// no cookie, and its routes check the feed token instead.
+		if !s.machine[route] {
+			session, ok := sessionFrom(r)
+			if !ok {
+				session = newSession()
+				http.SetCookie(sw, sessionCookie(session))
+			}
+			ctx = context.WithValue(ctx, sessionKey, &requestSession{id: session, s: s})
 		}
-		ctx := context.WithValue(r.Context(), sessionKey, &requestSession{id: session, s: s})
-		// A refusal inside a change handler is recorded through the context.
+		// A refusal inside a change or machine handler is recorded through
+		// the context.
 		ctx = context.WithValue(ctx, refusalKey, &reason)
 		next.ServeHTTP(sw, r.WithContext(ctx))
 		if sw.status == 0 {

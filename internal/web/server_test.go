@@ -20,6 +20,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/logging/loggingtest"
 	"github.com/alexherrero/sherwood/internal/notify/notifytest"
+	"github.com/alexherrero/sherwood/internal/secret"
 	"github.com/alexherrero/sherwood/internal/store"
 )
 
@@ -31,6 +32,9 @@ const (
 	laptopAddr  = "100.64.0.11"
 	phoneIPv6   = "fd7a:115c:a1e0::10"
 	startOfTest = "2026-11-16T15:00:00Z"
+	// feedToken is a made-up feed token for tests; the real one lives only
+	// in the settings file on the NAS.
+	feedToken = "fake-feed-token-for-tests-0123456789abcdef" //nolint:gosec // G101: a made-up token for tests
 )
 
 type fixture struct {
@@ -81,6 +85,7 @@ func newFixtureWith(t *testing.T, mode config.Mode, edit func(*fixture, *Config)
 		Calendar:        clock.NYSE(),
 		Checker:         f.checker,
 		BrokerHealthy:   func(context.Context) bool { return true },
+		FeedToken:       secret.New(feedToken),
 	}
 	if edit != nil {
 		edit(f, &cfg)
@@ -491,7 +496,7 @@ func TestNewRefusesAnIncompleteConfig(t *testing.T) {
 	complete := func(edit func(*Config)) Config {
 		c := Config{Login: login, Clock: clk, Logger: logger, Store: st, Mode: paper, Switch: sw,
 			Strategy: &config.Strategy{}, Calendar: clock.NYSE(), Checker: &fakeChecker{},
-			BrokerHealthy: func(context.Context) bool { return true }}
+			BrokerHealthy: func(context.Context) bool { return true }, FeedToken: secret.New(feedToken)}
 		edit(&c)
 		return c
 	}
@@ -508,6 +513,7 @@ func TestNewRefusesAnIncompleteConfig(t *testing.T) {
 		"no calendar":      complete(func(c *Config) { c.Calendar = nil }),
 		"no risk check":    complete(func(c *Config) { c.Checker = nil }),
 		"no broker health": complete(func(c *Config) { c.BrokerHealthy = nil }),
+		"no feed token":    complete(func(c *Config) { c.FeedToken = secret.Secret{} }),
 	} {
 		if _, err := New(cfg); err == nil {
 			t.Errorf("%s: New accepted it", name)
