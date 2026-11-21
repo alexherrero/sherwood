@@ -5,6 +5,8 @@ package brokertest
 
 import (
 	"context"
+	"errors"
+	"sort"
 	"sync"
 
 	"github.com/alexherrero/sherwood/internal/broker"
@@ -38,15 +40,30 @@ type answer struct {
 	err    error
 }
 
-// Fake is a scripted broker.Adapter. With nothing scripted, Place accepts,
+// ErrUnknownOrder is what a tracking Fake answers for a reference it was never
+// sent.
+var ErrUnknownOrder = errors.New("brokertest: the fake has no order with this reference")
+
+// Fake is a scripted broker.Adapter. With nothing scripted, Place accepts a
+// well-formed order and refuses a malformed one (as Order.Check finds it),
 // Cancel cancels, Lookup reports the order accepted, and the listing and
 // account calls return the fields below. It is safe for concurrent use.
+//
+// Set Track for a fake that keeps a book as a broker would: the unscripted
+// answers then remember each accepted order, Cancel calls it off (and answers
+// a finished order's status), Lookup and Cancel of a reference never placed
+// fail with ErrUnknownOrder, and OpenOrders lists the book's open orders
+// after Open.
 type Fake struct {
 	mu      sync.Mutex
 	calls   []Call
 	scripts map[Method][]answer
 	errs    map[Method][]error
 	unwell  bool
+	book    map[string]broker.Status
+
+	// Track turns on the book; see above. Set it before the first call.
+	Track bool
 
 	// Open, Positions and Acct are what OpenOrders, Holdings and Account
 	// return when no error is scripted for them.
@@ -127,10 +144,22 @@ func (f *Fake) next(c Call) (answer, bool) {
 	return answer{}, false
 }
 
-// Place records the order and answers from the script, or accepts it.
+// Place records the order and answers from the script, or accepts a
+// well-formed order and refuses a malformed one.
 func (f *Fake) Place(_ context.Context, o broker.Order) (broker.Report, error) {
 	if a, ok := f.next(Call{Method: Place, Order: o, Ref: o.Ref}); ok {
 		return a.report, a.err
+	}
+	if err := o.Check(); err != nil {
+		return broker.Report{Ref: o.Ref, Status: broker.StatusRejected, Detail: err.Error()}, nil
+	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if f.Track {
+		if f.book == nil {
+			f.book = map[string]broker.Status{}
+		}
+		f.book[o.Ref] = broker.StatusAccepted
 	}
 	return broker.Report{Ref: o.Ref, Status: broker.StatusAccepted}, nil
 }
@@ -140,26 +169,65 @@ func (f *Fake) Cancel(_ context.Context, ref string) (broker.Report, error) {
 	if a, ok := f.next(Call{Method: Cancel, Ref: ref}); ok {
 		return a.report, a.err
 	}
-	return broker.Report{Ref: ref, Status: broker.StatusCancelled}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.Track {
+		return broker.Report{Ref: ref, Status: broker.StatusCancelled}, nil
+	}
+	st, ok := f.book[ref]
+	switch {
+	case !ok:
+		return broker.Report{}, ErrUnknownOrder
+	case open(st):
+		st = broker.StatusCancelled
+		f.book[ref] = st
+	}
+	return broker.Report{Ref: ref, Status: st}, nil
 }
 
 // Lookup records the call and answers from the script, or reports the order
-// accepted.
+// accepted (a tracking fake reports its book).
 func (f *Fake) Lookup(_ context.Context, ref string) (broker.Report, error) {
 	if a, ok := f.next(Call{Method: Lookup, Ref: ref}); ok {
 		return a.report, a.err
 	}
-	return broker.Report{Ref: ref, Status: broker.StatusAccepted}, nil
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if !f.Track {
+		return broker.Report{Ref: ref, Status: broker.StatusAccepted}, nil
+	}
+	st, ok := f.book[ref]
+	if !ok {
+		return broker.Report{}, ErrUnknownOrder
+	}
+	return broker.Report{Ref: ref, Status: st}, nil
 }
 
-// OpenOrders records the call and returns Open, or a scripted error.
+// OpenOrders records the call and returns Open (and a tracking fake's open
+// orders, by reference), or a scripted error.
 func (f *Fake) OpenOrders(context.Context) ([]broker.Report, error) {
 	if a, ok := f.next(Call{Method: OpenOrders}); ok && a.err != nil {
 		return nil, a.err
 	}
 	f.mu.Lock()
 	defer f.mu.Unlock()
-	return append([]broker.Report(nil), f.Open...), nil
+	out := append([]broker.Report(nil), f.Open...)
+	var refs []string
+	for ref, st := range f.book {
+		if open(st) {
+			refs = append(refs, ref)
+		}
+	}
+	sort.Strings(refs)
+	for _, ref := range refs {
+		out = append(out, broker.Report{Ref: ref, Status: f.book[ref]})
+	}
+	return out, nil
+}
+
+// open reports whether an order with status st is still open at the broker.
+func open(st broker.Status) bool {
+	return st == broker.StatusAccepted || st == broker.StatusPartiallyFilled
 }
 
 // Holdings records the call and returns Positions, or a scripted error.

@@ -106,6 +106,17 @@ type reply struct {
 // request's args object (nil sends an empty object), and on success the reply's
 // result is decoded into result unless result is nil. Call never retries.
 func (c *Client) Call(ctx context.Context, op string, args, result any) error {
+	return c.CallFor(ctx, op, c.timeout, args, result)
+}
+
+// CallFor is Call with its own time limit in place of the client's: the call
+// ends at timeout or at the caller's deadline, whichever is sooner. A timeout
+// of zero or less means the client's. The order calls use it, because they
+// page through the account's order history and need far longer than a read.
+func (c *Client) CallFor(ctx context.Context, op string, timeout time.Duration, args, result any) error {
+	if timeout <= 0 {
+		timeout = c.timeout
+	}
 	if args == nil {
 		args = struct{}{}
 	}
@@ -118,13 +129,13 @@ func (c *Client) Call(ctx context.Context, op string, args, result any) error {
 
 	// The call ends at the client's timeout or the caller's deadline,
 	// whichever is sooner. The cause says which, for the error message.
-	deadline := time.Now().Add(c.timeout)
+	deadline := time.Now().Add(timeout)
 	var cancel context.CancelFunc
 	if d, ok := ctx.Deadline(); ok && !deadline.Before(d) {
 		deadline = d
 		ctx, cancel = context.WithCancel(ctx)
 	} else {
-		ctx, cancel = context.WithDeadlineCause(ctx, deadline, fmt.Errorf("no reply within %s", c.timeout))
+		ctx, cancel = context.WithDeadlineCause(ctx, deadline, fmt.Errorf("no reply within %s", timeout))
 	}
 	defer cancel()
 

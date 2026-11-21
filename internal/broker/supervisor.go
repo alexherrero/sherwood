@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
@@ -93,11 +94,21 @@ func (e *ExitError) Unwrap() error { return e.Err }
 var ErrStart = errors.New("broker helper did not start")
 
 // Supervisor starts the broker helper, restarts it whenever it exits, and
-// reports each failure to OnError.
+// reports each failure to OnError. It is the helper's broker.Health: healthy
+// from the moment a started helper says it is ready until that helper fails
+// or exits, and not healthy before the first start, while it waits to
+// restart, or after Run returns.
 type Supervisor struct {
-	cfg    SupervisorConfig
-	client *Client
+	cfg     SupervisorConfig
+	client  *Client
+	running atomic.Bool
 }
+
+var _ Health = (*Supervisor)(nil)
+
+// Healthy reports whether a helper is running and has said it is ready to
+// take calls. It is safe to call from any goroutine.
+func (s *Supervisor) Healthy() bool { return s.running.Load() }
 
 // NewSupervisor checks cfg and returns a supervisor. It starts nothing; call
 // Run.
@@ -140,8 +151,10 @@ func (s *Supervisor) Client() *Client { return s.client }
 // RestartDelay and starts it again. When ctx ends, Run stops the helper with
 // SIGTERM (then SIGKILL after ShutdownGrace) and returns ctx's error.
 func (s *Supervisor) Run(ctx context.Context) error {
+	defer s.running.Store(false)
 	for {
 		err := s.runOnce(ctx)
+		s.running.Store(false)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
@@ -188,6 +201,7 @@ func (s *Supervisor) runOnce(ctx context.Context) error {
 		return fmt.Errorf("%w: not ready within %s, so it was stopped: %w", ErrStart, s.cfg.StartTimeout, stopped)
 	}
 
+	s.running.Store(true)
 	if s.cfg.OnReady != nil {
 		s.cfg.OnReady()
 	}
