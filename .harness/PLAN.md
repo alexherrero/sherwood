@@ -63,8 +63,8 @@ Each morning the app shows sourced candidate cases, notes on your holdings and p
 - **Status:** [ ]
 
 ### 5. The watchlist tap
-- **What:** An "Add to watchlist" button on each candidate case (POST, anti-forgery token). The addition is recorded in the app (migration `0009`, or a `settings_changes`-style overlay as `internal/limits` does) and read through one effective-watchlist reader that replaces the direct `strategy.Watchlist` reads in the proposal, execution, approvals and price-fetch code. What an addition makes the rules do is the open question below; build what the operator decides.
-- **Verification:** The tap needs the anti-forgery token; an addition is recorded and appears in the effective watchlist; the effective watchlist resets when the strategy file changes, as limits do; no order is created by the tap.
+- **What:** An "Add to watchlist" button on each candidate case (POST, anti-forgery token). The addition is recorded in the app (migration `0009`, or a `settings_changes`-style overlay as `internal/limits` does) and read through one effective-watchlist reader that replaces the direct `strategy.Watchlist` reads in the proposal, execution, approvals and price-fetch code. Strategies gain an opt-in in the strategy file (for example `include_watchlist: true`); a strategy that opts in runs its rules over the effective watchlist as well as its own `stocks:`, so an added stock can produce a buy signal, and that buy still passes the risk check and waits for approval. The strategy-setup skill, the example strategy, the settings reference and the design (with an amendment-log entry) are updated to match.
+- **Verification:** The tap needs the anti-forgery token; an addition is recorded and appears in the effective watchlist; the effective watchlist resets when the strategy file changes, as limits do; a strategy that opts in signals on an added stock and one that doesn't never does; no order is created by the tap itself.
 - **Status:** [ ]
 
 ### 6. Research job how-to
@@ -74,11 +74,11 @@ Each morning the app shows sourced candidate cases, notes on your holdings and p
 
 ## Order and parallelism
 
-Task 1 first (adds migration `0008`). Then 2 and 3 side by side (2 owns `internal/web`'s machine routes; 3 owns `cmd/sherwood/setup.go`, the skill and the Mac files). Then 4 (after 2; owns the Feed, Portfolio and Approvals views). Then 5 (after 4 and the operator's answer; adds `0009` if it needs a table). Task 6 alongside 4 or 5.
+Task 1 first (adds migration `0008`). Then 2 and 3 side by side (2 owns `internal/web`'s machine routes; 3 owns `cmd/sherwood/setup.go`, the skill and the Mac files). Then 4 (after 2; owns the Feed, Portfolio and Approvals views). Then 5 (after 4; adds `0009` if it needs a table). Task 6 alongside 4 or 5.
 
 ## Risks / open questions
 
-- **Open, for the operator:** what does adding a candidate to the watchlist do? The design says "the rules decide whether to buy it", but rules only run on each strategy's `stocks:` list today, so a watchlist addition alone would only start its price fetch and let the risk check pass it. Either strategies gain an opt-in to run their rules over the watchlist too, or the tap only watches the stock and making it tradable stays a strategy-file change through `/strategy-setup`.
+- **Decided by the operator (2026-11-20):** a stock added to the watchlist is run through the rules of every strategy that opts in to the watchlist, as the design describes; see the locked calls.
 - The Mac asleep means a stale feed; trading carries on.
 - Prompt injection through news can only produce a bad feed item; the escaping, the schema and the import boundary are the defences.
 
@@ -96,6 +96,7 @@ Read this file's task list and find the first task with `Status: [ ]`, then read
 - **The Mac's script passes the Serve login and then the feed token.** The Mac is signed in to the tailnet as the owner, so it passes the login guard; the feed routes then require the bearer token instead of the session's anti-forgery token. A tagged device or another login is still refused.
 - **The export is built on request**, not published by the 16:30 job; it carries symbols, recent closes and signal reasons only.
 - **An upload is validated and stored when it arrives**, in one transaction, rather than staged for a 15-minute intake job; task 2 amends the design.
+- **A watchlist addition is run through the rules** of each strategy that opts in to the watchlist (operator, 2026-11-20). Any resulting buy is proposed, risk-checked and waits for approval like any other; the tap itself never creates an order.
 - Feed rows are append-only and kept; the app shows the latest upload's candidates and the latest note per holding.
 - The Mac-side script is a `sherwood` subcommand, so the NAS and the Mac validate with the same code.
 - See the final [Sherwood Design](../wiki/designs/sherwood.md) for the rest: Go application with Python only in the broker helper; SQLite; decimals; a mandatory risk check on every order; buys wait for approval and only protective sells go through on their own; any broker error halts trading with no retry; broker secrets only in the owner-only settings file on the NAS.
