@@ -11,6 +11,7 @@ Sherwood is a small, self-hosted investment tool. It runs on a home NAS, keeps a
 - **[Install sherwood on the NAS](how-to/install-sherwood-on-the-nas)** — takes you from a checkout of the repo to sherwood running in paper mode: the Compose file, the application-data folder and who owns it, the settings file, Tailscale Serve in front of the loopback port (and why it must stay on loopback), putting the app on your phone's home screen, and turning on notifications.
 - **[Log in to the broker on the NAS](how-to/log-in-to-the-broker-on-the-nas)** — saves a broker session on the NAS and runs the first read-only import of your holdings and cash, with what to compare against the broker's app and what each failure message means.
 - **[Set up and back-test a strategy](how-to/set-up-and-back-test-a-strategy)** — runs the `strategy-setup` skill on your Mac: the interview, the work folder kept outside the repo, validating the file, the Tiingo token file and price history, reading a back-test and what it leaves out, and copying the finished `strategy.yaml` to the NAS. Nothing it writes is financial advice.
+- **[Set up the research job](how-to/set-up-the-research-job)** — sets up the nightly research job on your Mac: building the `sherwood` helper, the owner-only config file with the feed token, a check-only run and a first run by hand, the launchd job and its log, what a stale feed means (trading carries on), what each failure message means, and the one risk that remains. The AI it runs never creates, approves or sends an order.
 
 ## Reference
 
@@ -19,6 +20,6 @@ Sherwood is a small, self-hosted investment tool. It runs on a home NAS, keeps a
 
 ## Operational
 
-- **[Runbook](operational/runbook)** — what to do when something needs you: the notifications sherwood sends, what each halt cause means and what to check before you reset the stop switch, reconciliation differences, restoring the database from a nightly backup, and rolling back across a migration.
+- **[Runbook](operational/runbook)** — what to do when something needs you: the notifications sherwood sends, what each halt cause means and what to check before you reset the stop switch, reconciliation differences, restoring the database from a nightly backup, rolling back across a migration, and a stale research feed or a failed upload.
 
 The original proof-of-concept is archived in [`v1/`](https://github.com/alexherrero/sherwood/tree/main/v1).
