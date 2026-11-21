@@ -43,3 +43,16 @@
 </body>
 </html>
 {{end}}
+
+{{/* sources lists a feed item's source links. The titles, links and domains
+     are untrusted text from the research feed: they go through the template's
+     escaping, and only an http or https link (a non-empty .Href) is a link. */}}
+{{define "sources" -}}
+{{if . -}}
+<ul class="sources" aria-label="Sources">
+{{- range .}}
+<li class="source">{{if .Href}}<a href="{{.Href}}" target="_blank" rel="noopener noreferrer">{{.Title}}</a> <span class="source-domain">{{.Domain}}</span>{{if .Unusual}} <span class="source-domain">(the name has letters outside plain ASCII; check it carefully)</span>{{end}}{{else}}{{.Title}} <span class="source-domain">(not a web link, so not linked)</span>{{end}}</li>
+{{- end}}
+</ul>
+{{- end}}
+{{- end}}

@@ -58,9 +58,23 @@
 <li class="row"><span class="row-label">Value<span class="row-meta">No checked closing price is stored for {{.Symbol}} yet.</span></span><span class="row-value">Not available</span></li>
 {{- end}}
 <li class="row"><span class="row-label">Held since</span><span class="row-value">{{.Opened}}</span></li>
-<li class="row"><span class="row-label">Suggestion</span><span class="row-value">{{if .Suggestion}}{{.Suggestion}}{{else}}Not yet available{{end}}</span></li>
-<li class="row"><span class="row-label">AI note</span><span class="row-value">{{if .Note}}{{.Note}}{{else}}Not yet available{{end}}</span></li>
+{{- range .Suggestions}}
+<li class="row"><span class="row-label">Rules' suggestion, {{.Strategy}}<span class="row-meta">{{if .Reason}}{{.Reason}}{{else}}No rule gave a decision.{{end}}{{if .Stop}} Stop at {{.Stop}}.{{end}} From the rules run of {{.Date}}.</span></span><span class="row-value">{{.Words}}</span></li>
+{{- else}}
+<li class="row"><span class="row-label">Rules' suggestion<span class="row-meta">The rules have not run for {{.Symbol}} yet.</span></span><span class="row-value">Not yet available</span></li>
+{{- end}}
+{{- if not .Note}}
+<li class="row"><span class="row-label">AI note<span class="row-meta">{{if $.Data.FeedStale}}The research feed is out of date, so only the rules' suggestion is shown.{{else}}The latest research feed has no note on {{.Symbol}}.{{end}}</span></span><span class="row-value">Not available</span></li>
+{{- end}}
 </ul>
+{{with .Note -}}
+<div class="card-body">
+<h3 class="field-label">AI note</h3>
+<p class="field-hint">Written by an AI from the sources below, in the feed that arrived {{.Arrived}}. It can be wrong.</p>
+<p class="feed-text">{{.Text}}</p>
+{{template "sources" .Sources}}
+</div>
+{{- end}}
 </section>
 {{- end}}
 </div>

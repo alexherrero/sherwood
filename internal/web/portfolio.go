@@ -9,8 +9,10 @@ import (
 	"time"
 
 	"github.com/alexherrero/sherwood/internal/clock"
+	"github.com/alexherrero/sherwood/internal/feed"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/money"
+	"github.com/alexherrero/sherwood/internal/signals"
 )
 
 // portfolioData is what the Portfolio view shows. Every figure is text
@@ -45,6 +47,10 @@ type portfolioData struct {
 	Value    string
 	Gain     delta
 	Total    string
+
+	// FeedStale is true when there is no research feed, or the latest is
+	// older than feed.StaleAfter; then no holding shows an AI note.
+	FeedStale bool
 }
 
 // holdingView is one row of the holdings list.
@@ -61,10 +67,33 @@ type holdingView struct {
 	CloseDate string
 	Value     string
 	Gain      delta
-	// Suggestion and Note are filled by later parts: the rule runner's
-	// suggestion and the research feed's latest AI note.
-	Suggestion string
-	Note       string
+	// Suggestions are the rules' suggestions for the stock from its latest
+	// rules run, one per strategy that holds it.
+	Suggestions []suggestionView
+	// Note is the research feed's latest note on the stock, or nil when
+	// there is none from a fresh upload.
+	Note *feedItemView
+}
+
+// suggestionView is one strategy's suggestion for a holding.
+type suggestionView struct {
+	Strategy string
+	// Words is the suggestion: Hold, Add, Trim or Sell.
+	Words string
+	// Reason is the rule's reason, or "" for a hold no rule decided.
+	Reason string
+	// Stop is the stop the strategy's stop rules give the holding, or "".
+	Stop string
+	// Date is the trading day of the rules run.
+	Date string
+}
+
+// suggestionWords says each suggestion as a word.
+var suggestionWords = map[signals.Suggestion]string{
+	signals.Hold:        "Hold",
+	signals.SuggestAdd:  "Add",
+	signals.SuggestTrim: "Trim",
+	signals.SuggestSell: "Sell",
 }
 
 // sources says in words where a set of figures came from.
@@ -120,6 +149,24 @@ func loadPortfolio(s *Server, r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	suggestions, err := latestSuggestions(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	held := make([]string, 0, len(set.Holdings))
+	for _, h := range set.Holdings {
+		held = append(held, h.Symbol)
+	}
+	notes, err := feed.LatestNotes(ctx, tx, held)
+	if err != nil {
+		return nil, err
+	}
+	up, err := feed.LatestUpload(ctx, tx)
+	if err != nil {
+		return nil, err
+	}
+	now := s.clock.Now()
+	d.FeedStale = up == nil || !feed.Fresh(up.At, now)
 	var invested, value money.Money
 	for _, h := range set.Holdings {
 		v := holdingView{
@@ -128,6 +175,10 @@ func loadPortfolio(s *Server, r *http.Request) (any, error) {
 			AverageCost: dollars(h.AverageCost),
 			Invested:    cents(h.Cost()),
 			Opened:      day(h.Opened),
+			Suggestions: suggestions[h.Symbol],
+		}
+		if n, ok := notes[h.Symbol]; ok {
+			v.Note = freshItem(&n, now)
 		}
 		invested = invested.Add(h.Cost())
 		if c, ok := closes[h.Symbol]; ok {
@@ -152,6 +203,48 @@ func loadPortfolio(s *Server, r *http.Request) (any, error) {
 		}
 	}
 	return d, nil
+}
+
+// latestSuggestions reads, for each current holding, every strategy's
+// suggestion from the newest rules run that made one for it, keyed by symbol.
+// It reads current_holdings in the same transaction as the caller's
+// holdings.Current, so both see the same set.
+func latestSuggestions(ctx context.Context, tx *sql.Tx) (map[string][]suggestionView, error) {
+	out := make(map[string][]suggestionView)
+	rows, err := tx.QueryContext(ctx,
+		`SELECT h.symbol, h.strategy, h.trading_date, h.suggestion, h.reason, h.stop FROM holding_suggestions AS h
+		 WHERE h.symbol IN (SELECT symbol FROM current_holdings)
+		   AND h.trading_date = (SELECT max(g.trading_date) FROM holding_suggestions AS g WHERE g.symbol = h.symbol)
+		 ORDER BY h.symbol, h.strategy`)
+	if err != nil {
+		return nil, fmt.Errorf("web: reading suggestions: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	for rows.Next() {
+		var symbol, date, suggestion string
+		var v suggestionView
+		var stop sql.Null[money.Price]
+		if err := rows.Scan(&symbol, &v.Strategy, &date, &suggestion, &v.Reason, &stop); err != nil {
+			return nil, fmt.Errorf("web: reading suggestions: %w", err)
+		}
+		d, err := time.ParseInLocation(clock.DateLayout, date, clock.Eastern)
+		if err != nil {
+			return nil, fmt.Errorf("web: reading suggestions: %w", err)
+		}
+		v.Date = day(d)
+		v.Words = suggestion
+		if w, ok := suggestionWords[signals.Suggestion(suggestion)]; ok {
+			v.Words = w
+		}
+		if stop.Valid {
+			v.Stop = dollars(stop.V.Money())
+		}
+		out[symbol] = append(out[symbol], v)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("web: reading suggestions: %w", err)
+	}
+	return out, nil
 }
 
 // latestCloses reads each current holding's newest closing price that the

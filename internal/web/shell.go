@@ -66,16 +66,9 @@ var views = []view{
 	{path: "/", name: "Today", content: "today", load: loadToday},
 	{path: approvalsPath, name: "Approvals", content: "approvals", load: loadApprovals},
 	{path: "/portfolio", name: "Portfolio", content: "portfolio", load: loadPortfolio},
-	{path: "/feed", name: "Feed", content: "placeholder", load: describe(
-		"candidate cases with their sources, and a button to add each one to your watchlist")},
+	{path: "/feed", name: "Feed", content: "feed", load: loadFeed},
 	{path: ordersPath, name: "Orders", content: "orders", load: loadOrders},
 	{path: settingsPath, name: "Settings", content: "settings", load: loadSettings},
-}
-
-// describe is the load function of a view not built yet: its data is the
-// sentence the placeholder shows.
-func describe(what string) func(*Server, *http.Request) (any, error) {
-	return func(*Server, *http.Request) (any, error) { return what, nil }
 }
 
 // pattern is the mux pattern for a view's path. The home page matches "/"
