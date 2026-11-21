@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/alexherrero/sherwood/internal/feed"
+	"github.com/alexherrero/sherwood/internal/limits"
 )
 
 // The research job's two routes, both machine routes.
@@ -107,7 +108,7 @@ func (s *Server) mountResearch() {
 }
 
 // buildExport builds the research export from one read transaction, for
-// the stocks held now and the strategy file's watchlist.
+// the stocks held now and the watchlist in force.
 func (s *Server) buildExport(r *http.Request) (feed.Export, error) {
 	ctx := r.Context()
 	tx, err := s.store.Reader().BeginTx(ctx, nil)
@@ -115,7 +116,11 @@ func (s *Server) buildExport(r *http.Request) (feed.Export, error) {
 		return feed.Export{}, err
 	}
 	defer func() { _ = tx.Rollback() }()
-	return feed.BuildExport(ctx, tx, s.clock.Now(), s.strategy.Watchlist)
+	watched, err := limits.Watchlist(ctx, tx, s.strategy)
+	if err != nil {
+		return feed.Export{}, err
+	}
+	return feed.BuildExport(ctx, tx, s.clock.Now(), watched)
 }
 
 // serveExport answers GET /research/export with the research export.

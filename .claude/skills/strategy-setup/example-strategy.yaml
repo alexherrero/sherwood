@@ -25,7 +25,11 @@ limits:
   price_cross_check_tolerance: 0.02
   min_paper_weeks: 4
 
-watchlist: []
+# Every stock a strategy may buy, because the risk check refuses a buy of a
+# stock that is neither watched nor held. In the app, "Add to watchlist" on
+# a research-feed candidate adds a stock to the watchlist in force until this
+# file changes.
+watchlist: [TECH1, TECH2, INDU1, HLTH1, STPL1, ENRG1, FINC1, UTIL1, HLTH2]
 
 # Three kinds of trade, spread across sectors, so the whole does not lean on
 # one market direction. The shares add up to 0.80, leaving the rest as cash.
@@ -48,6 +52,9 @@ strategies:
   - name: example-pullback
     portfolio_share: 0.25
     stocks: [HLTH1, STPL1]
+    # Also run these rules over the watchlist in force, which includes any
+    # candidate added from the Feed view. Optional; left out means false.
+    include_watchlist: true
     rules:
       - type: pullback
         settings:

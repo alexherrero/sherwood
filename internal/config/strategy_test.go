@@ -518,3 +518,60 @@ func TestSectorsOptionalWithoutTheSectorLimit(t *testing.T) {
 		t.Error("an empty sector was accepted without the limit")
 	}
 }
+
+func TestIncludeWatchlistIsOptionalAndOffByDefault(t *testing.T) {
+	s, err := ParseStrategy([]byte(validStrategy))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Strategies[0].IncludeWatchlist || s.Strategies[1].IncludeWatchlist {
+		t.Error("a strategy without include_watchlist should not run over the watchlist")
+	}
+	doc := replaced(t, validStrategy, "  - name: beta\n", "  - name: beta\n    include_watchlist: true\n")
+	if s, err = ParseStrategy([]byte(doc)); err != nil {
+		t.Fatal(err)
+	}
+	if s.Strategies[0].IncludeWatchlist || !s.Strategies[1].IncludeWatchlist {
+		t.Errorf("include_watchlist = %v, %v; want only beta's on",
+			s.Strategies[0].IncludeWatchlist, s.Strategies[1].IncludeWatchlist)
+	}
+	refuse(t, replaced(t, validStrategy, "  - name: beta\n", "  - name: beta\n    include_watchlist: often\n"),
+		"into bool")
+}
+
+func TestWithWatchlistExtendsOnlyTheStrategiesThatOptIn(t *testing.T) {
+	doc := replaced(t, validStrategy, "  - name: beta\n", "  - name: beta\n    include_watchlist: true\n")
+	s, err := ParseStrategy([]byte(doc))
+	if err != nil {
+		t.Fatal(err)
+	}
+	w := s.WithWatchlist([]string{"AAPL", "MSFT", "BRK.B", "NEWA"})
+	if got := strings.Join(w.Watchlist, ","); got != "AAPL,MSFT,BRK.B,NEWA" {
+		t.Errorf("watchlist = %s, want the one given", got)
+	}
+	if got := strings.Join(w.Strategies[0].Stocks, ","); got != "AAPL" {
+		t.Errorf("alpha's stocks = %s, want only its own", got)
+	}
+	if got := strings.Join(w.Strategies[1].Stocks, ","); got != "MSFT,BRK.B,AAPL,NEWA" {
+		t.Errorf("beta's stocks = %s, want its own and then the watched stocks it lacks", got)
+	}
+	if w.Hash != s.Hash || w.Limits.MaxOrdersPerDay != s.Limits.MaxOrdersPerDay {
+		t.Error("the copy should keep the file's hash and limits")
+	}
+	if got := strings.Join(s.Strategies[1].Stocks, ","); got != "MSFT,BRK.B" || len(s.Watchlist) != 3 {
+		t.Errorf("the original changed: beta's stocks %s, watchlist %v", got, s.Watchlist)
+	}
+}
+
+func TestValidSymbol(t *testing.T) {
+	for _, ok := range []string{"AAPL", "BRK.B", "BF-B", "A1"} {
+		if !ValidSymbol(ok) {
+			t.Errorf("ValidSymbol(%q) = false", ok)
+		}
+	}
+	for _, bad := range []string{"", "aapl", "<b>", "A B", "ABCDEFGHIJK", ".A", "A.B.C"} {
+		if ValidSymbol(bad) {
+			t.Errorf("ValidSymbol(%q) = true", bad)
+		}
+	}
+}

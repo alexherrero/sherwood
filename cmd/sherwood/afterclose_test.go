@@ -16,6 +16,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/execution"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
+	"github.com/alexherrero/sherwood/internal/limits"
 	"github.com/alexherrero/sherwood/internal/logging/loggingtest"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/notify"
@@ -36,6 +37,13 @@ import (
 // made-up strategy: a two-day breakout, a 10% fixed stop and fixed sizing.
 func acStrategy(t *testing.T) *config.Strategy {
 	t.Helper()
+	return acStrategyWith(t, "")
+}
+
+// acStrategyWith is acStrategy with extra written into the strategy's
+// entry, after its stocks, and a sector for the made-up FFF.
+func acStrategyWith(t *testing.T, extra string) *config.Strategy {
+	t.Helper()
 	head, _, ok := strings.Cut(readRepoFile(t, "strategy.example.yaml"), "\nwatchlist:\n")
 	if !ok {
 		t.Fatal("the example file has no watchlist block")
@@ -48,11 +56,12 @@ sectors:
   AAA: sector-a
   BBB: sector-b
   EEE: sector-a
+  FFF: sector-b
 strategies:
   - name: test-breakout
     portfolio_share: 0.50
     stocks: [AAA, BBB]
-    rules:
+` + extra + `    rules:
       - type: breakout
         settings:
           days: 2
@@ -96,6 +105,8 @@ type acHarness struct {
 	alerts  *notifytest.Fake
 	halts   *halt.Switch
 	paper   *paper.Broker
+	// strategy is the strategy file the job runs with.
+	strategy *config.Strategy
 }
 
 // newAC builds a store, two fake sources and a scheduler with the
@@ -105,6 +116,12 @@ type acHarness struct {
 //
 // missing names bars ("SYMBOL YYYY-MM-DD") the cross-check source lacks.
 func newAC(t *testing.T, now time.Time, catchUpDays int, missing ...string) *acHarness {
+	t.Helper()
+	return newACWith(t, now, catchUpDays, acStrategy(t), missing...)
+}
+
+// newACWith is newAC with the given strategy file.
+func newACWith(t *testing.T, now time.Time, catchUpDays int, strategy *config.Strategy, missing ...string) *acHarness {
 	t.Helper()
 	s, err := store.Open(context.Background(), filepath.Join(t.TempDir(), "sherwood.db"), now)
 	if err != nil {
@@ -145,11 +162,12 @@ func newAC(t *testing.T, now time.Time, catchUpDays int, missing ...string) *acH
 		t.Fatal(err)
 	}
 	ex, err := execution.New(execution.Config{Store: s, Clock: h.clock, Calendar: clock.NYSE(), Adapter: h.paper,
-		Checker: risk.Standard{}, Switch: h.halts, Strategy: acStrategy(t), Logger: log})
+		Checker: risk.Standard{}, Switch: h.halts, Strategy: strategy, Logger: log})
 	if err != nil {
 		t.Fatal(err)
 	}
-	a := &afterClose{store: s, clock: h.clock, calendar: clock.NYSE(), log: log, strategy: acStrategy(t),
+	h.strategy = strategy
+	a := &afterClose{store: s, clock: h.clock, calendar: clock.NYSE(), log: log, strategy: strategy,
 		halts: h.halts, alerts: h.alerts, paper: h.paper, exec: ex, primary: h.primary, check: h.check}
 	if err := a.register(h.sched); err != nil {
 		t.Fatal(err)
@@ -595,5 +613,57 @@ func TestHistoryDaysReachesTheOldestHolding(t *testing.T) {
 	old := holdings.Holding{Opened: d.AddDate(-2, 0, 0)}
 	if got, want := historyDays(d, []holdings.Holding{old}), 730; got != want {
 		t.Errorf("a holding from two years back: %d, want %d", got, want)
+	}
+}
+
+// TestAfterCloseRunsAnOptedInStrategyOverAStockAddedFromTheApp adds FFF to
+// the watchlist from the phone app. The tap itself makes no order. The
+// evening's run fetches FFF's prices, the strategy that opts in to the
+// watchlist signals its breakout, and the buy waits for approval after
+// passing the risk check, like any other.
+func TestAfterCloseRunsAnOptedInStrategyOverAStockAddedFromTheApp(t *testing.T) {
+	for _, c := range []struct {
+		name   string
+		extra  string
+		orders []string
+	}{
+		{"opted in", "    include_watchlist: true\n",
+			[]string{"2026-11-25 AAA buy awaiting_approval", "2026-11-25 FFF buy awaiting_approval"}},
+		{"not opted in", "", []string{"2026-11-25 AAA buy awaiting_approval"}},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			h := newACWith(t, at(t, "2026-11-24", 9, 0), 1, acStrategyWith(t, c.extra))
+			for d := day(t, "2026-11-02"); !d.After(day(t, "2026-11-24")); d = d.AddDate(0, 0, 1) {
+				if open, err := clock.NYSE().IsTradingDay(d); err != nil || !open {
+					continue
+				}
+				date, c := d.Format(clock.DateLayout), "10.00"
+				if date == "2026-11-24" {
+					c = "12.00"
+				}
+				b := pricestest.Bar("FFF", date, c, c, c, c, 1000)
+				h.primary.Add(b)
+				h.check.Add(b)
+			}
+			h.recordCash(t, "2026-11-24", "1000.00")
+			if _, err := limits.Watch(context.Background(), h.store, h.strategy, h.clock.Now(), "FFF"); err != nil {
+				t.Fatal(err)
+			}
+			if got := h.orderText(t); len(got) != 0 {
+				t.Fatalf("the tap made orders %q", got)
+			}
+
+			h.runAt(t, at(t, "2026-11-24", 16, 30))
+			var fetched bool
+			for _, call := range h.primary.Calls() {
+				fetched = fetched || call.Symbol == "FFF"
+			}
+			if !fetched {
+				t.Error("the after-close did not fetch the added stock's prices")
+			}
+			if got := h.orderText(t); !reflect.DeepEqual(got, c.orders) {
+				t.Errorf("orders %q, want %q", got, c.orders)
+			}
+		})
 	}
 }

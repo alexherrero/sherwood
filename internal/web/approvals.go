@@ -424,13 +424,18 @@ func (s *Server) snapshot(ctx context.Context, tx *sql.Tx, o orders.Order, now t
 	if err != nil {
 		return risk.Snapshot{}, err
 	}
+	// The watchlist in force: the file's, plus the phone's additions.
+	watched, err := limits.Watchlist(ctx, tx, s.strategy)
+	if err != nil {
+		return risk.Snapshot{}, err
+	}
 	return risk.Snapshot{
 		Now:                now,
 		Calendar:           s.calendar,
 		Preview:            true,
 		Limits:             lim,
 		Sectors:            s.strategy.Sectors,
-		Watchlist:          s.strategy.Watchlist,
+		Watchlist:          watched,
 		Held:               held,
 		Cash:               cash,
 		Value:              value,

@@ -289,7 +289,16 @@ Limits can move in only one direction from the phone, and that is on purpose.
 |---|---|---|
 | list of stock symbols | no | Well-formed symbols, no repeats; may be empty |
 
-The stocks the rules may buy besides the ones you already hold. Adding a candidate from the research feed puts it here. A buy of a stock that is neither on the watchlist nor already held is refused by the risk check.
+The stocks the rules may buy besides the ones you already hold. A buy of a stock that is neither on the watchlist in force nor already held is refused by the risk check, so list every stock a strategy may buy here as well as in its `stocks`.
+
+#### Adding a stock from the Feed view
+
+The Feed view has an **Add to watchlist** button on each candidate case. Only an approval device can use it. The tap adds the stock to the **watchlist in force**: the file's watchlist plus the stocks added from the app. It does not change the file. The addition is recorded in the database with its time and the source `phone`, and Settings lists it under recent changes.
+
+- The tap itself makes no order and no signal. From the next evening's run, the stock's prices are fetched, the research export lists it as watched, and the risk check counts it as watched.
+- Only a strategy that sets [`include_watchlist: true`](#strategies) runs its rules over it. Any buy those rules make is proposed, risk-checked and waits for your approval like any other. A strategy without `include_watchlist` never signals on it.
+- Additions last until the strategy file changes, just as a limit's tightening does. When sherwood starts with a new file, the watchlist in force is that file's again. To keep a stock for good, write it into `watchlist` in the file.
+- While a sector limit is in force (`max_sector_share`, from the file or tightened from the phone), a stock the file's `sectors` does not cover cannot be added from the app, because the risk check could not measure a buy of it. The Feed card says so instead of showing the button. To watch it, add it to `watchlist` and give it a line under [`sectors`](#sectors) in the file, then restart. You can also give a sector to a stock you might add later; `sectors` may list stocks that are on no list yet.
 
 A stock symbol is written in capital letters and digits, starts with a letter, may have one `.` or `-` followed by a share-class suffix (as in `BRK.B`), and is at most 10 characters long.
 
@@ -304,7 +313,7 @@ A stock symbol is written in capital letters and digits, starts with a letter, m
 
 Each stock's sector, for the sector limit. The risk check adds up what you hold in a buy's sector and refuses the buy if the sector would then be more than `max_sector_share` of the portfolio. Sherwood has no sector feed, so you give the sectors here. Name them however you like, but spell each one the same way every time: `technology` and `Technology` are two different sectors.
 
-When `max_sector_share` is set, every stock on the watchlist and in every strategy's `stocks` needs a sector, and sherwood refuses to start until each has one. A stock you hold that is in neither list needs no sector to start, but the risk check refuses a buy of any stock without one. When `max_sector_share` is left out, `sectors` may be left out too; any entries you do write are still checked.
+When `max_sector_share` is set, every stock on the watchlist and in every strategy's `stocks` needs a sector, and sherwood refuses to start until each has one. A stock you hold that is in neither list needs no sector to start, but the risk check refuses a buy of any stock without one. A stock added from the Feed view needs a sector here before it can be added while a sector limit is in force. When `max_sector_share` is left out, `sectors` may be left out too; any entries you do write are still checked.
 
 ```yaml
 sectors:
@@ -338,11 +347,13 @@ Each strategy has these fields:
 | `name` | text | yes | Unique across the file |
 | `portfolio_share` | share | yes | Above 0, at most 1 |
 | `stocks` | list of stock symbols | yes | At least one well-formed symbol, no repeats |
+| `include_watchlist` | true or false | no | `true` or `false`; left out means `false` |
 | `rules` | list of rules | yes | At least one rule |
 
 - **`name`** identifies the strategy in signals, orders and errors. Errors: `strategies[1].name is missing`, `strategy name "example-trend" is used more than once`.
 - **`portfolio_share`** is the strategy's share of the portfolio. Errors: `strategy "example-trend": portfolio_share is missing`, `strategy "example-trend": portfolio_share is 0, but it must be greater than 0`.
 - **`stocks`** are the symbols this strategy may trade, written like the watchlist's. Errors: `strategy "example-trend": stocks is missing or empty`, `strategy "example-trend": stocks[0] is "aapl", which is not a stock symbol (…)`, `strategy "example-trend": stocks lists AAPL more than once`.
+- **`include_watchlist`** turns on running this strategy's rules over the watchlist in force as well as its own `stocks`: the file's watchlist plus any stock added from the Feed view (see [Adding a stock from the Feed view](#adding-a-stock-from-the-feed-view)). Its own stocks come first and each watched stock is added once. It also widens a `momentum_ranking`, which then ranks the watched stocks alongside the strategy's own. Leave it out, or write `false`, and the strategy looks only at its own `stocks`. `sherwood check-strategy` prints a line for each strategy that sets it. The back-test runs such a strategy over the file's watchlist, since stocks added from the app live only in the database on the NAS.
 - **`rules`** are the rules the strategy runs, described below. Error: `strategy "example-trend": rules is missing or empty`.
 
 ### `rules`

@@ -117,7 +117,12 @@ type StrategyDef struct {
 	// PortfolioShare is the strategy's share of the portfolio, 0 to 1.
 	PortfolioShare Decimal
 	Stocks         []string
-	Rules          []Rule
+	// IncludeWatchlist is the file's include_watchlist: when true, the
+	// strategy's rules also run over every stock on the watchlist in force,
+	// the file's watchlist plus the stocks added from the phone app (see
+	// WithWatchlist).
+	IncludeWatchlist bool
+	Rules            []Rule
 }
 
 // Rule is one rule entry: a rule type and its settings as written.
@@ -151,10 +156,11 @@ type limitsFile struct {
 }
 
 type strategyDefFile struct {
-	Name           string     `yaml:"name"`
-	PortfolioShare *Decimal   `yaml:"portfolio_share"`
-	Stocks         []string   `yaml:"stocks"`
-	Rules          []ruleFile `yaml:"rules"`
+	Name             string     `yaml:"name"`
+	PortfolioShare   *Decimal   `yaml:"portfolio_share"`
+	Stocks           []string   `yaml:"stocks"`
+	IncludeWatchlist bool       `yaml:"include_watchlist"`
+	Rules            []ruleFile `yaml:"rules"`
 }
 
 type ruleFile struct {
@@ -324,6 +330,34 @@ func checkLimits(p *problems, f *limitsFile) Limits {
 	return l
 }
 
+// ValidSymbol reports whether sym is written as a stock symbol: capital
+// letters, digits, and one dot or dash for a share class, at most 10
+// characters.
+func ValidSymbol(sym string) bool { return len(sym) <= maxSymbolLen && symbolText.MatchString(sym) }
+
+// WithWatchlist returns a copy of s whose watchlist is watched, the
+// watchlist in force, and in which each strategy with IncludeWatchlist runs
+// its rules over its own stocks followed by every watched stock it does not
+// already list. s itself is left as it is; the copy keeps s's hash, limits
+// and sectors.
+func (s *Strategy) WithWatchlist(watched []string) *Strategy {
+	out := *s
+	out.Watchlist = slices.Clone(watched)
+	out.Strategies = make([]StrategyDef, len(s.Strategies))
+	for i, def := range s.Strategies {
+		def.Stocks = slices.Clone(def.Stocks)
+		if def.IncludeWatchlist {
+			for _, sym := range watched {
+				if !slices.Contains(def.Stocks, sym) {
+					def.Stocks = append(def.Stocks, sym)
+				}
+			}
+		}
+		out.Strategies[i] = def
+	}
+	return &out
+}
+
 // checkSymbols checks a list of stock symbols: well formed and not repeated.
 func checkSymbols(p *problems, field string, symbols []string) []string {
 	seen := make(map[string]bool, len(symbols))
@@ -360,7 +394,7 @@ func checkStrategies(p *problems, defs []strategyDefFile) []StrategyDef {
 			}
 			names[f.Name] = true
 		}
-		def := StrategyDef{Name: f.Name}
+		def := StrategyDef{Name: f.Name, IncludeWatchlist: f.IncludeWatchlist}
 		if f.PortfolioShare == nil {
 			p.add("%s: portfolio_share is missing", where)
 		} else {

@@ -97,7 +97,8 @@ type Snapshot struct {
 	// Sectors gives each stock's sector, from the strategy file. It is read
 	// only when Limits.MaxSectorShare is set.
 	Sectors map[string]string
-	// Watchlist is the strategy file's watchlist.
+	// Watchlist is the watchlist in force: the strategy file's, plus the
+	// stocks added from the phone app (limits.Watchlist).
 	Watchlist []string
 
 	// Held is the shares held of each stock. A stock with zero shares, or
