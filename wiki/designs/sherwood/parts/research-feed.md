@@ -19,7 +19,7 @@ estimated_scope: M
 
 ## Scope
 
-This part brings in the AI research. The Go application publishes the research export (symbols, prices and signals, with no balances or account details) behind the feed token, and accepts uploaded feeds at an endpoint that can only add feed rows after schema validation. On the Mac, a launchd job runs a plain script that fetches the export, runs Claude headless with the research skill and only read, web and own-folder write tools, then validates and uploads the feed. The app gains the Feed view with sources, the "Add to watchlist" tap, AI notes on holdings and signal explanations on approval cards.
+This part brings in the AI research. The Go application serves the research export on request (symbols, prices and signals, with no balances or account details) behind the feed token, and accepts uploaded feeds at an endpoint that can only add feed rows after schema validation. On the Mac, a launchd job runs a plain script that fetches the export, runs Claude headless with the research skill and only read, web and own-folder write tools, then validates and uploads the feed. The app gains the Feed view with sources, the "Add to watchlist" tap, AI notes on holdings and signal explanations on approval cards.
 
 ## Dependencies
 

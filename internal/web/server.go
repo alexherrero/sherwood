@@ -11,6 +11,9 @@
 // registered with HandleRead and can only be reached by GET, and a change is
 // registered with HandleChange and can only be reached by POST with a valid
 // anti-forgery token. A change can also be limited to the approval devices.
+// The research job's script on the Mac is the one machine caller: its two
+// routes are registered with HandleMachine, pass the same login check, and
+// then need the feed token instead of a session and an anti-forgery token.
 // Every response carries a strict Content-Security-Policy and the other
 // security headers, and is marked no-store by default.
 package web
@@ -31,6 +34,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/risk"
+	"github.com/alexherrero/sherwood/internal/secret"
 	"github.com/alexherrero/sherwood/internal/store"
 )
 
@@ -87,6 +91,9 @@ type Config struct {
 	// BrokerHealthy says whether the broker adapter is answering, for the
 	// approval's risk check. Required.
 	BrokerHealthy func(context.Context) bool
+	// FeedToken is the token the research job's script presents to read the
+	// export and upload a feed. Required.
+	FeedToken secret.Secret
 	// Orders cancels open orders at the broker when the stop switch is
 	// thrown: the execution layer. Leave it nil when no broker adapter is
 	// built (live mode, until live trading): the switch still declines the
@@ -111,8 +118,11 @@ type Server struct {
 	checker       risk.Checker
 	brokerHealthy func(context.Context) bool
 	orders        OrderCanceller
-	mux           *http.ServeMux
-	handler       http.Handler
+	feedToken     secret.Secret
+	// machine holds the mux patterns registered with HandleMachine.
+	machine map[string]bool
+	mux     *http.ServeMux
+	handler http.Handler
 	// reads lists every read pattern registered, for tests.
 	reads []string
 }
@@ -135,6 +145,9 @@ func New(cfg Config) (*Server, error) {
 	}
 	if cfg.Strategy == nil || cfg.Calendar == nil || cfg.Checker == nil || cfg.BrokerHealthy == nil {
 		return nil, errors.New("web: the strategy file, the calendar, the risk check and the broker's health are required")
+	}
+	if cfg.FeedToken.IsZero() {
+		return nil, errors.New("web: the feed token is required")
 	}
 	if cfg.Mode != config.ModePaper && cfg.Mode != config.ModeLive {
 		return nil, fmt.Errorf("web: the trading mode must be %q or %q", config.ModePaper, config.ModeLive)
@@ -159,6 +172,8 @@ func New(cfg Config) (*Server, error) {
 		checker:       cfg.Checker,
 		brokerHealthy: cfg.BrokerHealthy,
 		orders:        cfg.Orders,
+		feedToken:     cfg.FeedToken,
+		machine:       map[string]bool{},
 		mux:           http.NewServeMux(),
 	}
 	for _, a := range cfg.ApprovalDevices {
@@ -171,6 +186,7 @@ func New(cfg Config) (*Server, error) {
 	s.mountStopSwitch()
 	s.mountApprovals()
 	s.mountLimits()
+	s.mountResearch()
 	s.HandleRead("/health", http.HandlerFunc(health))
 	return s, nil
 }

@@ -17,6 +17,7 @@
 // their recent checked closes, and the latest trading date's signals with
 // their rules' reasons. It has no balances, share counts, cash, order details
 // or account details, and its types have no field that could carry one.
+// BuildExport builds one from the database on request.
 //
 // # The feed file
 //
