@@ -225,3 +225,29 @@ func TestCancelEndsTheCall(t *testing.T) {
 		t.Fatalf("err = %v, want it to wrap context.Canceled", err)
 	}
 }
+
+func TestCallForSetsItsOwnTimeLimit(t *testing.T) {
+	path := silentHelper(t)
+	start := time.Now()
+	err := NewClient(path, time.Hour).CallFor(context.Background(), "ping", 50*time.Millisecond, nil, nil)
+	if !errors.Is(err, ErrNoReply) || !strings.Contains(err.Error(), "no reply within 50ms") {
+		t.Fatalf("err = %v, want ErrNoReply after 50ms", err)
+	}
+	if elapsed := time.Since(start); elapsed > within/2 {
+		t.Errorf("silent call took %s; CallFor's time limit did not hold", elapsed)
+	}
+}
+
+func TestCallForLongerThanTheClientsLimit(t *testing.T) {
+	path := fakeHelper(t, replyWith(t, func(req map[string]any) string {
+		return `{"id":"` + req["id"].(string) + `","ok":true,"result":{}}` + "\n"
+	}))
+	// A client limit of zero or less falls back to the default; CallFor's
+	// own limit is used as given.
+	if err := NewClient(path, time.Second).CallFor(context.Background(), "ping", time.Minute, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+	if err := NewClient(path, time.Second).CallFor(context.Background(), "ping", 0, nil, nil); err != nil {
+		t.Fatal(err)
+	}
+}

@@ -100,6 +100,9 @@ func TestContractWithTheRealHelper(t *testing.T) {
 	client := h.sup.Client()
 
 	receive(t, h.ready, "the helper to be ready")
+	if !h.sup.Healthy() {
+		t.Error("a ready helper is not healthy")
+	}
 	first, err := client.Ping(ctx)
 	if err != nil {
 		t.Fatalf("Ping: %v", err)
@@ -128,6 +131,9 @@ func TestContractWithTheRealHelper(t *testing.T) {
 	if !strings.Contains(reported.Error(), "killed") {
 		t.Errorf("reported %q, want it to say the helper was killed", reported)
 	}
+	if h.sup.Healthy() {
+		t.Error("a killed helper is still healthy")
+	}
 
 	// The supervisor is now waiting to restart. Calls fail meanwhile.
 	wait := receive(t, h.clock.waits, "the restart wait")
@@ -141,6 +147,9 @@ func TestContractWithTheRealHelper(t *testing.T) {
 	// Let the restart happen; a new helper answers.
 	wait.ch <- time.Time{}
 	receive(t, h.ready, "the restarted helper to be ready")
+	if !h.sup.Healthy() {
+		t.Error("the restarted helper is not healthy")
+	}
 	second, err := client.Ping(ctx)
 	if err != nil {
 		t.Fatalf("Ping after restart: %v", err)
@@ -205,6 +214,9 @@ func TestNotReadyInTimeIsAStartFailure(t *testing.T) {
 	if !errors.Is(err, ErrStart) || !strings.Contains(err.Error(), "not ready within") {
 		t.Fatalf("reported %v, want a start timeout", err)
 	}
+	if h.sup.Healthy() {
+		t.Error("a helper that never said it was ready is healthy")
+	}
 	receive(t, h.clock.waits, "the restart wait")
 	h.stop(t)
 }
@@ -219,6 +231,9 @@ func TestCleanExitIsStillReported(t *testing.T) {
 	if !errors.As(err, &exit) || exit.Err != nil {
 		t.Fatalf("reported %v, want an ExitError for a clean exit", err)
 	}
+	if h.sup.Healthy() {
+		t.Error("a helper that exited is still healthy")
+	}
 	receive(t, h.clock.waits, "the restart wait")
 	if !strings.Contains(h.stderr.String(), "chatter") {
 		t.Errorf("helper stdout was not passed on: %q", h.stderr.String())
@@ -231,7 +246,13 @@ func TestShutdownStopsARunningHelperWithoutReporting(t *testing.T) {
 		Command: []string{"sh", "-c", "echo ready; exec sleep 60"},
 	})
 	receive(t, h.ready, "the helper to be ready")
+	if !h.sup.Healthy() {
+		t.Error("a ready helper is not healthy")
+	}
 	h.stop(t)
+	if h.sup.Healthy() {
+		t.Error("the helper is still healthy after shutdown")
+	}
 }
 
 func TestNewSupervisorChecksItsConfig(t *testing.T) {

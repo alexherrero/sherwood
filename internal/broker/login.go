@@ -14,8 +14,8 @@ import (
 // succeeds re-arms it, so a session that lapses again is reported again. A
 // restart re-arms it too. It is safe for concurrent use.
 //
-// Nothing calls the broker on a schedule yet. The live adapter (the
-// live-trading part) passes its calls through Seen.
+// The Robinhood adapter (package robinhood) passes every helper call's
+// outcome through Seen.
 type LoginAlert struct {
 	Notifier notify.Notifier
 
