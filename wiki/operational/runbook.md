@@ -1,6 +1,6 @@
 # Runbook
 
-This page is for the moments when something needs you: trading has halted, sherwood's records and the broker's disagree, the database has to come back from a backup, or a new version has to be rolled back. Each section says what you will see, what to check, and what to do, in order. It grows as sherwood does; the live-trading part will add to it.
+This page is for the moments when something needs you: trading has halted, sherwood's records and the broker's disagree, the database has to come back from a backup, a new version has to be rolled back, or the research feed has gone stale. Each section says what you will see, what to check, and what to do, in order. It grows as sherwood does; the live-trading part will add to it.
 
 Every path, address, name and number on this page is a placeholder. Where a command names the data folder or the backup share on the NAS, use your own paths in their place. The container is called `sherwood`, as in the example Compose file.
 
@@ -175,6 +175,18 @@ After a clean stop the `-wal` file is empty or gone, so the one file is the whol
 5. Check the log for `database ready` and `sherwood started`, then follow steps 6 and 7 of [Restoring a backup](#restoring-a-backup).
 
 Everything recorded since that copy is lost, as with any restore. Never edit a migration file that has already run, and never delete rows from `schema_migrations` to make an older version start: either one leaves a database that no version of sherwood describes correctly.
+
+## Stale feed or failed upload
+
+The research feed comes from a job on your Mac, set up as in [Set up the research job](../how-to/set-up-the-research-job). When no new feed has arrived for a while, the Feed view shows a quiet note, and approval cards show the rules' own reasons in place of Claude's explanations. You get no notification, and nothing else changes: the rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
+
+To bring the feed back:
+
+1. On the Mac, read the end of the job's log, `research-job.log` in the job's work folder. The last lines say which step stopped and why.
+2. Fix what it shows. Most often the Mac was asleep or off the tailnet, the NAS was down, or the Claude login lapsed (run `claude`, then `/login`). The how-to's [troubleshooting table](../how-to/set-up-the-research-job#troubleshooting) covers every message.
+3. Run the job again by hand with `launchctl kickstart -k gui/$(id -u)/com.example.sherwood-research`, and check the end of the log says `done`.
+
+A failed upload stores nothing, so the previous feed stays on the phone until a good one arrives. An upload that worked but dropped some items still stored the rest; the log lists each dropped item and why.
 
 ## Known wording slips
 
