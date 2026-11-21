@@ -407,3 +407,45 @@ func TestTheTablesAreAppendOnly(t *testing.T) {
 		}
 	}
 }
+
+// ThrowOnce gives one halt and one push per cause while that cause is active,
+// whatever the evidence: a helper that keeps crashing, each time with its own
+// words, halts once. Another cause still halts, and after a reset the cause
+// halts again.
+func TestThrowOnceHaltsOncePerActiveCause(t *testing.T) {
+	h := newHarness(t)
+	ctx := context.Background()
+	first, thrown, err := h.sw.ThrowOnce(ctx, BrokerError, "broker helper exited: exit status 1")
+	if err != nil || !thrown {
+		t.Fatalf("first throw: thrown %v, %v", thrown, err)
+	}
+	for i := range 5 {
+		h.clock.Advance(time.Second)
+		again, thrown, err := h.sw.ThrowOnce(ctx, BrokerError, fmt.Sprintf("broker helper did not start: attempt %d", i))
+		if err != nil || thrown || again != first {
+			t.Fatalf("restart %d: %+v, thrown %v, %v; want the first halt back", i, again, thrown, err)
+		}
+	}
+	if h.count(t, "halts") != 1 || h.halted(t) != 1 {
+		t.Fatalf("%d halts, %d alerts; want 1 and 1", h.count(t, "halts"), h.halted(t))
+	}
+	// Throw still records new evidence under the same cause.
+	h.throw(t, BrokerError, "Reading the account failed")
+	// Another cause halts as usual.
+	if _, thrown, err := h.sw.ThrowOnce(ctx, DailyLoss, "lost too much"); err != nil || !thrown {
+		t.Fatalf("another cause: thrown %v, %v", thrown, err)
+	}
+	if _, err := h.sw.Reset(ctx, ResetRequest{Through: h.state(t).Newest(),
+		Reason: "logged in again", Device: "100.64.0.10"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, thrown, err := h.sw.ThrowOnce(ctx, BrokerError, "broker helper exited: exit status 1"); err != nil || !thrown {
+		t.Fatalf("after a reset: thrown %v, %v", thrown, err)
+	}
+	if h.count(t, "halts") != 4 || h.halted(t) != 4 {
+		t.Errorf("%d halts, %d alerts; want 4 and 4", h.count(t, "halts"), h.halted(t))
+	}
+	if _, _, err := h.sw.ThrowOnce(ctx, BrokerError, "  "); !errors.Is(err, ErrInvalid) {
+		t.Errorf("empty evidence: %v, want ErrInvalid", err)
+	}
+}

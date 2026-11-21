@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/alexherrero/sherwood/internal/broker/paper"
 	"github.com/alexherrero/sherwood/internal/clock"
@@ -24,6 +25,15 @@ import (
 const (
 	sendJob      = "send-orders"
 	reconcileJob = "reconcile"
+)
+
+// The 15-minute checks, interval jobs inside market hours, and the alert
+// group they share. Never rename them once they have run.
+const (
+	openOrdersCheckJob = "open-orders-check"
+	dailyLossCheckJob  = "daily-loss-check"
+	checksAlertGroup   = "intraday-checks"
+	checkEvery         = 15 * time.Minute
 )
 
 // trading is what registerTrading built. Both are nil in live mode.
@@ -81,6 +91,41 @@ func registerTrading(e env, sched *scheduler.Scheduler, mode config.Mode, strate
 		},
 	})
 	return trading{paper: pb, exec: ex}, err
+}
+
+// registerChecks registers the 15-minute checks through ex: the broker's open
+// orders against sherwood's, and the day's loss from the broker's account
+// value against the daily loss limit in force. Both run every 15 minutes
+// inside market hours on trading days, never make up a missed slot, and share
+// one failure alert a date. Each halts trading itself on what it finds; a run
+// fails when a broker call failed (which halted trading too) or the loss
+// could not be measured.
+//
+// Live mode registers them once its adapter is built (live-trading task 4);
+// paper mode does not, because the paper broker's open orders and value are
+// sherwood's own records.
+func registerChecks(sched *scheduler.Scheduler, ex *execution.Executor) error {
+	err := sched.Register(scheduler.Job{
+		Name:       openOrdersCheckJob,
+		Every:      checkEvery,
+		AlertGroup: checksAlertGroup,
+		Run: func(ctx context.Context, _ scheduler.Run) error {
+			_, err := ex.CheckOpenOrders(ctx)
+			return err
+		},
+	})
+	if err != nil {
+		return err
+	}
+	return sched.Register(scheduler.Job{
+		Name:       dailyLossCheckJob,
+		Every:      checkEvery,
+		AlertGroup: checksAlertGroup,
+		Run: func(ctx context.Context, r scheduler.Run) error {
+			_, err := ex.CheckDailyLoss(ctx, r.TradingDate)
+			return err
+		},
+	})
 }
 
 // reconcile runs one reconciliation. A difference halts trading and is not
