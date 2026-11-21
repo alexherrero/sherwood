@@ -204,17 +204,9 @@ func (e *Executor) load(ctx context.Context, session time.Time) (*run, error) {
 	if r.closes, err = prices.LatestCloses(ctx, q, prev); err != nil {
 		return nil, fmt.Errorf("execution: %w", err)
 	}
-	previous := cash
-	for _, h := range set.Holdings {
-		c, ok := r.closes[h.Symbol]
-		if !ok {
-			// Without every close the previous value is unknown; zero makes
-			// the daily loss check refuse, which fails closed.
-			previous = money.Money{}
-			break
-		}
-		previous = previous.Add(h.Value(c))
-	}
+	// Without every close the previous value is unknown; zero makes the
+	// daily loss check refuse, which fails closed.
+	previous, _ := previousValue(set, cash, r.closes)
 
 	day, err := orders.ForDate(ctx, q, session)
 	if err != nil {
@@ -265,7 +257,7 @@ func (e *Executor) load(ctx context.Context, session time.Time) (*run, error) {
 
 	acct, err := call(ctx, e.timeout, e.adapter.Account)
 	if err != nil {
-		return nil, e.halt(ctx, halt.BrokerError, "Reading the account before the 09:35 send failed: "+err.Error(), err)
+		return nil, e.brokerFailed(ctx, "Reading the account before the 09:35 send failed: "+err.Error(), err)
 	}
 	healthy := true
 	if h, ok := e.adapter.(broker.Health); ok {
@@ -693,6 +685,38 @@ func (e *Executor) move(ctx context.Context, o orders.Order, c orders.Change) (o
 func (e *Executor) halt(ctx context.Context, c halt.Cause, evidence string, cause error) error {
 	_, _, err := e.sw.Throw(ctx, c, evidence)
 	return errors.Join(fmt.Errorf("%w: %s", ErrHalted, evidence), cause, err)
+}
+
+// SessionExpired opens the evidence of a broker_error halt thrown because
+// the broker session needs a new login (broker.LoginNeeded).
+const SessionExpired = "The broker session has expired or was refused: log in again with the broker helper's login command on the NAS, then reset the switch."
+
+// brokerFailed halts trading for a broker call that failed, the same as halt
+// does, but with halt.Switch.ThrowOnce: one broker problem, such as an
+// expired session or a helper that is down, fails every call until it is
+// fixed, and it halts and pushes once, not once per call. An expired session
+// says so first in the evidence.
+func (e *Executor) brokerFailed(ctx context.Context, evidence string, cause error) error {
+	if broker.LoginNeeded(cause) {
+		evidence = SessionExpired + " " + evidence
+	}
+	_, _, err := e.sw.ThrowOnce(ctx, halt.BrokerError, evidence)
+	return errors.Join(fmt.Errorf("%w: %s", ErrHalted, evidence), cause, err)
+}
+
+// previousValue is the portfolio's value at the previous close: the cash
+// plus each holding at its latest close in closes. ok is false, and the value
+// zero, when a holding has no close, so the value is not known.
+func previousValue(set holdings.Set, cash money.Money, closes map[string]money.Price) (v money.Money, ok bool) {
+	v = cash
+	for _, h := range set.Holdings {
+		c, ok := closes[h.Symbol]
+		if !ok {
+			return money.Money{}, false
+		}
+		v = v.Add(h.Value(c))
+	}
+	return v, true
 }
 
 // unknown moves a sent order whose outcome is not known to unknown, in its

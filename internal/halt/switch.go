@@ -68,6 +68,10 @@ func New(cfg Config) (*Switch, error) {
 // the failure logged. An error means the halt was not recorded; the caller
 // must treat that as at least as serious as the halt itself.
 func (s *Switch) Throw(ctx context.Context, cause Cause, evidence string) (h Halt, thrown bool, err error) {
+	return s.throw(ctx, cause, evidence, false)
+}
+
+func (s *Switch) throw(ctx context.Context, cause Cause, evidence string, anyEvidence bool) (h Halt, thrown bool, err error) {
 	if !cause.Valid() {
 		return Halt{}, false, fmt.Errorf("%w: cause %q is not a short snake_case word", ErrInvalid, cause)
 	}
@@ -75,7 +79,7 @@ func (s *Switch) Throw(ctx context.Context, cause Cause, evidence string) (h Hal
 	if evidence == "" {
 		return Halt{}, false, fmt.Errorf("%w: a halt needs evidence", ErrInvalid)
 	}
-	h, thrown, err = s.record(ctx, cause, evidence)
+	h, thrown, err = s.record(ctx, cause, evidence, anyEvidence)
 	if err != nil {
 		s.log.Error("trading must halt, but the halt could not be recorded",
 			"halt_cause", string(cause), "error", err)
@@ -92,21 +96,33 @@ func (s *Switch) Throw(ctx context.Context, cause Cause, evidence string) (h Hal
 	return h, true, nil
 }
 
-// record writes the halt unless an active one matches it exactly.
-func (s *Switch) record(ctx context.Context, cause Cause, evidence string) (h Halt, thrown bool, err error) {
+// ThrowOnce is Throw for a cause that keeps recurring while one problem
+// lasts, such as a broker helper that crashes and is restarted again and
+// again, or a broker session that has expired: while any halt with the same
+// cause is active, whatever its evidence, nothing is recorded or sent, and
+// that halt is returned with thrown false. So one problem gives one halt and
+// one push until you reset the switch; after a reset, the next one halts
+// again.
+func (s *Switch) ThrowOnce(ctx context.Context, cause Cause, evidence string) (h Halt, thrown bool, err error) {
+	return s.throw(ctx, cause, evidence, true)
+}
+
+// record writes the halt unless an active one matches it: exactly, or by
+// cause alone when anyEvidence is set.
+func (s *Switch) record(ctx context.Context, cause Cause, evidence string, anyEvidence bool) (h Halt, thrown bool, err error) {
 	err = s.write(ctx, func(tx *sql.Tx) error {
 		var at string
 		err := tx.QueryRowContext(ctx,
-			`SELECT id, at FROM halts
-			 WHERE cause = ? AND evidence = ?
+			`SELECT id, evidence, at FROM halts
+			 WHERE cause = ? AND (? OR evidence = ?)
 			   AND id > (SELECT coalesce(max(through_halt_id), 0) FROM halt_resets)
-			 ORDER BY id DESC LIMIT 1`, string(cause), evidence).Scan(&h.ID, &at)
+			 ORDER BY id DESC LIMIT 1`, string(cause), anyEvidence, evidence).Scan(&h.ID, &h.Evidence, &at)
 		switch {
 		case err == nil:
 			if h.At, err = store.ParseTime(at); err != nil {
 				return err
 			}
-			h.Cause, h.Evidence = cause, evidence
+			h.Cause = cause
 			return nil
 		case !errors.Is(err, sql.ErrNoRows):
 			return err

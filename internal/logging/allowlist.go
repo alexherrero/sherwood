@@ -21,6 +21,7 @@ var allowedKeys = []string{
 	"attempt",      // attempt number for a retried run
 	"missed_dates", // how many trading dates a catch-up covers
 	"missed_runs",  // how many runs a pass found missed and ran late
+	"slot",         // an interval job run's slot, HH:MM US Eastern
 
 	// Signals, risk decisions and orders.
 	"strategy_hash", // hash of the strategy file in force

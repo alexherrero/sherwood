@@ -84,6 +84,14 @@ func (e *Executor) settle(ctx context.Context, res *Reconciled) error {
 	if err != nil {
 		return fmt.Errorf("execution: %w", err)
 	}
+	_, err = e.settleOrders(ctx, res, pending)
+	return err
+}
+
+// settleOrders looks up each of pending once and records the broker's
+// answer. It returns the answers it could record, by order key.
+func (e *Executor) settleOrders(ctx context.Context, res *Reconciled, pending []orders.Order) (map[string]broker.Report, error) {
+	answers := map[string]broker.Report{}
 	var errs []error
 	for _, o := range pending {
 		rep, err := call(ctx, e.timeout, func(ctx context.Context) (broker.Report, error) { return e.adapter.Lookup(ctx, o.Key) })
@@ -106,14 +114,15 @@ func (e *Executor) settle(ctx context.Context, res *Reconciled) error {
 		case errors.As(err, &diff):
 			res.Differences = append(res.Differences, diff.what)
 		case err != nil:
-			return errors.Join(append(errs, err)...)
+			return answers, errors.Join(append(errs, err)...)
 		default:
+			answers[o.Key] = rep
 			res.Settled = append(res.Settled, settled)
 			e.log.Info("order settled by lookup", "order_key", settled.Key, "symbol", settled.Symbol,
 				"from_state", string(o.State), "state", string(settled.State))
 		}
 	}
-	return errors.Join(errs...)
+	return answers, errors.Join(errs...)
 }
 
 // settleOne records the broker's answer about o in one transaction. A
@@ -226,15 +235,15 @@ func filled(ctx context.Context, q orders.Querier, id int64) (money.Quantity, er
 func (e *Executor) compare(ctx context.Context, res *Reconciled) error {
 	positions, err := call(ctx, e.timeout, e.adapter.Holdings)
 	if err != nil {
-		return e.halt(ctx, halt.BrokerError, "Reading the broker's holdings for reconciliation failed: "+err.Error(), err)
+		return e.brokerFailed(ctx, "Reading the broker's holdings for reconciliation failed: "+err.Error(), err)
 	}
 	brokerCash, err := call(ctx, e.timeout, e.cash)
 	if err != nil {
-		return e.halt(ctx, halt.BrokerError, "Reading the broker's cash for reconciliation failed: "+err.Error(), err)
+		return e.brokerFailed(ctx, "Reading the broker's cash for reconciliation failed: "+err.Error(), err)
 	}
 	open, err := call(ctx, e.timeout, e.adapter.OpenOrders)
 	if err != nil {
-		return e.halt(ctx, halt.BrokerError, "Listing the broker's open orders for reconciliation failed: "+err.Error(), err)
+		return e.brokerFailed(ctx, "Listing the broker's open orders for reconciliation failed: "+err.Error(), err)
 	}
 
 	// Read sherwood's side in one read transaction, so it is one moment.
@@ -285,9 +294,22 @@ func (e *Executor) compare(ctx context.Context, res *Reconciled) error {
 			fmt.Sprintf("Cash: sherwood has recorded %s, the broker $%s.", ourCash, brokerCash))
 	}
 
+	diffs, err := compareOpen(ctx, tx, open)
+	if err != nil {
+		return err
+	}
+	res.Differences = append(res.Differences, diffs...)
+	return nil
+}
+
+// compareOpen compares the orders sherwood has open (or whose answer it never
+// recorded) with the broker's open orders: which ones, their status and their
+// filled shares. It returns the differences, one sentence each.
+func compareOpen(ctx context.Context, tx orders.Querier, open []broker.Report) ([]string, error) {
+	var diffs []string
 	mine, err := orders.InState(ctx, tx, orders.Submitted, orders.Accepted, orders.PartiallyFilled, orders.Unknown)
 	if err != nil {
-		return fmt.Errorf("execution: %w", err)
+		return nil, fmt.Errorf("execution: %w", err)
 	}
 	byRef := map[string]orders.Order{}
 	for _, o := range mine {
@@ -298,30 +320,30 @@ func (e *Executor) compare(ctx context.Context, res *Reconciled) error {
 		seen[r.Ref] = true
 		o, ok := byRef[r.Ref]
 		if !ok {
-			res.Differences = append(res.Differences,
+			diffs = append(diffs,
 				fmt.Sprintf("The broker has an open order (reference %s) that sherwood does not have open.", r.Ref))
 			continue
 		}
 		got, err := filled(ctx, tx, o.ID)
 		if err != nil {
-			return fmt.Errorf("execution: %w", err)
+			return nil, fmt.Errorf("execution: %w", err)
 		}
 		if !got.Equal(r.Filled) {
-			res.Differences = append(res.Differences, fmt.Sprintf("%s: the broker reports %s shares filled, sherwood has recorded %s.",
+			diffs = append(diffs, fmt.Sprintf("%s: the broker reports %s shares filled, sherwood has recorded %s.",
 				describe(o), r.Filled, got))
 		}
 		if want := openStatus(o.State); want != "" && r.Status != want {
-			res.Differences = append(res.Differences, fmt.Sprintf("%s: it is %s in sherwood's records, %s at the broker.",
+			diffs = append(diffs, fmt.Sprintf("%s: it is %s in sherwood's records, %s at the broker.",
 				describe(o), o.State, r.Status))
 		}
 	}
 	for _, o := range mine {
 		if !seen[o.Key] {
-			res.Differences = append(res.Differences,
+			diffs = append(diffs,
 				fmt.Sprintf("%s: it is %s in sherwood's records, but the broker does not list it as open.", describe(o), o.State))
 		}
 	}
-	return nil
+	return diffs, nil
 }
 
 // cash reads the broker's cash: on its own when the adapter can, otherwise

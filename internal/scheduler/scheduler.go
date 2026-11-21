@@ -43,8 +43,10 @@ const InputsUnavailable = "inputs-unavailable"
 // scheduler stops, because a panic is a bug and sherwood fails closed.
 var ErrJobPanicked = errors.New("scheduler: job panicked")
 
-// Job is a daily job. It runs once per trading date, at Hour:Minute US
-// Eastern time on that date, or once per calendar date when EveryDay is set.
+// Job is a daily job or an interval job. A daily job runs once per trading
+// date, at Hour:Minute US Eastern time on that date, or once per calendar date
+// when EveryDay is set. An interval job (Every set) runs every Every inside
+// market hours on trading days instead.
 type Job struct {
 	// Name keys the job's runs in job_runs. It must be unique and must not
 	// change once the job has run, or its history is lost.
@@ -58,6 +60,16 @@ type Job struct {
 	// backup is the example, and a backup taken late is as good as the one
 	// that was missed.
 	EveryDay bool
+	// Every, when set, makes this an interval job: it runs at the session's
+	// open and then every Every until the close, on trading days only (the
+	// last slot starts before the close, and a half day has fewer slots).
+	// Hour, Minute and EveryDay must be left zero. Every must be a whole
+	// number of minutes, at least one. A slot the scheduler could not run
+	// while it was current (the container was down, or another run took its
+	// time) is never made up: the next slot is the next run. Each date has
+	// one job_runs row per interval job, rewritten by every slot, so it shows
+	// the latest slot. A failed slot is not tried again.
+	Every time.Duration
 	// Alert is what is sent to your phone when a run fails. The zero Alert
 	// means notify.JobFailed().
 	Alert notify.Alert
@@ -65,7 +77,9 @@ type Job struct {
 	// as the after-close job and its retries: once one run in the group has
 	// failed for a date, later failures in the group on that date send no
 	// alert. Empty means the job's own name, so a run retried after a restart
-	// still alerts only once.
+	// still alerts only once. An interval job alerts on its first failed
+	// slot of a date and not again that date while this process runs; after
+	// a restart, only when the date's last recorded slot did not fail.
 	AlertGroup string
 	// Inputs, when set, returns everything the run will read, in a stable
 	// encoding. The scheduler hashes it together with the trading date and
@@ -140,6 +154,10 @@ type Scheduler struct {
 	// tried holds failed runs already tried by this process, so a failure is
 	// not retried in a tight loop; the next start tries it again.
 	tried map[runKey]bool
+	// alerted holds the alert groups (in runKey.job) and dates whose
+	// failure an interval job has already sent, because an interval job's
+	// failed row is rewritten by its next slot.
+	alerted map[runKey]bool
 
 	// onWait, when set by a test, is called once the loop has asked the
 	// clock to wake it, with the time it will wake at.
@@ -181,6 +199,7 @@ func New(cfg Config) (*Scheduler, error) {
 		alerts:  alerts,
 		catchUp: days,
 		tried:   map[runKey]bool{},
+		alerted: map[runKey]bool{},
 	}, nil
 }
 
@@ -199,6 +218,12 @@ func (s *Scheduler) Register(j Job) error {
 		return fmt.Errorf("scheduler: job %q time %d:%02d is not a time of day", j.Name, j.Hour, j.Minute)
 	case j.Alert != (notify.Alert{}) && !j.Alert.Valid():
 		return fmt.Errorf("scheduler: job %q has an alert not made by package notify", j.Name)
+	case j.Every < 0:
+		return fmt.Errorf("scheduler: job %q interval %v is negative", j.Name, j.Every)
+	case j.Every > 0 && (j.Every < time.Minute || j.Every%time.Minute != 0):
+		return fmt.Errorf("scheduler: job %q interval %v is not a whole number of minutes", j.Name, j.Every)
+	case j.Every > 0 && (j.Hour != 0 || j.Minute != 0 || j.EveryDay):
+		return fmt.Errorf("scheduler: job %q runs at an interval, so it takes no time of day and is not every-day", j.Name)
 	}
 	for _, have := range s.jobs {
 		if have.Name == j.Name {
@@ -276,6 +301,10 @@ func (s *Scheduler) RunDue(ctx context.Context) error {
 		session clock.Session
 		at      time.Time
 	}
+	current, err := s.todaysSession(now)
+	if err != nil {
+		return err
+	}
 	var queue []due
 	missed := make([]int, len(jobs))
 	late := 0
@@ -312,9 +341,25 @@ func (s *Scheduler) RunDue(ctx context.Context) error {
 			return err
 		}
 	}
+	for i, j := range jobs {
+		if j.Every == 0 || current == nil {
+			continue
+		}
+		slot, ok := currentSlot(*current, j.Every, now)
+		if !ok {
+			continue
+		}
+		ran, err := s.slotRan(ctx, runKey{j.Name, today}, slot)
+		if err != nil {
+			return err
+		}
+		if !ran {
+			queue = append(queue, due{i, *current, slot})
+		}
+	}
 	for _, ses := range sessions {
 		for i, j := range jobs {
-			if j.EveryDay {
+			if j.EveryDay || j.Every > 0 {
 				continue
 			}
 			if err := consider(i, ses); err != nil {
@@ -325,6 +370,11 @@ func (s *Scheduler) RunDue(ctx context.Context) error {
 	for key := range s.tried {
 		if !inWindow[key] {
 			delete(s.tried, key)
+		}
+	}
+	for key := range s.alerted {
+		if key.date != today {
+			delete(s.alerted, key)
 		}
 	}
 	sort.SliceStable(queue, func(a, b int) bool {
@@ -450,6 +500,11 @@ func (s *Scheduler) next(jobs []Job, now time.Time) (time.Time, error) {
 		if t := atTime(today, j); open && t.After(now) {
 			at = t
 		}
+		if j.Every > 0 {
+			if at, err = s.nextSlot(j.Every, today, open, following, now); err != nil {
+				return time.Time{}, err
+			}
+		}
 		if j.EveryDay {
 			at = atTime(today, j)
 			if !at.After(now) {
@@ -461,6 +516,81 @@ func (s *Scheduler) next(jobs []Job, now time.Time) (time.Time, error) {
 		}
 	}
 	return best, nil
+}
+
+// todaysSession returns now's session when now's date is a trading day, and
+// nil otherwise.
+func (s *Scheduler) todaysSession(now time.Time) (*clock.Session, error) {
+	today := clock.DateOf(now)
+	open, err := s.cal.IsTradingDay(today)
+	if err != nil || !open {
+		return nil, wrap(err)
+	}
+	ses, err := s.cal.Session(today)
+	if err != nil {
+		return nil, wrap(err)
+	}
+	return &ses, nil
+}
+
+func wrap(err error) error {
+	if err == nil {
+		return nil
+	}
+	return fmt.Errorf("scheduler: %w", err)
+}
+
+// currentSlot returns the interval slot now falls in: the latest of open,
+// open+every, open+2*every, ... that is not after now. ok is false outside
+// market hours. Earlier slots are never returned, so a missed one is not made
+// up.
+func currentSlot(ses clock.Session, every time.Duration, now time.Time) (slot time.Time, ok bool) {
+	if now.Before(ses.Open) || !now.Before(ses.Close) {
+		return time.Time{}, false
+	}
+	return ses.Open.Add(now.Sub(ses.Open) / every * every), true
+}
+
+// nextSlot returns the first interval slot after now: a later one today, or
+// the next trading day's open.
+func (s *Scheduler) nextSlot(every time.Duration, today time.Time, open bool, following, now time.Time) (time.Time, error) {
+	if open {
+		ses, err := s.cal.Session(today)
+		if err != nil {
+			return time.Time{}, wrap(err)
+		}
+		if now.Before(ses.Open) {
+			return ses.Open, nil
+		}
+		if slot, ok := currentSlot(ses, every, now); ok && slot.Add(every).Before(ses.Close) {
+			return slot.Add(every), nil
+		}
+	}
+	ses, err := s.cal.Session(following)
+	if err != nil {
+		return time.Time{}, wrap(err)
+	}
+	return ses.Open, nil
+}
+
+// slotRan reports whether key's interval job has already started a run at or
+// after slot, so the slot has had its run.
+func (s *Scheduler) slotRan(ctx context.Context, key runKey, slot time.Time) (bool, error) {
+	var started string
+	err := s.db.QueryRowContext(ctx,
+		`SELECT started_at FROM job_runs WHERE job_name = ? AND trading_date = ?`,
+		key.job, key.date).Scan(&started)
+	switch {
+	case errors.Is(err, sql.ErrNoRows):
+		return false, nil
+	case err != nil:
+		return false, fmt.Errorf("scheduler: read job_runs: %w", err)
+	}
+	at, err := store.ParseTime(started)
+	if err != nil {
+		return false, fmt.Errorf("scheduler: read job_runs: %w", err)
+	}
+	return !at.Before(slot), nil
 }
 
 func atTime(date time.Time, j Job) time.Time {
@@ -551,16 +681,28 @@ func (s *Scheduler) runOne(ctx context.Context, jobs []Job, j Job, r Run) (err e
 	if err != nil {
 		return err
 	}
+	group := runKey{alertGroup(j), r.Date()}
+	alerted = alerted || s.alerted[group]
 	started := s.clk.Now()
-	claimed, err := s.claim(ctx, r, started)
+	claim := s.claim
+	if j.Every > 0 {
+		claim = s.claimSlot
+	}
+	claimed, err := claim(ctx, r, started)
 	if err != nil || !claimed {
 		return err
 	}
 	log := s.log.With("job", r.Job, "trading_date", r.Date(), "input_hash", r.InputHash)
+	if j.Every > 0 {
+		log = log.With("slot", r.Scheduled.In(clock.Eastern).Format("15:04"))
+	}
 	end := func(runErr error) error {
 		failed, err := s.finish(ctx, log, r, started, runErr)
 		if failed && !alerted {
 			s.send(ctx, failureAlert(j))
+			if j.Every > 0 {
+				s.alerted[group] = true
+			}
 		}
 		return err
 	}
@@ -612,6 +754,25 @@ WHERE job_runs.outcome IN ('running', 'failed')`,
 		return false, fmt.Errorf("scheduler: record start of %s on %s: %w", r.Job, r.Date(), err)
 	}
 	return n == 1, nil
+}
+
+// claimSlot writes an interval job's run as running, in the date's one row
+// for the job, whatever the row held: each slot is a new run.
+func (s *Scheduler) claimSlot(ctx context.Context, r Run, started time.Time) (bool, error) {
+	_, err := s.db.ExecContext(ctx, `
+INSERT INTO job_runs (job_name, trading_date, input_hash, started_at)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (job_name, trading_date) DO UPDATE SET
+    input_hash = excluded.input_hash,
+    started_at = excluded.started_at,
+    finished_at = NULL,
+    outcome = 'running',
+    detail = ''`,
+		r.Job, r.Date(), r.InputHash, store.FormatTime(started))
+	if err != nil {
+		return false, fmt.Errorf("scheduler: record start of %s on %s: %w", r.Job, r.Date(), err)
+	}
+	return true, nil
 }
 
 // finish records how a run ended, from the error its job returned. It

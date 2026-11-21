@@ -356,11 +356,15 @@ func alertsOf(push web.PushChannel) notify.Notifier {
 }
 
 // haltOnBrokerFailure is the supervisor's failure hook: any helper failure is
-// a broker error, so trading halts. A failure to record the halt is logged by
-// the switch.
+// a broker error, so trading halts. A helper that crashes and is restarted
+// again and again fails each time, often in different words (another exit
+// status, a start that timed out), so the halt is thrown with ThrowOnce: one
+// halt and one push while a broker_error halt is active, however many
+// restarts fail. Every failure is still logged by the supervisor's hook. A
+// failure to record the halt is logged by the switch.
 func haltOnBrokerFailure(ctx context.Context, sw *halt.Switch) func(error) {
 	return func(err error) {
-		_, _, _ = sw.Throw(ctx, halt.BrokerError, "The broker helper failed: "+err.Error())
+		_, _, _ = sw.ThrowOnce(ctx, halt.BrokerError, "The broker helper failed: "+err.Error())
 	}
 }
 
