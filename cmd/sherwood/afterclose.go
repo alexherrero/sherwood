@@ -16,6 +16,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/execution"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
+	"github.com/alexherrero/sherwood/internal/limits"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/notify"
 	"github.com/alexherrero/sherwood/internal/prices"
@@ -157,6 +158,10 @@ type afterCloseInputs struct {
 	set    holdings.Set   // the snapshot read
 	cash   *holdings.Cash // the cash reading, or nil
 	stocks prices.Stocks  // Held and Watched, for the fetch
+	// strategy is the strategy file with the watchlist in force applied,
+	// for the rules: a strategy that opts in to the watchlist covers the
+	// stocks added from the phone app.
+	strategy *config.Strategy
 }
 
 type holdingInput struct {
@@ -206,8 +211,13 @@ func (a *afterClose) gather(ctx context.Context, r scheduler.Run) (*afterCloseIn
 			AverageCost: h.AverageCost, Opened: store.FormatDate(h.Opened.In(clock.Eastern))})
 		in.Held = append(in.Held, h.Symbol)
 	}
-	watched := slices.Clone(a.strategy.Watchlist)
-	for _, def := range a.strategy.Strategies {
+	list, err := limits.Watchlist(ctx, q, a.strategy)
+	if err != nil {
+		return nil, err
+	}
+	in.strategy = a.strategy.WithWatchlist(list)
+	watched := slices.Clone(in.strategy.Watchlist)
+	for _, def := range in.strategy.Strategies {
 		watched = append(watched, def.Stocks...)
 	}
 	slices.Sort(watched)
@@ -282,7 +292,7 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 		return err
 	}
 	runner := &signals.Runner{Store: a.store, Clock: a.clock, Log: log}
-	res, err := runner.Run(ctx, r.TradingDate, a.strategy, in.set.Holdings)
+	res, err := runner.Run(ctx, r.TradingDate, in.strategy, in.set.Holdings)
 	if err != nil {
 		return err
 	}

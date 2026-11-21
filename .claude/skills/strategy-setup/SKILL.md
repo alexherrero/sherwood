@@ -59,7 +59,7 @@ Write `$WORK/strategy.yaml`. Start it with a comment saying it was written by th
 | `max_orders_per_day` | How many approvals a day they are happy with. |
 | `daily_loss_limit` | Their one-bad-day answer, in dollars with cents. |
 | `max_holdings` | Their answer, at most 20, and at least the stocks the strategies may hold at once. |
-| `max_sector_share` | Their answer, or leave it out to switch the sector limit off. When it is set, add a `sectors:` map giving every stock on the watchlist and in a strategy its sector, or sherwood refuses to start. |
+| `max_sector_share` | Their answer, or leave it out to switch the sector limit off. When it is set, add a `sectors:` map giving every stock on the watchlist and in a strategy its sector, or sherwood refuses to start. A stock can then be added from the Feed view only if `sectors` names it, so offer to list sectors for stocks they may want to add later. |
 | `max_limit_distance`, `buy_limit_margin`, `price_cross_check_tolerance` | Keep the example's 0.05, 0.01 and 0.02 unless they ask otherwise. `buy_limit_margin` must not exceed `max_limit_distance`. |
 | `fractional_shares`, `min_paper_weeks` | Their answers. |
 
@@ -71,7 +71,8 @@ Write `$WORK/strategy.yaml`. Start it with a comment saying it was written by th
 
 For each strategy:
 
-- Give it a short lower-case name, a `portfolio_share`, its `stocks` and its `rules`. All `portfolio_share` values together must be at most 1; leaving some unallocated keeps cash.
+- Give it a short lower-case name, a `portfolio_share`, its `stocks` and its `rules`. Put every stock any strategy lists on the `watchlist` too: the risk check refuses a buy of a stock that is neither watched nor held.
+- Ask whether this strategy should also look at stocks the operator adds from the research feed. If yes, set `include_watchlist: true`: its rules then run over the watchlist in force (the file's watchlist plus anything added with the Feed view's "Add to watchlist" tap) as well as its own `stocks`. Pick a strategy whose rules suit an unfamiliar stock, such as a pullback or trend rule with a stop, and say that an added stock's buys still pass the risk check and wait for approval. A `momentum_ranking` that opts in ranks the watched stocks too. Leave it out for a strategy meant to trade only its own list. All `portfolio_share` values together must be at most 1; leaving some unallocated keeps cash.
 - Use well-known, heavily traded stocks in the operator's chosen sectors, or the ones they named. Say that picking today's well-known names makes any back-test look better than it would have been in real time.
 - Give it exactly one sizing rule. A strategy with none never buys. `size_by_risk` sizes from their per-trade loss answer and needs a stop rule in the same strategy; `size_fixed_amount` spends a fixed dollar amount per buy.
 - Give it at least one stop rule, with the distance set from their loss answers.

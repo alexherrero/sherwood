@@ -2,7 +2,7 @@
 
 This page sets up the nightly research job on your Mac. Each night it downloads a short export from sherwood, has Claude read the public news about your stocks, and uploads what Claude wrote as the next morning's feed. You set it up once, run it by hand twice to see it work, and then hand it to launchd.
 
-**The AI never creates, approves or sends an order.** The feed is reading material and nothing else. Only sherwood's rules create orders, and only you approve buys. A candidate in the feed reaches the rules only when you tap "Add to watchlist", and even then a rule has to signal and you have to approve the buy. Nothing the job writes is financial advice.
+**The AI never creates, approves or sends an order.** The feed is reading material and nothing else. Only sherwood's rules create orders, and only you approve buys. A candidate in the feed reaches the rules only when you tap "Add to watchlist", and only the strategies that set `include_watchlist: true` look at it. Even then a rule has to signal, the risk check has to pass the buy, and you have to approve it. Nothing the job writes is financial advice.
 
 Sherwood must already be running on the NAS, as in [Install sherwood on the NAS](install-sherwood-on-the-nas). Every path, address, symbol and token below is a placeholder; put your own in its place.
 
@@ -181,7 +181,7 @@ The job reads the research skill from your clone each night, so keep the clone o
 
 ## What a stale feed means
 
-A feed stays fresh for 36 hours, so one missed night is enough to make it stale. The Feed view then shows a quiet note saying when the latest feed arrived, and Portfolio and the approval cards show only the rules' own reasons, without the feed's notes and explanations, until a new feed arrives. You get no notification, because nothing about trading depends on the feed. The rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
+A feed stays fresh for 36 hours (the threshold is `feed.StaleAfter` in the code), so one missed night is enough to make it stale. The Feed view then shows a quiet note saying when the latest feed arrived, and Portfolio and the approval cards show only the rules' own reasons, without the feed's notes and explanations, until a new feed arrives. You get no notification, because nothing about trading depends on the feed. The rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
 
 A stale feed usually means one of these:
 

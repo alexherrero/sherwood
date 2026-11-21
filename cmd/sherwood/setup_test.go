@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -135,8 +136,22 @@ func TestSkillExampleStrategyValidates(t *testing.T) {
 			}
 		}
 	}
-	if len(s.Watchlist) != 0 {
-		t.Errorf("watchlist = %v, want empty", s.Watchlist)
+	// The watchlist holds the same placeholders, and every stock a strategy
+	// may buy, since the risk check refuses a buy of a stock not watched.
+	for _, sym := range s.Watchlist {
+		if !placeholder.MatchString(sym) {
+			t.Errorf("watchlist: %q is not a placeholder symbol", sym)
+		}
+	}
+	for _, def := range s.Strategies {
+		for _, sym := range def.Stocks {
+			if !slices.Contains(s.Watchlist, sym) {
+				t.Errorf("strategy %s: %s is not on the watchlist, so the risk check would refuse its buys", def.Name, sym)
+			}
+		}
+	}
+	if !strings.Contains(out, "include_watchlist: example-pullback also runs its rules over the watchlist") {
+		t.Errorf("check-strategy does not show the strategy that opts in to the watchlist:\n%s", out)
 	}
 }
 

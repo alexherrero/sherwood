@@ -186,6 +186,7 @@ func New(cfg Config) (*Server, error) {
 	s.mountStopSwitch()
 	s.mountApprovals()
 	s.mountLimits()
+	s.mountWatchlist()
 	s.mountResearch()
 	s.HandleRead("/health", http.HandlerFunc(health))
 	return s, nil

@@ -166,6 +166,9 @@ type run struct {
 	// noStops is set while you have cancelled the protective stops from
 	// the phone app: no stop is placed or raised until the switch is reset.
 	noStops bool
+	// strategy is the strategy file with the watchlist in force applied,
+	// so a strategy that opts in to the watchlist covers its added stocks.
+	strategy *config.Strategy
 }
 
 type suggestion struct {
@@ -272,11 +275,17 @@ func (e *Executor) load(ctx context.Context, session time.Time) (*run, error) {
 	if err != nil {
 		return nil, fmt.Errorf("execution: %w", err)
 	}
+	// The watchlist in force: the file's, plus the phone's additions.
+	watched, err := limits.Watchlist(ctx, q, e.strategy)
+	if err != nil {
+		return nil, fmt.Errorf("execution: %w", err)
+	}
+	r.strategy = e.strategy.WithWatchlist(watched)
 	r.snap = risk.Snapshot{
 		Calendar:           e.calendar,
 		Limits:             lim,
 		Sectors:            e.strategy.Sectors,
-		Watchlist:          e.strategy.Watchlist,
+		Watchlist:          watched,
 		Cash:               cash,
 		Value:              acct.Value,
 		PreviousCloseValue: previous,
@@ -615,7 +624,7 @@ func (r *run) carrier(ctx context.Context, sym string, held money.Quantity, targ
 	if s, ok := r.suggested[sym]; ok {
 		names = append(names, s.strategy)
 	}
-	for _, def := range r.e.strategy.Strategies {
+	for _, def := range r.strategy.Strategies {
 		if slices.Contains(def.Stocks, sym) {
 			names = append(names, def.Name)
 		}

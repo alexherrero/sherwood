@@ -59,6 +59,10 @@ func runBacktest(e env, args []string) error {
 	if err != nil {
 		return fmt.Errorf("backtest: %w", err)
 	}
+	// A strategy that opts in to the watchlist is tested over the file's
+	// watchlist too. Stocks added from the phone app live in the NAS's
+	// database, not the file, so a backtest does not see them.
+	strategy = strategy.WithWatchlist(strategy.Watchlist)
 	var symbols []string
 	for _, def := range strategy.Strategies {
 		symbols = append(symbols, def.Stocks...)

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/alexherrero/sherwood/internal/feed"
+	"github.com/alexherrero/sherwood/internal/limits"
 )
 
 // The research feed in the app: the Feed view, and the pieces Portfolio and
@@ -24,6 +26,11 @@ var staleAfterText = fmt.Sprintf("%d hours", int(feed.StaleAfter/time.Hour))
 
 // feedData is what the Feed view shows.
 type feedData struct {
+	// Result is the outcome of the last watchlist tap, if any.
+	Result *notice
+	// OptedIn names the strategies whose rules also run over the watchlist,
+	// so an added stock can get a buy signal from them.
+	OptedIn []string
 	// HasUpload is false until a feed has been uploaded.
 	HasUpload bool
 	// Arrived is when the latest upload arrived, and Accepted and Dropped
@@ -47,6 +54,13 @@ type feedItemView struct {
 	Sources []sourceView
 	// Arrived is when the upload holding the item arrived.
 	Arrived string
+	// Watched is true when a candidate is already on the watchlist in
+	// force, so the Feed view shows no "Add to watchlist" button.
+	Watched bool
+	// NeedsSector is true when a sector limit is in force and the strategy
+	// file gives the candidate no sector, so the tap would be refused; the
+	// view says how to add it instead.
+	NeedsSector bool
 }
 
 // sourceView is one source link as a page shows it.
@@ -73,6 +87,14 @@ func loadFeed(s *Server, r *http.Request) (any, error) {
 	defer func() { _ = tx.Rollback() }()
 
 	d := feedData{Stale: true, StaleAfter: staleAfterText}
+	if res, ok := watchResults[r.URL.Query().Get("watch")]; ok {
+		d.Result = &res
+	}
+	for _, def := range s.strategy.Strategies {
+		if def.IncludeWatchlist {
+			d.OptedIn = append(d.OptedIn, def.Name)
+		}
+	}
 	up, err := feed.LatestUpload(ctx, tx)
 	if err != nil {
 		return nil, err
@@ -88,8 +110,19 @@ func loadFeed(s *Server, r *http.Request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	watched, err := limits.Watchlist(ctx, tx, s.strategy)
+	if err != nil {
+		return nil, err
+	}
+	lim, err := limits.Effective(ctx, tx, s.strategy)
+	if err != nil {
+		return nil, err
+	}
 	for _, c := range candidates {
-		d.Candidates = append(d.Candidates, itemView(c))
+		v := itemView(c)
+		v.Watched = slices.Contains(watched, c.Symbol)
+		v.NeedsSector = !v.Watched && lim.MaxSectorShare != nil && s.strategy.Sectors[c.Symbol] == ""
+		d.Candidates = append(d.Candidates, v)
 	}
 	return d, nil
 }

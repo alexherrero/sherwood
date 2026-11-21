@@ -178,7 +178,7 @@ Everything recorded since that copy is lost, as with any restore. Never edit a m
 
 ## Stale feed or failed upload
 
-The research feed comes from a job on your Mac, set up as in [Set up the research job](../how-to/set-up-the-research-job). A feed stays fresh for 36 hours. After that, the Feed view shows a quiet note saying when the latest one arrived, and Portfolio and the approval cards show only the rules' own reasons, without the feed's notes and explanations. You get no notification, and nothing else changes: the rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
+The research feed comes from a job on your Mac, set up as in [Set up the research job](../how-to/set-up-the-research-job). A feed stays fresh for 36 hours, the threshold set by `feed.StaleAfter` in the code. After that, the Feed view shows a quiet note saying when the latest one arrived, and Portfolio and the approval cards show only the rules' own reasons, without the feed's notes and explanations. You get no notification, and nothing else changes: the rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
 
 To bring the feed back:
 

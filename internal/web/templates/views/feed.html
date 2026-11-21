@@ -4,6 +4,12 @@
 <h1>Feed</h1>
 {{if .Candidates}}<span class="badge">{{len .Candidates}} {{if eq (len .Candidates) 1}}candidate{{else}}candidates{{end}}</span>{{end}}
 </header>
+{{with .Result -}}
+<section class="notice {{.Class}}" role="status" aria-label="Watchlist">
+<p class="notice-title"><strong>{{.Title}}</strong></p>
+<p>{{.Body}}</p>
+</section>
+{{- end}}
 {{if not .HasUpload -}}
 <section class="notice" aria-label="Research feed">
 <p class="notice-title"><strong>No research feed has arrived yet.</strong></p>
@@ -27,7 +33,20 @@
 </div>
 <p class="card-body feed-text">{{$c.Text}}</p>
 {{template "sources" $c.Sources}}
-{{- /* Task 5 adds the "Add to watchlist" form here, in a card-foot. */}}
+{{if $c.Watched -}}
+<p class="card-foot field-hint">{{$c.Symbol}} is on the watchlist.</p>
+{{- else if $c.NeedsSector -}}
+<p class="card-foot field-hint">A sector limit is in force and the strategy file gives {{$c.Symbol}} no sector, so it cannot be added from here. To watch it, add it to watchlist: in the strategy file on the NAS, give it a line under sectors: (such as {{$c.Symbol}}: technology), and restart.</p>
+{{- else -}}
+<div class="card-foot button-row">
+<form method="post" action="/watchlist/add">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<input type="hidden" name="symbol" value="{{$c.Symbol}}">
+<button type="submit" class="button button--secondary">Add to watchlist</button>
+</form>
+</div>
+<p class="card-foot field-hint">{{if $.Data.OptedIn}}The rules of {{range $j, $n := $.Data.OptedIn}}{{if $j}}, {{end}}{{$n}}{{end}} also run over the watchlist, so they may suggest buying it. Any buy waits for your approval.{{else}}No strategy runs its rules over the watchlist yet, so adding it fetches its prices and tells the research job, but makes no signal.{{end}} Only an approval device can add it.</p>
+{{- end}}
 </section>
 {{- end}}
 </div>

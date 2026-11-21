@@ -208,6 +208,11 @@ func (p *Proposer) Propose(ctx context.Context, d Day) (Result, error) {
 		if err != nil {
 			return err
 		}
+		// The watchlist in force: the file's, plus the phone's additions.
+		watched, err := limits.Watchlist(ctx, tx, p.cfg.Strategy)
+		if err != nil {
+			return err
+		}
 		for _, pl := range plans {
 			o, created, err := orders.Create(ctx, tx, pl.order, orders.Proposer, now)
 			if err != nil {
@@ -221,7 +226,7 @@ func (p *Proposer) Propose(ctx context.Context, d Day) (Result, error) {
 			if err != nil {
 				return err
 			}
-			snap := p.snapshot(now, in, lim, sw, healthy, dayOrders(day, o.ID, in.closes))
+			snap := p.snapshot(now, in, lim, watched, sw, healthy, dayOrders(day, o.ID, in.closes))
 			v := p.cfg.Checker.Check(pl.risk, snap)
 			ch := orders.Change{Actor: orders.Risk, Verdict: v.String(), At: now}
 			switch {
@@ -481,7 +486,7 @@ func percent(f decimal.Decimal) string {
 
 // snapshot is the risk check's view at proposal: a preview for the order's
 // session, from the holdings, cash and closes the rules ran with.
-func (p *Proposer) snapshot(now time.Time, in *inputs, lim config.Limits, sw halt.State, healthy bool,
+func (p *Proposer) snapshot(now time.Time, in *inputs, lim config.Limits, watched []string, sw halt.State, healthy bool,
 	day []risk.DayOrder) risk.Snapshot {
 	return risk.Snapshot{
 		Now:       now,
@@ -489,7 +494,7 @@ func (p *Proposer) snapshot(now time.Time, in *inputs, lim config.Limits, sw hal
 		Preview:   true,
 		Limits:    lim,
 		Sectors:   p.cfg.Strategy.Sectors,
-		Watchlist: p.cfg.Strategy.Watchlist,
+		Watchlist: watched,
 		Held:      in.held,
 		Cash:      in.cash,
 		Value:     in.value,

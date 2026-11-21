@@ -182,6 +182,9 @@ func (s *Server) loadLimits(ctx context.Context, d *settingsData) error {
 		if c.Setting == limits.HashSetting {
 			cv.Setting = "The strategy file"
 			cv.From, cv.To = "", "changed"
+		} else if c.Setting == limits.WatchSetting {
+			cv.Setting = c.New
+			cv.From, cv.To = "", "added to the watchlist"
 		} else if spec, ok := limits.Lookup(limits.Name(c.Setting)); ok {
 			cv.Setting = spec.Words
 			cv.From, cv.To = limitWords(spec.Kind, c.Old), limitWords(spec.Kind, c.New)

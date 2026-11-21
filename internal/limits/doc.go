@@ -25,5 +25,17 @@
 // settings (the buy limit margin, fractional shares, the price cross-check
 // tolerance and the fewest paper weeks) are shown but only change at the NAS.
 //
+// The watchlist works the same way. Watch records a stock added from the
+// Feed view's "Add to watchlist" tap (setting watchlist.add, source phone),
+// and Watchlist reads the watchlist in force: the file's watchlist followed
+// by the additions recorded after the newest hash row, while that row names
+// the file loaded now. Watchlist is the one reader of the watchlist for the
+// proposal, the approval re-check, the 09:35 send, the after-close price
+// fetch and the research export. An addition creates no order; a strategy
+// whose file sets include_watchlist runs its rules over the watchlist in
+// force (config.Strategy.WithWatchlist), and any buy goes through the risk
+// check and approval like any other. This package must never import the
+// feed package, so the feed itself cannot reach trading.
+//
 // Every value is exact decimal text; nothing passes through a float.
 package limits

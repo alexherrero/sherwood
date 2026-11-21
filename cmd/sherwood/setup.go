@@ -101,6 +101,10 @@ func runCheckStrategy(e env, args []string) error {
 		}
 		fmt.Fprintf(w, "- %s: portfolio_share %s, stocks %s, rules %s\n",
 			def.Name, def.PortfolioShare, strings.Join(def.Stocks, ", "), strings.Join(types, ", "))
+		if def.IncludeWatchlist {
+			fmt.Fprintf(w, "  include_watchlist: %s also runs its rules over the watchlist (%s) and any stock added to it from the app.\n",
+				def.Name, strings.Join(strategy.Watchlist, ", "))
+		}
 		if !kinds[rules.KindSizing] {
 			fmt.Fprintf(w, "  note: %s has no sizing rule, so it never buys.\n", def.Name)
 		}
@@ -169,6 +173,9 @@ func runFetchBars(ctx context.Context, e env, args []string) error {
 	if err != nil {
 		return fmt.Errorf("fetch-bars: %w", err)
 	}
+	// The bars cover what a backtest runs over, the file's watchlist
+	// included for a strategy that opts in to it.
+	strategy = strategy.WithWatchlist(strategy.Watchlist)
 	var symbols []string
 	for _, def := range strategy.Strategies {
 		symbols = append(symbols, def.Stocks...)

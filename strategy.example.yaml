@@ -27,8 +27,11 @@ limits:
   price_cross_check_tolerance: 0.02  # how far the two price sources may disagree
   min_paper_weeks: 4               # weeks of paper trading before live mode can be turned on
 
-# Stocks the rules may buy besides those already held. Adding a candidate from
-# the research feed puts it here.
+# Stocks the rules may buy besides those already held: list every stock a
+# strategy may buy here too. "Add to watchlist" on a candidate in the app's
+# Feed view adds a stock to the watchlist in force without changing this
+# file; the additions last until this file changes. Write a stock here to
+# keep it for good.
 watchlist:
   - AAPL
   - MSFT
@@ -36,9 +39,9 @@ watchlist:
 
 # Each stock's sector, for the sector limit. When max_sector_share is set,
 # every stock on the watchlist and in a strategy needs a sector here, or
-# sherwood refuses to start. Name sectors however you like, but spell each
-# one the same way every time. Leave this section out when there is no
-# sector limit.
+# sherwood refuses to start, and a stock can be added from the Feed view
+# only if it has one. Name sectors however you like, but spell each one the
+# same way every time. Leave this section out when there is no sector limit.
 sectors:
   AAPL: technology
   MSFT: technology
@@ -65,6 +68,9 @@ strategies:
   - name: example-pullback
     portfolio_share: 0.30
     stocks: [KO]
+    # optional: also run these rules over the watchlist in force, including
+    # stocks added from the Feed view. Left out, it means false.
+    include_watchlist: true
     rules:
       - type: pullback
         settings:
