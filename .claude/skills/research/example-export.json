@@ -1,0 +1,61 @@
+{
+  "version": 1,
+  "generated_at": "2026-11-13T22:00:00Z",
+  "signal_date": "2026-11-13",
+  "symbols": [
+    {
+      "symbol": "HELD1",
+      "held": true,
+      "watched": false,
+      "closes": [
+        {
+          "date": "2026-11-12",
+          "close": "101.50"
+        },
+        {
+          "date": "2026-11-13",
+          "close": "98.25"
+        }
+      ]
+    },
+    {
+      "symbol": "HELD2",
+      "held": true,
+      "watched": true,
+      "closes": [
+        {
+          "date": "2026-11-12",
+          "close": "42.00"
+        },
+        {
+          "date": "2026-11-13",
+          "close": "42.80"
+        }
+      ]
+    },
+    {
+      "symbol": "WTCH1",
+      "held": false,
+      "watched": true,
+      "closes": [
+        {
+          "date": "2026-11-12",
+          "close": "15.10"
+        },
+        {
+          "date": "2026-11-13",
+          "close": "15.95"
+        }
+      ]
+    }
+  ],
+  "signals": [
+    {
+      "key": "abababababababababababababababababababababababababababababababab",
+      "symbol": "HELD1",
+      "side": "sell",
+      "kind": "trim",
+      "reason": "trailing_stop: made-up example reason"
+    }
+  ]
+}

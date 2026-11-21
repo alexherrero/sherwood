@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "items": [
+    {
+      "kind": "candidate",
+      "symbol": "WTCH1",
+      "text": "Made-up example. The company behind WTCH1 reported quarterly sales above what analysts expected, and two news outlets say it is widening its product line. Risks the sources mention: a single large customer and a pending lawsuit.",
+      "sources": [
+        {
+          "url": "https://news.example.com/wtch1-quarterly-results",
+          "title": "Example News: WTCH1 quarterly results"
+        },
+        {
+          "url": "https://filings.example.org/wtch1/quarterly-report",
+          "title": "WTCH1 quarterly report (example filing)"
+        }
+      ]
+    },
+    {
+      "kind": "candidate",
+      "symbol": "CAND1",
+      "text": "Made-up example. CAND1 is not held or watched. An example trade paper reports it won a long contract, and its latest filing shows debt falling for a third quarter.",
+      "sources": [
+        {
+          "url": "https://trade.example.net/cand1-contract",
+          "title": "Example Trade Paper: CAND1 wins contract"
+        }
+      ]
+    },
+    {
+      "kind": "holding_note",
+      "symbol": "HELD1",
+      "text": "Made-up example. HELD1 fell about 3% today after a competitor cut prices. No filing or company statement explains the move yet.",
+      "sources": [
+        {
+          "url": "https://news.example.com/held1-competitor-price-cut",
+          "title": "Example News: competitor cuts prices"
+        }
+      ]
+    },
+    {
+      "kind": "holding_note",
+      "symbol": "HELD2",
+      "text": "Made-up example. No news found on HELD2 today beyond a routine dividend notice.",
+      "sources": [
+        {
+          "url": "https://filings.example.org/held2/dividend-notice",
+          "title": "HELD2 dividend notice (example filing)"
+        }
+      ]
+    },
+    {
+      "kind": "signal_explanation",
+      "symbol": "HELD1",
+      "signal_key": "abababababababababababababababababababababababababababababababab",
+      "text": "Made-up example. The trailing stop rule suggested trimming HELD1 because its price fell more than the rule allows below its recent high. Today's fall followed news of a competitor's price cut.",
+      "sources": [
+        {
+          "url": "https://news.example.com/held1-competitor-price-cut",
+          "title": "Example News: competitor cuts prices"
+        }
+      ]
+    }
+  ]
+}
