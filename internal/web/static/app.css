@@ -37,6 +37,9 @@
  *    Read-only limit displays (paired with a Tighten action) and form controls.
  * 9. Empty State (.empty-state, .empty-title, .empty-body)
  *    Calm container when a queue has no waiting items or a view is unbuilt.
+ * 10. Feed Text & Sources (.feed-text, .sources, .source, .source-domain)
+ *    The research feed's words, kept as plain text with their line breaks,
+ *    and each source link with its domain beside it.
  */
 
 :root {
@@ -671,6 +674,29 @@ textarea {
   text-decoration: underline;
   text-decoration-thickness: 0.14em;
   text-underline-offset: 0.24em;
+}
+
+/* 10. Feed Text & Sources */
+.feed-text {
+  white-space: pre-line;
+  overflow-wrap: anywhere;
+}
+
+.sources {
+  list-style: none;
+  margin: 0 0 var(--space-3);
+  padding: 0;
+  display: grid;
+  gap: var(--space-2);
+}
+
+.source {
+  overflow-wrap: anywhere;
+}
+
+.source-domain {
+  font-size: 0.875rem;
+  color: var(--muted);
 }
 
 @media (prefers-reduced-motion: reduce) {

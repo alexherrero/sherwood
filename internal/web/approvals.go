@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/alexherrero/sherwood/internal/clock"
+	"github.com/alexherrero/sherwood/internal/feed"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/limits"
@@ -87,6 +88,10 @@ type approvalCard struct {
 	Late     bool
 	// Reason is the rule's reason.
 	Reason string
+	// Explanation is the research feed's explanation of the order's signal,
+	// matched by its key, or nil when there is none from a fresh upload;
+	// then the card shows the rule's reason alone.
+	Explanation *feedItemView
 	// Stored is the verdict stored when the order was proposed, and Now the
 	// risk check run again for this page.
 	Stored    []verdictLine
@@ -159,16 +164,24 @@ func (s *Server) card(ctx context.Context, tx *sql.Tx, o orders.Order, now time.
 		return approvalCard{}, err
 	}
 	v := s.checker.Check(riskOrder(o), snap)
+	explained, err := feed.Explanation(ctx, tx, o.Key)
+	if err != nil {
+		return approvalCard{}, err
+	}
+	if explained != nil && explained.Symbol != o.Symbol {
+		explained = nil
+	}
 	words, badge := actionOf(o.Kind)
 	c := approvalCard{
 		ID: o.ID, Symbol: o.Symbol, Strategy: o.Strategy, Action: words, Badge: badge,
-		Shares:    o.Quantity.String(),
-		Session:   day(o.Date),
-		Deadline:  when(deadline),
-		Late:      !now.Before(deadline),
-		Reason:    o.Reason,
-		Stored:    storedVerdict(o.Verdict),
-		NowPassed: v.Passed(),
+		Shares:      o.Quantity.String(),
+		Session:     day(o.Date),
+		Deadline:    when(deadline),
+		Late:        !now.Before(deadline),
+		Reason:      o.Reason,
+		Explanation: freshItem(explained, now),
+		Stored:      storedVerdict(o.Verdict),
+		NowPassed:   v.Passed(),
 	}
 	switch {
 	case o.Type == orders.DayLimitBuy && o.Price != nil:

@@ -1,0 +1,42 @@
+{{define "content" -}}
+{{with .Data -}}
+<header class="page-head">
+<h1>Feed</h1>
+{{if .Candidates}}<span class="badge">{{len .Candidates}} {{if eq (len .Candidates) 1}}candidate{{else}}candidates{{end}}</span>{{end}}
+</header>
+{{if not .HasUpload -}}
+<section class="notice" aria-label="Research feed">
+<p class="notice-title"><strong>No research feed has arrived yet.</strong></p>
+<p>The research job on the Mac uploads one each night. Until then, Portfolio and Approvals show the rules' own reasons. Trading does not use the feed, so nothing else changes.</p>
+</section>
+{{- else -}}
+{{if .Stale -}}
+<section class="notice" aria-label="Research feed">
+<p class="notice-title"><strong>The research feed is out of date.</strong></p>
+<p>The latest one arrived {{.Arrived}}, more than {{.StaleAfter}} ago. The Mac may have been asleep. Portfolio and Approvals show the rules' own reasons until a new one arrives. Trading does not use the feed, so nothing else changes.</p>
+</section>
+{{- end}}
+<p class="field-hint">The latest feed arrived {{.Arrived}}. {{.Accepted}} {{if eq .Accepted 1}}item was{{else}}items were{{end}} kept{{if .Dropped}} and {{.Dropped}} dropped{{end}}. An AI wrote these from public web pages. It can be wrong, so check the sources. Nothing here can place or approve an order.</p>
+{{if .Candidates -}}
+<div class="stack">
+{{- range $i, $c := .Candidates}}
+<section class="card" aria-labelledby="candidate-{{$i}}">
+<div class="card-head">
+<h2 class="card-title" id="candidate-{{$i}}">{{$c.Symbol}}</h2>
+<span class="badge">Candidate</span>
+</div>
+<p class="card-body feed-text">{{$c.Text}}</p>
+{{template "sources" $c.Sources}}
+{{- /* Task 5 adds the "Add to watchlist" form here, in a card-foot. */}}
+</section>
+{{- end}}
+</div>
+{{- else -}}
+<section class="card empty-state" aria-label="Candidates">
+<p class="empty-title">No candidate cases in the latest feed.</p>
+<p class="empty-body">The research job found no stock it wanted to make a case for this time.</p>
+</section>
+{{- end}}
+{{- end}}
+{{- end}}
+{{- end}}

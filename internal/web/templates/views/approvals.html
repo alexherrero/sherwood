@@ -32,6 +32,14 @@
 <li class="row"><span class="row-label">Trading day<span class="row-meta">Approve by {{.Deadline}}.</span></span><span class="row-value">{{.Session}}</span></li>
 <li class="row"><span class="row-label">Why the rule proposed it<span class="row-meta">{{.Reason}}</span></span></li>
 </ul>
+{{with .Explanation -}}
+<div class="card-body">
+<h3 class="field-label">The research feed's explanation</h3>
+<p class="field-hint">Written by an AI from the sources below, in the feed that arrived {{.Arrived}}. It can be wrong, and it does not change the order or its risk check.</p>
+<p class="feed-text">{{.Text}}</p>
+{{template "sources" .Sources}}
+</div>
+{{- end}}
 <div class="card-body stack">
 <h3 class="field-label">Risk check now</h3>
 <p class="field-hint">Run again for this page. Approving runs it once more.</p>

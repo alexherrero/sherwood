@@ -287,8 +287,8 @@ func TestPortfolioValuesHoldingsFromStoredCloses(t *testing.T) {
 		`<span class="delta delta--down">−$123,406.17, down 10.0%</span>`,
 		`<span class="row-label">Held since</span><span class="row-value">Mon 2 Mar 2026</span>`,
 		// Room for the later parts' columns.
-		`<span class="row-label">Suggestion</span><span class="row-value">Not yet available</span>`,
-		`<span class="row-label">AI note</span><span class="row-value">Not yet available</span>`)
+		"The rules have not run for AAAA yet.</span></span><span class=\"row-value\">Not yet available</span>",
+		"The research feed is out of date, so only the rules' suggestion is shown.")
 	wantNotIn(t, body, "$14.00", "Not shown", "Over the limit", "Holdings not imported yet.")
 	if i, j := strings.Index(body, ">AAAA<"), strings.Index(body, ">CCCC<"); i < 0 || j < i {
 		t.Error("the holdings are not in symbol order")
