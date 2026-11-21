@@ -119,7 +119,7 @@ The script prints a dated line as each step starts. The research step takes a fe
 }
 ```
 
-The script ends with `done`. Open the Feed view on your phone: it should show the new candidates with their sources, and Portfolio should show a note under each holding.
+The script ends with `done`. Open the Feed view on your phone: it should say when the feed arrived and how many items were kept, and show the new candidates with their sources. Portfolio should show a note under each holding, and an approval card for a signal should show the feed's explanation beside the rule's reason.
 
 Read a few items against their sources. If anything tells you what to do, such as "buy", "sell" or a target price, the session broke the skill's one rule. Note it and look into it before you leave the job running.
 
@@ -181,7 +181,7 @@ The job reads the research skill from your clone each night, so keep the clone o
 
 ## What a stale feed means
 
-When no new feed has arrived for a while, the Feed view shows a quiet note saying so, and approval cards show the rules' own reasons in place of Claude's explanations. You get no notification, because nothing about trading depends on the feed. The rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
+A feed stays fresh for 36 hours, so one missed night is enough to make it stale. The Feed view then shows a quiet note saying when the latest feed arrived, and Portfolio and the approval cards show only the rules' own reasons, without the feed's notes and explanations, until a new feed arrives. You get no notification, because nothing about trading depends on the feed. The rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
 
 A stale feed usually means one of these:
 

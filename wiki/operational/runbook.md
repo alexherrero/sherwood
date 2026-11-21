@@ -178,7 +178,7 @@ Everything recorded since that copy is lost, as with any restore. Never edit a m
 
 ## Stale feed or failed upload
 
-The research feed comes from a job on your Mac, set up as in [Set up the research job](../how-to/set-up-the-research-job). When no new feed has arrived for a while, the Feed view shows a quiet note, and approval cards show the rules' own reasons in place of Claude's explanations. You get no notification, and nothing else changes: the rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
+The research feed comes from a job on your Mac, set up as in [Set up the research job](../how-to/set-up-the-research-job). A feed stays fresh for 36 hours. After that, the Feed view shows a quiet note saying when the latest one arrived, and Portfolio and the approval cards show only the rules' own reasons, without the feed's notes and explanations. You get no notification, and nothing else changes: the rules still run, the risk check still applies, buys still wait for your approval, and protective stops still work.
 
 To bring the feed back:
 
@@ -186,7 +186,7 @@ To bring the feed back:
 2. Fix what it shows. Most often the Mac was asleep or off the tailnet, the NAS was down, or the Claude login lapsed (run `claude`, then `/login`). The how-to's [troubleshooting table](../how-to/set-up-the-research-job#troubleshooting) covers every message.
 3. Run the job again by hand with `launchctl kickstart -k gui/$(id -u)/com.example.sherwood-research`, and check the end of the log says `done`.
 
-A failed upload stores nothing, so the previous feed stays on the phone until a good one arrives. An upload that worked but dropped some items still stored the rest; the log lists each dropped item and why.
+A failed upload stores nothing, so the Feed view keeps showing the previous feed, with the stale note once it is more than 36 hours old, until a good one arrives. An upload that worked but dropped some items still stored the rest; the log lists each dropped item and why.
 
 ## Known wording slips
 
