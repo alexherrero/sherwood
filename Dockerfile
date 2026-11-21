@@ -30,7 +30,7 @@ RUN CGO_ENABLED=0 go build -trimpath \
       -o /out/sherwood ./cmd/sherwood
 
 # ---- Runtime ----------------------------------------------------------------
-FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
+FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
