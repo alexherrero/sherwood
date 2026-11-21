@@ -5,49 +5,119 @@ on: pull_request
 permissions:
   contents: write
   pull-requests: write
+  checks: read
+
+# One run per pull request. A new push cancels the run still waiting on the
+# old head, so an old head's checks can never arm the merge.
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   automerge:
-    if: github.actor == 'dependabot[bot]'
+    name: Dependabot auto-merge
+    # Every push to a Dependabot branch, whoever made it, runs the disarm step
+    # below. Only Dependabot's own pushes go on to the gate and the merge.
+    if: github.event.pull_request.user.login == 'dependabot[bot]'
     runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+      REPO: ${{ github.repository }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      # The repository rulesets require only "Build (v1)", so a merge armed
+      # for an earlier head would go through on the new head once that one
+      # check passes. Take it back first; the gate below re-arms it only after
+      # every check has passed on this exact commit.
+      - name: Disarm any earlier auto-merge
+        shell: bash
+        run: |
+          armed=$(gh pr view "$PR_URL" --json autoMergeRequest --jq '.autoMergeRequest != null')
+          if [ "$armed" = true ]; then
+            gh pr merge --disable-auto "$PR_URL"
+            echo "Auto-merge disarmed until $HEAD_SHA passes every check."
+          fi
+
       - name: Fetch Dependabot metadata
         id: meta
+        if: github.actor == 'dependabot[bot]'
         uses: dependabot/fetch-metadata@25dd0e34f4fe68f24cc83900b1fe3fe149efef98 # v3.1.0
 
-      # Defense in depth: explicitly require the CI "Build (v1)" check to pass
-      # before merging. `gh pr merge --auto` only waits when the check is a
-      # required status check in branch protection; if it is not, --auto would
-      # merge immediately. This gate makes the merge safe either way. Filtered
-      # to the single check by name so it never waits on this job's own run.
-      - name: Wait for CI to pass
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Wait for every CI job on this pull request's head commit, and merge
+      # only if all of them passed. Every job in ci.yml runs on every pull
+      # request, so this covers whichever ecosystem the bump touched: the
+      # root Go module (vet, lint, govulncheck, race tests), the broker
+      # helper's Python (its pytest and the Go contract test that runs it),
+      # the container (build and smoke test), the archived v1 module, and the
+      # credential scan. A check that is missing, skipped, cancelled or failed
+      # refuses the merge; so does a timeout. Only check runs made by GitHub
+      # Actions (app id 15368, the same id the rulesets name) count.
+      #
+      # The names below must match the job names in ci.yml. Renaming a job
+      # there without renaming it here makes this gate time out and refuse.
+      - name: Wait for every CI check to pass
+        id: gate
+        if: >-
+          github.actor == 'dependabot[bot]' &&
+          (steps.meta.outputs.update-type == 'version-update:semver-patch' ||
+           steps.meta.outputs.update-type == 'version-update:semver-minor')
+        shell: bash
         run: |
-          check='Build (v1)'
-          for _ in $(seq 1 60); do
-            bucket=$(gh pr checks "$PR_URL" --json name,bucket \
-              --jq ".[] | select(.name == \"$check\") | .bucket" | head -n1 || true)
-            case "$bucket" in
-              pass)
-                echo "CI check '$check' passed."
-                exit 0 ;;
-              fail|cancel)
-                echo "CI check '$check' did not pass (bucket=$bucket); refusing to merge." >&2
-                exit 1 ;;
-              *)
-                echo "Waiting for CI check '$check' (state='${bucket:-not reported yet}')..."
-                sleep 30 ;;
-            esac
+          set -euo pipefail
+          required=()
+          while IFS= read -r name; do required+=("$name"); done <<'EOF'
+          Build (v1)
+          Go vet
+          Go lint
+          Go vulnerability check
+          Go tests (race)
+          Python helper tests
+          Credential scan
+          Container build
+          EOF
+
+          for _ in $(seq 1 100); do
+            if ! runs=$(gh api --paginate \
+                "repos/${REPO}/commits/${HEAD_SHA}/check-runs?filter=latest&per_page=100" \
+                --jq '.check_runs[] | select(.app.id == 15368) | [.name, .status, (.conclusion // "")] | @tsv'); then
+              echo "Could not read the checks; trying again."
+              sleep 30
+              continue
+            fi
+
+            waiting=()
+            for name in "${required[@]}"; do
+              row=$(awk -F'\t' -v n="$name" '$1 == n { print; exit }' <<<"$runs")
+              if [ -z "$row" ]; then
+                waiting+=("$name: not reported yet")
+                continue
+              fi
+              IFS=$'\t' read -r _ status conclusion <<<"$row"
+              if [ "$status" != completed ]; then
+                waiting+=("$name: $status")
+                continue
+              fi
+              if [ "$conclusion" != success ]; then
+                echo "::error::Check '$name' finished '$conclusion' on $HEAD_SHA; refusing to merge."
+                exit 1
+              fi
+            done
+
+            if [ "${#waiting[@]}" -eq 0 ]; then
+              echo "All ${#required[@]} checks passed on $HEAD_SHA."
+              exit 0
+            fi
+            echo "Waiting on ${#waiting[@]} check(s): $(IFS=';'; echo "${waiting[*]}")"
+            sleep 30
           done
-          echo "Timed out waiting for CI check '$check'; refusing to merge." >&2
+
+          echo "::error::Timed out waiting for every check on $HEAD_SHA; refusing to merge."
           exit 1
 
+      # Arm the merge for the commit the gate checked and no other: if the
+      # head has moved on, GitHub refuses, and the new head's own run decides.
       - name: Enable auto-merge for patch and minor bumps
-        if: steps.meta.outputs.update-type != 'version-update:semver-major'
-        run: gh pr merge --auto --squash "$PR_URL"
-        env:
-          PR_URL: ${{ github.event.pull_request.html_url }}
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        if: steps.gate.outcome == 'success'
+        run: gh pr merge --auto --squash --match-head-commit "$HEAD_SHA" "$PR_URL"
