@@ -1,4 +1,7 @@
-"""The read-only broker operations, against the fake library."""
+"""The holdings and cash reads, against the fake library.
+
+The order and account operations are in test_order_ops.py.
+"""
 
 import json
 import os

@@ -62,6 +62,10 @@ class ErrorCode:
     # The broker answered, but not in the shape the helper expects, so the
     # helper will not guess at what it meant.
     BAD_BROKER_REPLY = "bad_broker_reply"
+    # The broker lists no order with the reference asked about. For an order
+    # whose send failed, this most likely means it never reached the broker,
+    # but the helper does not decide that: it is still a broker error.
+    ORDER_NOT_FOUND = "order_not_found"
 
 
 class HelperError(Exception):
