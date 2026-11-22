@@ -69,3 +69,31 @@ Part 5 of 6 of the sherwood rewrite is done: six tasks merged as #129, #131, #13
 2026-11-21 /work — live-trading task 3 (interval jobs, ThrowOnce, the open-order and daily-loss checks, one halt for a restarting helper) merged as #145, and task 2 (the Robinhood adapter, the brokertest conformance suite on fake, paper and robinhood, the eight-op contract test, supervisor health) merged as #146. Neither used a migration; 0009 is still free. Task 4 (live wiring and the gate) is next.
 
 2026-11-21 /work — live-trading task 4 (the live-mode gate and wiring, #148; live fills, gone orders, fills at place time and lost stops, #149) merged, with no migration. Task 5 (the runbook and the first live session) is the last task.
+
+2026-11-22 /work — live-trading task 5 (the live runbook and the first-live-session how-to) merged as #151, documentation only. That was the last live-trading task.
+
+## Live-trading complete — 2026-11-22
+
+Part 6 of 6 of the sherwood rewrite is done. Five tasks merged in six PRs, #141, #146, #145, #148, #149 and #151, with plan bookkeeping in #142, #147 and #150. No migration was used, so `0009` is still free.
+
+What shipped:
+- The broker helper offers exactly eight ops: place, cancel, lookup, open_orders and account, alongside the earlier ping, holdings and cash. Its safety test pins every op, library method and POST route. The client reference is a UUIDv5 of the idempotency key.
+- The Go Robinhood adapter maps open orders back to sherwood's keys and flags foreign orders. Its health comes from the supervisor and the login state, and every outcome passes through one shared login alert.
+- One conformance suite runs on the fake, the paper broker and the adapter, and the contract test runs all eight ops against the real helper with its library faked.
+- The scheduler gained interval jobs. In live mode, every 15 minutes, sherwood checks open orders against the broker and checks the day's loss from the broker's account value, halting on `daily_loss`. An expired session or a crashing helper halts once.
+- Live mode is built only when all three conditions hold: `mode: live`, the in-app confirmation (approval devices only), and the minimum paper period. The gate is read at start-up. The confirmation lapses on a new strategy file or a change of mode, and Settings and Today say why live trading is off.
+- Live fills update the holdings and cash through a `fills` snapshot. The full reconciliation settles orders that have left the broker's book. A fill at place time is recorded. A lost resting stop halts trading and is re-placed at the next 09:35 at no lower a price.
+- The runbook covers every halt cause in live mode, and a new how-to walks through the first live session.
+
+Operator checks still open: the first live session, run by the operator only. The checklist in section 7 of the how-to gathers the checks from tasks 1 to 4:
+- reply shapes and `ref_id` on each order type;
+- stop size and fractional limits;
+- whether `equity` is the right account value;
+- which cash field to use, and the tolerance for fees and dividends;
+- gtc stop expiry;
+- foreign-order detection;
+- session-expiry pushes.
+
+Known gap: a partial fill that grows cannot be cleared by a reset, because no command settles an order by hand. A hand-settle command is a follow-up.
+
+The plan is archived to .harness/PLAN.archive.20261122-live-trading.md. All six parts of the rewrite are complete, and no plan is active.

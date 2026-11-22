@@ -5,7 +5,7 @@ parent_part_slug: live-trading
 
 # Plan: Live trading (from design sherwood)
 
-**Status:** in progress
+**Status:** done
 **Created:** 2026-11-15 (refined 2026-11-21 against the merged paper-trading and research-feed code)
 **Roadmap item:** part 6 of 6 of [Sherwood Design](../wiki/designs/sherwood.md); part file [live-trading](../wiki/designs/sherwood/parts/live-trading.md)
 **Brief:** Add the broker helper's order calls and the Go Robinhood adapter, wire the execution layer and reconciliation into live mode, add the 15-minute checks with the intraday loss limit and session-expiry handling, gate live mode behind the setting, an in-app confirmation and the minimum paper period, then finish the runbook.
@@ -63,7 +63,15 @@ After the minimum paper period, you switch to live mode with a small amount, and
 ### 5. Runbook and the first live session
 - **What:** Finish the runbook for live mode: halts and resets with the live causes, reconciliation differences against the real broker, re-login, the 15-minute checks, restoring a backup when orders may rest at the broker, and rolling back. Add a how-to for the first live session: the minimum paper period, the small starting amount, the confirmation, what to watch at 09:00, 09:35 and after the close, and how to stop.
 - **Verification:** Each halt cause in code has a runbook entry that matches live behaviour; placeholders only.
-- **Status:** [ ]
+- **Status:** [x] Merged as #151 (eabd536). It is documentation only, with no migration, so `0009` is still free.
+  - **`wiki/operational/runbook.md`** no longer says that live trading is not built.
+    - Its halt table has a row for each of the 8 causes in `internal/halt/halt.go`, with live behaviour. Two open orders under one reference are a `broker_error`, from the adapter's bad reply.
+    - The by-cause folding is explained.
+    - Reconciliation covers gone orders, how live fills reach the records, every live difference message, lost stops and a partial fill that grows.
+    - New sections cover the live jobs and the 15-minute checks, logging in again, restoring a backup in live mode (cancel the orders the copy doesn't know before the next 09:35), and going back to paper mode.
+  - **The new `wiki/how-to/run-the-first-live-session.md`** covers the small starting amount, setting `mode: live`, confirming, the second restart, and what to watch the evening before, at 09:00, at 09:35, every 15 minutes and after the close. It also covers how to stop. Its section 7 is the one checklist of every operator check from tasks 1 to 4.
+  - **Links** were added from Home, the settings reference, the broker-login how-to and the strategy how-to.
+  - **Open gap.** A partial fill that grows can't be cleared by a reset, because no command settles an order by hand, so each later check halts again. The runbook says so. A hand-settle command is a follow-up before partial fills happen live.
 
 ## Order and parallelism
 
