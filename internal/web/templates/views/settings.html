@@ -43,7 +43,7 @@
 <span class="badge {{if .Live}}badge--blocked{{else}}badge--passed{{end}}">{{if .Live}}Live{{else}}Paper{{end}}</span>
 </div>
 <div class="card-body">
-<p>{{if .Live}}Live trading: orders you approve are placed with the broker and use real money.{{else}}Paper trading: no real money moves. Orders are simulated against stored prices.{{end}} The mode is set in the settings file on the NAS.</p>
+<p>{{if .Live}}{{if .Gate.On}}Live trading: orders you approve are placed with the broker and use real money.{{else}}Live mode, but live trading is off: nothing is sent to the broker. <a href="#live">See why</a>.{{end}}{{else}}Paper trading: no real money moves. Orders are simulated against stored prices.{{end}} The mode is set in the settings file on the NAS.</p>
 </div>
 </section>
 <section class="card" aria-labelledby="limits">
@@ -106,6 +106,7 @@
 <li class="row"><span class="row-label">Began<span class="row-meta">With cash and holdings at cost</span></span><span class="row-value">{{.Since}}: {{.Start}}</span></li>
 <li class="row"><span class="row-label">Now<span class="row-meta">Cash and holdings at their latest checked closes</span></span><span class="row-value">{{if .Now}}{{.Now}}{{else}}Not valued: a holding has no checked close yet{{end}}</span></li>
 {{if .Now}}<li class="row"><span class="row-label">Return</span><span class="row-value delta {{.Return.Class}}">{{.Return.Text}}</span></li>{{end}}
+<li class="row"><span class="row-label">Weeks so far<span class="row-meta">Live mode needs at least {{$.Data.Gate.MinWeeks}}. Weeks in live mode do not count.</span></span><span class="row-value">{{$.Data.Gate.PaperWeeks}}</span></li>
 <li class="row"><span class="row-label">Holdings<span class="row-meta"><a href="/portfolio">Open Portfolio</a></span></span><span class="row-value">{{.Holdings}}</span></li>
 <li class="row"><span class="row-label">Orders filled<span class="row-meta">{{.Fills}} fills in all</span></span><span class="row-value">{{.Filled}}</span></li>
 <li class="row"><span class="row-label">Orders approved or open</span><span class="row-value">{{.Open}}</span></li>
@@ -118,6 +119,37 @@
 <p class="empty-body">The record begins once your holdings and cash are imported.</p>
 </div>
 {{- end}}
+{{- end}}
+</section>
+<section class="card" aria-labelledby="live">
+<div class="card-head">
+<h2 class="card-title" id="live">Live mode</h2>
+<span class="badge {{if .Gate.On}}badge--blocked{{else}}badge--hold{{end}}">{{if .Gate.On}}On: real orders{{else}}Off{{end}}</span>
+</div>
+<div class="card-body stack">
+<p>Sherwood places real orders only when all three of these hold as it starts: the settings file names live mode, you have confirmed live mode here, and the paper record is at least {{.Gate.MinWeeks}} weeks long.</p>
+</div>
+<ul class="rows">
+<li class="row"><span class="row-label">The settings file names live mode</span><span class="row-value">{{if .Live}}Yes{{else}}No: paper mode{{end}}</span></li>
+<li class="row"><span class="row-label">Confirmed in the app<span class="row-meta">A new strategy file, or a change of mode, needs a new confirmation.</span></span><span class="row-value">{{if .Gate.Confirmed}}Yes, {{.Gate.Confirmed}}{{else}}No{{end}}</span></li>
+<li class="row"><span class="row-label">Paper record long enough<span class="row-meta">{{.Gate.PaperWeeks}} of at least {{.Gate.MinWeeks}} weeks</span></span><span class="row-value">{{if .Gate.PaperMet}}Yes{{else}}No{{end}}</span></li>
+</ul>
+<div class="card-body stack">
+{{if .Gate.On -}}
+<p>Live trading is on: orders you approve are placed with the broker and use real money. To stop sending orders at once, turn on the stop switch on Today. To go back to paper trading, set mode: paper in the settings file on the NAS and restart.</p>
+{{- else if .Gate.Restart -}}
+<p>All three hold. Restart sherwood on the NAS to start live trading; until then nothing is sent to the broker.</p>
+{{- else -}}
+<p>Live trading is off, so nothing is sent to the broker.{{range .Gate.Reasons}} {{.}}{{end}}</p>
+{{- end}}
+</div>
+{{if .Gate.CanConfirm -}}
+<form class="card-body stack" method="post" action="/settings/live">
+<input type="hidden" name="csrf_token" value="{{$.Token}}">
+<p>Confirming means that after sherwood next restarts, orders you approve are placed with your broker account and use real money, inside the limits above. Start with a small amount.</p>
+<button type="submit" class="button button--primary button--full">Confirm live mode</button>
+<p class="field-hint">Only an approval device can confirm live mode. The confirmation is recorded with this device's tap.</p>
+</form>
 {{- end}}
 </section>
 {{- end}}

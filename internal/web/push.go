@@ -62,6 +62,8 @@ type settingsData struct {
 	Other   []otherView
 	Changes []changeView
 	Paper   paperRecord
+	// Gate is the live-mode gate (live.go).
+	Gate liveView
 }
 
 type pushView struct {
@@ -75,6 +77,9 @@ func loadSettings(s *Server, r *http.Request) (any, error) {
 		d.Result = &res
 	}
 	if res, ok := limitResults[r.URL.Query().Get("limit")]; ok {
+		d.Result = &res
+	}
+	if res, ok := liveResults[r.URL.Query().Get("live")]; ok {
 		d.Result = &res
 	}
 	if err := s.loadLimits(r.Context(), &d); err != nil {

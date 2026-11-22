@@ -502,11 +502,13 @@ func orNone(v string) string {
 }
 
 // History returns the newest n recorded changes to the limits, the
-// watchlist and the strategy file's hash, newest first.
+// watchlist, the strategy file's hash, the mode and the confirmation of live
+// mode, newest first.
 func History(ctx context.Context, q Querier, n int) ([]Change, error) {
 	rows, err := q.QueryContext(ctx,
 		`SELECT id, changed_at, setting, old_value, new_value, source FROM settings_changes
-		 WHERE setting IN (?, ?) OR setting LIKE 'limits.%' ORDER BY id DESC LIMIT ?`, HashSetting, WatchSetting, n)
+		 WHERE setting IN (?, ?, ?, ?) OR setting LIKE 'limits.%' ORDER BY id DESC LIMIT ?`,
+		HashSetting, WatchSetting, ModeSetting, LiveSetting, n)
 	if err != nil {
 		return nil, fmt.Errorf("limits: reading changes: %w", err)
 	}

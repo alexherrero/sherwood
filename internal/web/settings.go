@@ -185,6 +185,15 @@ func (s *Server) loadLimits(ctx context.Context, d *settingsData) error {
 		} else if c.Setting == limits.WatchSetting {
 			cv.Setting = c.New
 			cv.From, cv.To = "", "added to the watchlist"
+		} else if c.Setting == limits.ModeSetting {
+			cv.Setting = "The mode"
+			cv.From, cv.To = c.Old, c.New
+			if cv.From == "" {
+				cv.From, cv.To = "", "recorded as "+c.New
+			}
+		} else if c.Setting == limits.LiveSetting {
+			cv.Setting = "Live mode"
+			cv.From, cv.To = "", "confirmed"
 		} else if spec, ok := limits.Lookup(limits.Name(c.Setting)); ok {
 			cv.Setting = spec.Words
 			cv.From, cv.To = limitWords(spec.Kind, c.Old), limitWords(spec.Kind, c.New)
@@ -192,6 +201,9 @@ func (s *Server) loadLimits(ctx context.Context, d *settingsData) error {
 		d.Changes = append(d.Changes, cv)
 	}
 
+	if d.Gate, err = s.loadLive(ctx, tx); err != nil {
+		return err
+	}
 	d.Paper, err = loadPaperRecord(ctx, tx)
 	return err
 }

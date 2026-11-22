@@ -3,7 +3,13 @@
 {{if .Live -}}
 <section class="mode-banner mode-banner--live" aria-label="Trading mode">
 <span class="mode-tag">Live</span>
+{{if .Gate.On -}}
 <p>Live trading: orders you approve are placed with the broker and use real money.</p>
+{{- else if .Gate.Restart -}}
+<p>Live mode is confirmed, but live trading is not on yet: restart sherwood on the NAS to start it. Until then nothing is sent to the broker.</p>
+{{- else -}}
+<p>Live trading is off: nothing is sent to the broker until all three of the live-mode conditions hold.{{range .Gate.Reasons}} {{.}}{{end}} <a href="/settings#live">Open Settings</a></p>
+{{- end}}
 </section>
 {{- else -}}
 <section class="mode-banner mode-banner--paper" aria-label="Trading mode">
