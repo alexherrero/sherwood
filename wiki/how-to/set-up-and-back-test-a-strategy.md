@@ -110,7 +110,7 @@ docker logs sherwood
 
 Use the user you chose in [Install sherwood on the NAS](install-sherwood-on-the-nas) if it is not 10001. The log should show `strategy file loaded` with the same `strategy_hash` that `check-strategy` printed, then `sherwood started`. If sherwood refuses to start instead, the last line lists every problem in the file.
 
-Run a new strategy in paper mode first, with `mode: paper` in the NAS settings file. Live mode can only be turned on after `min_paper_weeks` of paper trading.
+Run a new strategy in paper mode first, with `mode: paper` in the NAS settings file. Live mode can only be turned on after `min_paper_weeks` of paper trading; [Run the first live session](run-the-first-live-session) covers that step.
 
 ## 8. Tidy up
 
@@ -131,3 +131,4 @@ Every step above is an ordinary command, so you can write `strategy.yaml` by han
 - [Rule library and back-test reference](../reference/rule-library-and-back-tests) lists every rule type and setting, the command flags, the bars file format and the fill rules.
 - [Settings and strategy file reference](../reference/settings-and-strategy-files) explains every limit in the strategy file.
 - [Install sherwood on the NAS](install-sherwood-on-the-nas) covers the application-data folder and restarting the container.
+- [Run the first live session](run-the-first-live-session) turns live trading on once the paper record is long enough.

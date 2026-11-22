@@ -147,6 +147,8 @@ The checks below only make sure each field is present. Sherwood checks the keys 
 
 Whether orders go to the paper ledger or to the broker. Sherwood starts in `paper`. There is no default, so you choose the mode on purpose.
 
+`live` alone sends nothing. Orders go to the broker only when sherwood starts with all three of these: `mode: live`, live mode confirmed on Settings from an approval device, and a paper record at least [`min_paper_weeks`](#limits) long. A new strategy file or a change of mode ends the confirmation. [Run the first live session](../how-to/run-the-first-live-session) walks through it, and the [runbook](../operational/runbook#going-back-to-paper-mode) covers going back to paper.
+
 - `mode is missing; set it to "paper" or "live"`
 - `mode is "Paper", but it must be "paper" or "live"`
 
