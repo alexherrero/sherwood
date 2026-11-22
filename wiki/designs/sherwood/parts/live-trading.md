@@ -29,7 +29,7 @@ This part connects sherwood to the real account. The broker helper gains order c
 ## Verification criteria
 
 - The broker helper's order calls are tested only against a fake library; no agent calls Robinhood.
-- The Robinhood adapter is built only in live mode with the in-app confirmation.
+- The Robinhood adapter is built only in live mode with the in-app confirmation and after the minimum paper period.
 - A helper error or silence halts trading and is never retried.
 - Resting stops are placed when a holding opens and raised by trailing rules after close.
 - The first live session is run by the operator with a small amount, after the minimum paper period.

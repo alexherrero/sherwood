@@ -96,9 +96,14 @@ type Config struct {
 	FeedToken secret.Secret
 	// Orders cancels open orders at the broker when the stop switch is
 	// thrown: the execution layer. Leave it nil when no broker adapter is
-	// built (live mode, until live trading): the switch still declines the
-	// waiting buys, and Today says open orders could not be cancelled.
+	// built (live mode while the live-mode gate is shut): the switch still
+	// declines the waiting buys, and Today says open orders could not be
+	// cancelled.
 	Orders OrderCanceller
+	// LiveTrading is true when sherwood built the live broker adapter at
+	// start-up, so approved orders are sent to the broker. In live mode
+	// while it is false, Settings and Today say why.
+	LiveTrading bool
 }
 
 // Server is the phone app's HTTP server.
@@ -118,6 +123,7 @@ type Server struct {
 	checker       risk.Checker
 	brokerHealthy func(context.Context) bool
 	orders        OrderCanceller
+	liveTrading   bool
 	feedToken     secret.Secret
 	// machine holds the mux patterns registered with HandleMachine.
 	machine map[string]bool
@@ -172,6 +178,7 @@ func New(cfg Config) (*Server, error) {
 		checker:       cfg.Checker,
 		brokerHealthy: cfg.BrokerHealthy,
 		orders:        cfg.Orders,
+		liveTrading:   cfg.LiveTrading,
 		feedToken:     cfg.FeedToken,
 		machine:       map[string]bool{},
 		mux:           http.NewServeMux(),
@@ -186,6 +193,7 @@ func New(cfg Config) (*Server, error) {
 	s.mountStopSwitch()
 	s.mountApprovals()
 	s.mountLimits()
+	s.mountLive()
 	s.mountWatchlist()
 	s.mountResearch()
 	s.HandleRead("/health", http.HandlerFunc(health))

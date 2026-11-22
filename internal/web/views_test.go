@@ -167,12 +167,19 @@ func TestTodayBannerSaysTheModeInWords(t *testing.T) {
 		"Paper trading: no real money moves.")
 	wantNotIn(t, paper, "Live trading", "mode-banner--live")
 
-	live := newFixtureMode(t, config.ModeLive).page("/")
+	live := newFixtureWith(t, config.ModeLive, func(_ *fixture, cfg *Config) { cfg.LiveTrading = true }).page("/")
 	wantIn(t, live,
 		`<section class="mode-banner mode-banner--live" aria-label="Trading mode">`,
 		`<span class="mode-tag">Live</span>`,
 		"Live trading: orders you approve are placed with the broker and use real money.")
-	wantNotIn(t, live, "Paper trading", "mode-banner--paper")
+	wantNotIn(t, live, "Paper trading", "mode-banner--paper", "Live trading is off")
+
+	// Live mode without the live adapter says why nothing is sent.
+	off := newFixtureMode(t, config.ModeLive).page("/")
+	wantIn(t, off, `<span class="mode-tag">Live</span>`,
+		"Live trading is off: nothing is sent to the broker until all three of the live-mode conditions hold.",
+		"Live mode has not been confirmed in the app for this strategy file.", "There is no paper record yet.")
+	wantNotIn(t, off, "orders you approve are placed with the broker")
 }
 
 func TestTodayWithNothingRecorded(t *testing.T) {

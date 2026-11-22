@@ -40,7 +40,7 @@ func TestTheSendJobSkipsAPassedSessionAndRunsToday(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	tr, err := registerTrading(env{clock: clk}, sched, config.ModePaper, acStrategy(t), s, sw, log)
+	tr, err := registerTrading(ctx, env{clock: clk}, sched, config.ModePaper, acStrategy(t), s, sw, log, nil)
 	if err != nil || tr.paper == nil || tr.exec == nil {
 		t.Fatalf("registerTrading = %+v, %v", tr, err)
 	}
@@ -70,29 +70,6 @@ func TestTheSendJobSkipsAPassedSessionAndRunsToday(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "reconciled with the broker") {
 		t.Errorf("no reconciliation logged:\n%s", out.String())
-	}
-}
-
-func TestLiveModeRegistersNoSendJob(t *testing.T) {
-	ctx := context.Background()
-	now := at(t, "2026-11-24", 9, 0)
-	s, err := store.Open(ctx, filepath.Join(t.TempDir(), "sherwood.db"), now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = s.Close() })
-	log, out := loggingtest.New(t)
-	clk := clock.NewFake(now)
-	sched, err := scheduler.New(scheduler.Config{Store: s, Clock: clk, Calendar: clock.NYSE(), Logger: log})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tr, err := registerTrading(env{clock: clk}, sched, config.ModeLive, acStrategy(t), s, nil, log)
-	if err != nil || tr.paper != nil || tr.exec != nil {
-		t.Fatalf("registerTrading = %+v, %v, want nothing in live mode", tr, err)
-	}
-	if !strings.Contains(out.String(), "orders are not sent") {
-		t.Errorf("live mode did not say orders are not sent:\n%s", out.String())
 	}
 }
 

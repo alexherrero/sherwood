@@ -71,9 +71,12 @@ type afterClose struct {
 	halts    *halt.Switch        // thrown when the sources disagree on a held stock
 	alerts   notify.Notifier     // says when buys are waiting; notify.Nowhere when off
 	paper    *paper.Broker       // settles the day's paper fills; nil in live mode
-	exec     *execution.Executor // reconciles after a successful attempt; nil in live mode
-	primary  prices.Source
-	check    prices.Source
+	exec     *execution.Executor // reconciles after a successful attempt; nil while no adapter is built
+	// healthy is the broker adapter's health for the proposal's preview
+	// check; nil means paperBrokerHealthy.
+	healthy func(context.Context) bool
+	primary prices.Source
+	check   prices.Source
 }
 
 // newPriceSources builds the two price sources from the settings, or returns
@@ -102,7 +105,7 @@ func registerAfterClose(e env, sched *scheduler.Scheduler, keys config.PriceKeys
 		return nil
 	}
 	a := &afterClose{store: db, clock: e.clock, calendar: clock.NYSE(), log: logger, strategy: strategy,
-		halts: halts, alerts: alerts, paper: tr.paper, exec: tr.exec, primary: primary, check: check}
+		halts: halts, alerts: alerts, paper: tr.paper, exec: tr.exec, healthy: tr.healthy, primary: primary, check: check}
 	return a.register(sched)
 }
 
@@ -315,12 +318,22 @@ func (a *afterClose) run(ctx context.Context, r scheduler.Run, attempt int) erro
 // expires the unapproved ones, logging through log.
 func (a *afterClose) proposer(log *slog.Logger) (*proposal.Proposer, error) {
 	return proposal.New(proposal.Config{Store: a.store, Clock: a.clock, Calendar: a.calendar, Strategy: a.strategy,
-		Checker: risk.Standard{}, Switch: a.halts, Notifier: a.alerts, BrokerHealthy: paperBrokerHealthy, Logger: log})
+		Checker: risk.Standard{}, Switch: a.halts, Notifier: a.alerts, BrokerHealthy: a.brokerHealthy(), Logger: log})
 }
 
-// paperBrokerHealthy is the broker's health for the proposal's preview check.
-// The paper broker always answers; the execution layer checks the real
-// adapter's health again just before it sends.
+// brokerHealthy is the broker adapter's health: the live adapter's in live
+// trading, otherwise paperBrokerHealthy.
+func (a *afterClose) brokerHealthy() func(context.Context) bool {
+	if a.healthy == nil {
+		return paperBrokerHealthy
+	}
+	return a.healthy
+}
+
+// paperBrokerHealthy is the broker's health when no live adapter is built.
+// The paper broker always answers, and without a live adapter nothing is
+// sent; the execution layer checks the live adapter's health again just
+// before it sends.
 func paperBrokerHealthy(context.Context) bool { return true }
 
 // disagreement is a price halt's evidence: the date, and each held stock

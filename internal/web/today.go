@@ -19,6 +19,9 @@ import (
 type todayData struct {
 	// Live is true in live mode. The banner says which mode in words.
 	Live bool
+	// Gate is the live-mode gate: in live mode, the banner says whether
+	// live trading is on, and if not, why (live.go).
+	Gate liveView
 	// Result is the outcome of the last stop switch action, if any.
 	Result *notice
 	// Switch is the stop switch: on or off, and the halts that turned it on.
@@ -67,6 +70,11 @@ func loadToday(s *Server, r *http.Request) (any, error) {
 	defer func() { _ = tx.Rollback() }()
 
 	d := todayData{Live: s.mode == config.ModeLive}
+	if d.Live {
+		if d.Gate, err = s.loadLive(ctx, tx); err != nil {
+			return nil, err
+		}
+	}
 	if res, ok := switchResults[r.URL.Query().Get("switch")]; ok {
 		d.Result = &res
 	}

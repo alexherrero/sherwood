@@ -34,6 +34,7 @@ import (
 	"syscall"
 
 	"github.com/alexherrero/sherwood/internal/broker"
+	"github.com/alexherrero/sherwood/internal/broker/robinhood"
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/config"
 	"github.com/alexherrero/sherwood/internal/halt"
@@ -213,6 +214,14 @@ func run(ctx context.Context, e env) (err error) {
 		logger.Info("strategy file recorded", "strategy_hash", strategy.Hash, "change_source", string(limits.NAS),
 			"reason", "its hash and changed limits are recorded; limits tightened from the phone app under an earlier file no longer apply")
 	}
+	// A new mode is recorded too; a confirmation of live mode given before
+	// it, or before a new strategy file, no longer holds.
+	if wrote, err := limits.RecordMode(ctx, db, settings.Mode, e.clock.Now()); err != nil {
+		return fmt.Errorf("refusing to start: recording the mode: %w", err)
+	} else if wrote {
+		logger.Info("mode recorded", "mode", mode, "change_source", string(limits.NAS),
+			"reason", "a confirmation of live mode given before this change no longer holds")
+	}
 
 	push := newPush(settings, db, e.clock, logger)
 	stopSwitch, err := newStopSwitch(db, e.clock, push, logger)
@@ -227,11 +236,13 @@ func run(ctx context.Context, e env) (err error) {
 		cancel(nil)
 		helpers.Wait() // the helper is stopped before the database closes
 	}()
+	var newLive newLiveAdapter
 	if settings.Mode == config.ModeLive {
 		sup, err := newSupervisor(e, opts, logger, haltOnBrokerFailure(ctx, stopSwitch))
 		if err != nil {
 			return fmt.Errorf("refusing to start: %w", err)
 		}
+		newLive = robinhoodAdapter(sup, &broker.LoginAlert{Notifier: alertsOf(push)}, db, logger)
 		helpers.Add(1)
 		go func() {
 			defer helpers.Done()
@@ -254,7 +265,7 @@ func run(ctx context.Context, e env) (err error) {
 	if err := registerBackup(sched, settings.Backup, db, logger); err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
-	tr, err := registerTrading(e, sched, settings.Mode, strategy, db, stopSwitch, logger)
+	tr, err := registerTrading(ctx, e, sched, settings.Mode, strategy, db, stopSwitch, logger, newLive)
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
 	}
@@ -278,9 +289,10 @@ func run(ctx context.Context, e env) (err error) {
 		Strategy:        strategy,
 		Calendar:        clock.NYSE(),
 		Checker:         risk.Standard{},
-		BrokerHealthy:   paperBrokerHealthy,
+		BrokerHealthy:   tr.healthy,
 		FeedToken:       settings.FeedToken,
 		Orders:          canceller,
+		LiveTrading:     tr.live,
 	})
 	if err != nil {
 		return fmt.Errorf("refusing to start: %w", err)
@@ -365,6 +377,16 @@ func alertsOf(push web.PushChannel) notify.Notifier {
 func haltOnBrokerFailure(ctx context.Context, sw *halt.Switch) func(error) {
 	return func(err error) {
 		_, _, _ = sw.ThrowOnce(ctx, halt.BrokerError, "The broker helper failed: "+err.Error())
+	}
+}
+
+// robinhoodAdapter returns the builder of the live broker adapter over the
+// supervisor's helper. Every broker call's outcome goes through the one login
+// alert, so an expired session sends one alert however many calls fail.
+func robinhoodAdapter(sup *broker.Supervisor, login *broker.LoginAlert, db *store.Store, logger *slog.Logger) newLiveAdapter {
+	return func() (liveAdapter, error) {
+		return robinhood.New(robinhood.Config{Client: sup.Client(), Helper: sup, Login: login,
+			Keys: robinhood.OrderKeys(db.Reader()), Logger: logger})
 	}
 }
 
