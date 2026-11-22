@@ -163,6 +163,11 @@ type run struct {
 	// suggested is the highest stop the strategies' stop rules gave each
 	// holding at the previous close, and the strategy that gave it.
 	suggested map[string]suggestion
+	// lost is the price of each stock's newest sent stop when the broker
+	// cancelled or expired it (reconciliation found it gone without
+	// filling) and no stop has been sent since: the stop that replaces it
+	// is never lower.
+	lost map[string]money.Price
 	// noStops is set while you have cancelled the protective stops from
 	// the phone app: no stop is placed or raised until the switch is reset.
 	noStops bool
@@ -241,6 +246,9 @@ func (e *Executor) load(ctx context.Context, session time.Time) (*run, error) {
 		if o.Type == orders.Stop {
 			r.resting[o.Symbol] = append(r.resting[o.Symbol], o)
 		}
+	}
+	if r.lost, err = lostStops(ctx, q); err != nil {
+		return nil, err
 	}
 	sugg, err := signals.LoadSuggestions(ctx, q, prev)
 	if err != nil {
@@ -512,6 +520,11 @@ func (r *run) restop(ctx context.Context, sym string) error {
 	for _, o := range cands {
 		raise(o.Price)
 	}
+	if len(rest) == 0 {
+		if p, ok := r.lost[sym]; ok {
+			raise(&p)
+		}
+	}
 	if s, ok := r.suggested[sym]; ok {
 		raise(&s.price)
 	}
@@ -657,6 +670,37 @@ func (r *run) carrier(ctx context.Context, sym string, held money.Quantity, targ
 	return nil, nil
 }
 
+// lostStops reads, for each stock, the price of its newest sent stop order
+// when reconciliation found it cancelled or expired at the broker, unless a
+// stop has been sent for the stock since.
+func lostStops(ctx context.Context, q orders.Querier) (map[string]money.Price, error) {
+	rows, err := q.QueryContext(ctx, `SELECT symbol, price FROM orders AS o
+		WHERE order_type = 'stop' AND state IN ('cancelled', 'expired') AND price IS NOT NULL
+		  AND (SELECT actor FROM order_history WHERE order_id = o.id ORDER BY id DESC LIMIT 1) = ?
+		  AND NOT EXISTS (SELECT 1 FROM orders AS n WHERE n.symbol = o.symbol AND n.order_type = 'stop' AND n.id > o.id
+		      AND n.state NOT IN ('proposed', 'awaiting_approval', 'approved', 'declined', 'blocked'))`, string(orders.Reconciliation))
+	if err != nil {
+		return nil, fmt.Errorf("execution: reading lost stops: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+	out := map[string]money.Price{}
+	for rows.Next() {
+		var sym, text string
+		if err := rows.Scan(&sym, &text); err != nil {
+			return nil, fmt.Errorf("execution: reading lost stops: %w", err)
+		}
+		p, err := money.ParsePrice(text)
+		if err != nil {
+			return nil, fmt.Errorf("execution: reading lost stops: %w", err)
+		}
+		out[sym] = p
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("execution: reading lost stops: %w", err)
+	}
+	return out, nil
+}
+
 // call runs one broker call under the time limit.
 func call[T any](ctx context.Context, timeout time.Duration, fn func(context.Context) (T, error)) (T, error) {
 	cctx, cancel := context.WithTimeout(ctx, timeout)
@@ -756,6 +800,23 @@ func (e *Executor) send(ctx context.Context, o orders.Order, v risk.Verdict) (or
 	switch rep.Status {
 	case broker.StatusAccepted:
 		return e.move(ctx, o, orders.Change{To: orders.Accepted, Actor: orders.Broker, Reason: "The broker accepted it."})
+	case broker.StatusFilled, broker.StatusPartiallyFilled:
+		// Filled at once, as a marketable buy or a sell at the open can be:
+		// the fill is recorded at the broker's price, with the holdings and
+		// cash after it. A fill that cannot be recorded without a guess (no
+		// price, more shares than ordered) leaves the order unknown.
+		out, err := e.settleOne(ctx, o, rep, orders.Broker, "Filled when it was placed")
+		var diff errDifference
+		if errors.As(err, &diff) {
+			return orders.Order{}, e.unknown(ctx, o, fmt.Sprintf("%s was sent and the broker answered %s, but the answer cannot be recorded: %s",
+				describe(o), rep.Status, diff.what), nil)
+		}
+		if err != nil {
+			return orders.Order{}, err
+		}
+		e.log.Info("order filled when placed", "order_key", out.Key, "symbol", out.Symbol, "state", string(out.State),
+			"quantity", rep.Filled, "price", rep.FillPrice)
+		return out, nil
 	case broker.StatusRejected:
 		why := "The broker refused it: " + orDefault(rep.Detail, "no reason given") + "."
 		if _, err := e.move(ctx, o, orders.Change{To: orders.Rejected, Actor: orders.Broker, Reason: why}); err != nil {

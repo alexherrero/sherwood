@@ -8,13 +8,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/alexherrero/sherwood/internal/broker"
 	"github.com/alexherrero/sherwood/internal/clock"
 	"github.com/alexherrero/sherwood/internal/halt"
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/limits"
 	"github.com/alexherrero/sherwood/internal/money"
-	"github.com/alexherrero/sherwood/internal/orders"
 	"github.com/alexherrero/sherwood/internal/prices"
 )
 
@@ -56,37 +54,9 @@ func (e *Executor) CheckOpenOrders(ctx context.Context) (*Reconciled, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	res := &Reconciled{}
-	open, err := call(ctx, e.timeout, e.adapter.OpenOrders)
-	if err != nil {
-		return res, e.brokerFailed(ctx, "Listing the broker's open orders for the 15-minute check failed: "+err.Error(), err)
-	}
-	listed := map[string]bool{}
-	for _, r := range open {
-		listed[r.Ref] = true
-	}
-	mine, err := orders.InState(ctx, e.store.Reader(),
-		orders.Submitted, orders.Unknown, orders.Accepted, orders.PartiallyFilled)
-	if err != nil {
-		return res, fmt.Errorf("execution: %w", err)
-	}
-	var pending []orders.Order
-	for _, o := range mine {
-		if o.State == orders.Submitted || o.State == orders.Unknown || !listed[o.Key] {
-			pending = append(pending, o)
-		}
-	}
-	answers, err := e.settleOrders(ctx, res, pending)
+	open, err := e.settleListed(ctx, res, "the 15-minute check")
 	if err != nil {
 		return res, err
-	}
-	// An order the listing missed but the lookup still finds open (it was
-	// placed or moved between the two calls) is compared as the lookup
-	// answered.
-	for _, o := range pending {
-		if rep, ok := answers[o.Key]; ok && !listed[o.Key] &&
-			(rep.Status == broker.StatusAccepted || rep.Status == broker.StatusPartiallyFilled) {
-			open = append(open, rep)
-		}
 	}
 
 	tx, err := e.store.Reader().BeginTx(ctx, &sql.TxOptions{ReadOnly: true})

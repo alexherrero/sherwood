@@ -345,7 +345,7 @@ func (b *Broker) Settle(ctx context.Context, date time.Time, bars []prices.Bar) 
 		slices.SortStableFunc(open, func(x, y orders.Order) int {
 			return cmp.Or(cmp.Compare(workOrder(x.Type), workOrder(y.Type)), cmp.Compare(x.ID, y.ID))
 		})
-		book, err := readBook(ctx, tx)
+		book, err := holdings.ReadBook(ctx, tx)
 		if err != nil {
 			return err
 		}
@@ -360,7 +360,7 @@ func (b *Broker) Settle(ctx context.Context, date time.Time, bars []prices.Bar) 
 		if len(res.Fills) == 0 {
 			return nil
 		}
-		return book.write(ctx, tx, session.Close, res)
+		return write(ctx, tx, book, session.Close, res)
 	})
 	if err != nil {
 		return nil, err
@@ -395,7 +395,7 @@ func expire(ctx context.Context, tx *sql.Tx, open []orders.Order, date time.Time
 
 // work settles one open order against the date, if it is due.
 func (b *Broker) work(ctx context.Context, tx *sql.Tx, o orders.Order, date time.Time,
-	day map[string]prices.Bar, book *book, res *Settlement, now time.Time) error {
+	day map[string]prices.Bar, book *holdings.Book, res *Settlement, now time.Time) error {
 	made := clock.DateOf(o.Date)
 	switch {
 	case made.After(date):
@@ -440,8 +440,10 @@ func (b *Broker) work(ctx context.Context, tx *sql.Tx, o orders.Order, date time
 		res.Unfilled = append(res.Unfilled, Worked{o, f.Reason})
 		return nil
 	}
-	if err := book.apply(o, f, date); err != nil {
-		return err
+	if o.Side == signals.SideBuy {
+		book.Buy(o.Symbol, f.Quantity, f.Price, date)
+	} else if err := book.Sell(o.Symbol, f.Quantity, f.Price); err != nil {
+		return fmt.Errorf("%w: order %d: %w", ErrSettle, o.ID, err)
 	}
 	after, rec, err := orders.RecordFill(ctx, tx, o.ID, orders.NewFill{
 		Date: date, Quantity: f.Quantity, Price: f.Price, Reason: f.Reason, Actor: orders.Broker, At: now,
@@ -453,80 +455,9 @@ func (b *Broker) work(ctx context.Context, tx *sql.Tx, o orders.Order, date time
 	return nil
 }
 
-// book is the holdings and cash as the day's fills change them.
-type book struct {
-	held map[string]holdings.Holding
-	cash money.Money
-}
-
-func readBook(ctx context.Context, tx *sql.Tx) (*book, error) {
-	bk := &book{held: map[string]holdings.Holding{}}
-	set, err := holdings.Current(ctx, tx)
-	if err != nil && !errors.Is(err, holdings.ErrNone) {
-		return nil, err
-	}
-	for _, h := range set.Holdings {
-		bk.held[h.Symbol] = h
-	}
-	cash, err := holdings.LatestCash(ctx, tx)
-	switch {
-	case errors.Is(err, holdings.ErrNone):
-	case err != nil:
-		return nil, err
-	default:
-		bk.cash = cash.Amount
-	}
-	return bk, nil
-}
-
-// costPlaces is how many places an average cost is kept to after an add.
-const costPlaces = 6
-
-// apply changes the book for one fill.
-func (bk *book) apply(o orders.Order, f fill.Fill, date time.Time) error {
-	h, held := bk.held[o.Symbol]
-	if o.Side == signals.SideBuy {
-		bk.cash = bk.cash.Sub(f.Value)
-		if !held {
-			bk.held[o.Symbol] = holdings.Holding{Symbol: o.Symbol, Quantity: f.Quantity,
-				AverageCost: f.Price.Money(), Opened: date}
-			return nil
-		}
-		qty := h.Quantity.Add(f.Quantity)
-		cost := h.Cost().Add(f.Value).Decimal().DivRound(qty.Decimal(), costPlaces)
-		h.Quantity, h.AverageCost = qty, money.FromDecimal(cost)
-		bk.held[o.Symbol] = h
-		return nil
-	}
-	if !held {
-		return fmt.Errorf("%w: order %d sells %s shares of %s, which is not held", ErrSettle, o.ID, f.Quantity, o.Symbol)
-	}
-	left, err := h.Quantity.Sub(f.Quantity)
-	if err != nil {
-		return fmt.Errorf("%w: order %d sells %s shares of %s, but only %s are held",
-			ErrSettle, o.ID, f.Quantity, o.Symbol, h.Quantity)
-	}
-	bk.cash = bk.cash.Add(f.Value)
-	if left.IsZero() {
-		delete(bk.held, o.Symbol)
-		return nil
-	}
-	h.Quantity = left
-	bk.held[o.Symbol] = h
-	return nil
-}
-
 // write records the book as the holdings and cash at the session's close.
-func (bk *book) write(ctx context.Context, tx *sql.Tx, at time.Time, res *Settlement) error {
-	hs := make([]holdings.Holding, 0, len(bk.held))
-	for _, h := range bk.held {
-		hs = append(hs, h)
-	}
-	set, err := holdings.Replace(ctx, tx, holdings.SourceFills, at, hs)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrSettle, err)
-	}
-	cash, err := holdings.RecordCash(ctx, tx, holdings.SourceFills, at, bk.cash)
+func write(ctx context.Context, tx *sql.Tx, bk *holdings.Book, at time.Time, res *Settlement) error {
+	set, cash, err := bk.Write(ctx, tx, holdings.SourceFills, at)
 	if err != nil {
 		return fmt.Errorf("%w: %w", ErrSettle, err)
 	}
