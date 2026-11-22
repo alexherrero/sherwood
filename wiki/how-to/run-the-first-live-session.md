@@ -113,6 +113,7 @@ From 09:30 until 15:45, the `open-orders-check` and `daily-loss-check` jobs run 
 - Today shows both succeeding, with the start times moving on every 15 minutes.
 - The log says `open orders agree with the broker` and `daily loss under the limit`.
 - When a resting order fills during the day, the next check finds it, and Orders shows the fill "by reconciliation". Portfolio's holdings and cash move with it.
+- When an order that had already partly filled fills further, the next check halts with `reconciliation`, because the broker gives only an average price for the whole order. Read the new shares' price in the broker's app and record them with `sherwood settle-order`, as in [A partial fill that grows](../operational/runbook#a-partial-fill-that-grows), then reset.
 
 You don't need to watch every slot. A notification reaches you if a check halts trading or fails.
 
@@ -151,6 +152,7 @@ These checks need the real account, so they are yours. Note what you find for ea
 
 - [ ] **Fill prices.** After the first fill, the price on Orders matches the broker's app, to the cent.
 - [ ] **A fill during the day.** The next 15-minute check settles it by lookup, Orders shows "by reconciliation", and trading doesn't halt.
+- [ ] **A partial fill that grows, if one happens.** Does the broker's app show each execution's own price, or only the average? `settle-order` needs each execution's price. After you record it, Portfolio's average cost and cash match the app, and the next check passes.
 - [ ] **Which cash.** After the first fill, compare the cash on Portfolio with the app's cash, buying power and withdrawable cash. Sherwood reads the broker's cash, not buying power. Does it include unsettled sale proceeds?
 - [ ] **Fees and other cash movements.** After the first sell, did the cash differ by a few cents, from regulatory fees? Dividends, interest and deposits also move cash, and reconciliation halts on any difference. Note whether a small tolerance would be worth adding later.
 - [ ] **The account value.** During market hours and outside them, compare the value the daily loss check uses with the total in the broker's app. Is the "down X from Y" figure right, when the check halts or in the log?

@@ -13,7 +13,9 @@
 // through the strategy file's rules and prints a report; it starts nothing
 // else (see backtest.go). "sherwood import-holdings" starts the broker
 // helper just long enough to read the holdings and cash once, read-only, and
-// records them (see importholdings.go). "sherwood rules", "sherwood
+// records them (see importholdings.go). "sherwood settle-order" records by
+// hand a fill reconciliation can't, read from the broker's app, and calls no
+// broker (see settleorder.go). "sherwood rules", "sherwood
 // check-strategy" and "sherwood fetch-bars" serve the setup skill on the Mac
 // (see setup.go), and "sherwood research-export" and "sherwood
 // research-upload" serve the nightly research job there (see research.go).
@@ -153,6 +155,9 @@ func run(ctx context.Context, e env) (err error) {
 	}
 	if len(e.args) > 0 && e.args[0] == importCommand {
 		return runImportHoldings(ctx, e, e.args[1:])
+	}
+	if len(e.args) > 0 && e.args[0] == settleCommand {
+		return runSettleOrder(ctx, e, e.args[1:])
 	}
 	if len(e.args) > 0 {
 		switch e.args[0] {
