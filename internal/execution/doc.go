@@ -21,7 +21,9 @@
 //     resting now, any protective sell proposed for the session, and the
 //     stop the strategies' stop rules gave the holding at the last close, so
 //     a trailing rule's raise after the close is applied here and a stop
-//     never moves down. When the price or the share count changes, the old
+//     never moves down. When the broker cancelled or expired the holding's
+//     last stop, that stop's price counts too, so its replacement is never
+//     lower. When the price or the share count changes, the old
 //     stop is called off and then the new one sent, never the other way
 //     round, so two stops never cover the same shares.
 //  3. Buys, unless the stop switch is on.
@@ -35,8 +37,12 @@
 // A send is two moves. The order moves to `submitted` and that is committed
 // before the broker is called, so a crash mid-call leaves it `submitted` for
 // reconciliation to look up. The broker is then called exactly once, under a
-// time limit. An acceptance moves the order to `accepted`. A refusal moves it
-// to `rejected` and halts trading. Any error, time-out or unclear answer
+// time limit. An acceptance moves the order to `accepted`. An answer that
+// the order filled at once, in full or in part, records the fill at the
+// broker's price and moves the holdings and cash with it, as reconciliation
+// does; a fill it cannot record without a guess (no price, more shares than
+// ordered) moves the order to `unknown` and halts. A refusal moves it to
+// `rejected` and halts trading. Any error, time-out or unclear answer
 // moves it to `unknown` in its own transaction and then halts trading, and
 // the run stops there: nothing is ever retried, and nothing more is sent
 // until you reset the switch.
@@ -48,7 +54,10 @@
 //
 // The same layer does what the stop switch asks of orders (StopBuys and
 // CancelOpen, in stopswitch.go) and reconciles sherwood's records with the
-// broker's (Reconcile, in reconcile.go). Send, CancelOpen and Reconcile hold
+// broker's (Reconcile, in reconcile.go). Every fill that a send or a lookup
+// records also writes the holdings and cash after it, as a snapshot with
+// source fills (holdings.Book), so in live mode the records follow the
+// broker's fills and reconciliation compares like with like. Send, CancelOpen and Reconcile hold
 // one lock, so they never run over each other. Every check reads the limits
 // in force afresh: the strategy file's, tightened from the phone app
 // (limits.Effective). While a stops_cancelled halt is active, Send places no

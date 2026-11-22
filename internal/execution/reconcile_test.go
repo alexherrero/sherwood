@@ -10,6 +10,7 @@ import (
 	"github.com/alexherrero/sherwood/internal/broker"
 	"github.com/alexherrero/sherwood/internal/broker/brokertest"
 	"github.com/alexherrero/sherwood/internal/halt"
+	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/orders"
 	"github.com/alexherrero/sherwood/internal/signals"
@@ -84,12 +85,23 @@ func TestAReconciliationDifferenceHaltsTrading(t *testing.T) {
 			},
 			want: "The broker has an open order (reference made-up-reference) that sherwood does not have open.",
 		},
-		"an open order the broker does not list": {
+		// A resting stop the broker no longer lists is looked up; one the
+		// broker cancelled or expired leaves the holding unprotected there.
+		"a resting stop the broker cancelled": {
 			setup: func(t *testing.T, h *harness) {
-				h.resting(t, "AAA", "10", "9.00")
+				stop := h.resting(t, "AAA", "10", "9.00")
 				h.agree(map[string]string{"AAA": "10"})
+				h.fake.Answer(brokertest.Lookup, broker.Report{Ref: stop.Key, Status: broker.StatusCancelled}, nil)
 			},
-			want: "but the broker does not list it as open.",
+			want: "the resting stop at $9.00 is cancelled at the broker, so AAA has no stop there until the next 09:35 send places a new one, at no less than $9.00.",
+		},
+		"a resting stop the broker expired": {
+			setup: func(t *testing.T, h *harness) {
+				stop := h.resting(t, "AAA", "10", "9.00")
+				h.agree(map[string]string{"AAA": "10"})
+				h.fake.Answer(brokertest.Lookup, broker.Report{Ref: stop.Key, Status: broker.StatusExpired}, nil)
+			},
+			want: "the resting stop at $9.00 is expired at the broker",
 		},
 		"an open order's fills": {
 			setup: func(t *testing.T, h *harness) {
@@ -148,16 +160,16 @@ func TestAnUnknownOrderIsSettledByLookupWithoutAResend(t *testing.T) {
 	}
 }
 
-func TestAFillFoundByLookupIsRecordedAtTheBrokersPrice(t *testing.T) {
+func TestAFillFoundByLookupIsRecordedAtTheBrokersPriceAndInTheHoldings(t *testing.T) {
 	h := newHarness(t, passAll{})
 	h.hold(t, nil)
 	unknown := h.order(t, signals.KindBuy, "AAA", "5", p("10.10"), session,
 		orders.AwaitingApproval, orders.Approved, orders.Submitted, orders.Unknown)
 	h.fake.Answer(brokertest.Lookup, broker.Report{Ref: unknown.Key, Status: broker.StatusFilled, Filled: q("5"),
 		FillPrice: p("10.05")}, nil)
-	// The broker holds the shares sherwood has not recorded in its holdings
-	// yet, so the comparison still finds that difference for review.
+	// The fill moves the holdings and cash, so they agree with the broker's.
 	h.agree(map[string]string{"AAA": "5"})
+	h.fake.Acct.Cash = money.MustParseMoney("9949.75")
 	res := h.reconcile(t)
 	o := h.get(t, unknown.ID)
 	if o.State != orders.Filled || h.lastActor(t, o.ID) != orders.Reconciliation {
@@ -167,8 +179,20 @@ func TestAFillFoundByLookupIsRecordedAtTheBrokersPrice(t *testing.T) {
 	if err != nil || len(fs) != 1 || !fs[0].Price.Equal(*p("10.05")) || !fs[0].Quantity.Equal(q("5")) {
 		t.Fatalf("fills = %+v, %v; want 5 at 10.05", fs, err)
 	}
-	if len(res.Differences) != 1 || !strings.Contains(res.Differences[0], "AAA: sherwood holds 0 shares, the broker 5.") {
-		t.Errorf("differences %q, want the holdings difference", res.Differences)
+	if len(res.Differences) != 0 || h.halted(t).On() {
+		t.Errorf("differences %q, want none", res.Differences)
+	}
+	set, err := holdings.Current(context.Background(), h.store.Reader())
+	if err != nil {
+		t.Fatal(err)
+	}
+	aaa, ok := set.Find("AAA")
+	if set.Source != holdings.SourceFills || !ok || !aaa.Quantity.Equal(q("5")) || aaa.AverageCost.String() != "10.05" ||
+		!aaa.Opened.Equal(session) {
+		t.Errorf("holdings = %+v, want 5 AAA at 10.05 opened on the session, from fills", set)
+	}
+	if c, err := holdings.LatestCash(context.Background(), h.store.Reader()); err != nil || c.Amount.String() != "9949.75" {
+		t.Errorf("cash = %+v, %v; want 9949.75", c, err)
 	}
 	if h.fake.Count(brokertest.Place) != 0 {
 		t.Error("the order was sent again")

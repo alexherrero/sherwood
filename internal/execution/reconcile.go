@@ -15,25 +15,34 @@ import (
 	"github.com/alexherrero/sherwood/internal/holdings"
 	"github.com/alexherrero/sherwood/internal/money"
 	"github.com/alexherrero/sherwood/internal/orders"
+	"github.com/alexherrero/sherwood/internal/signals"
 )
 
 // Reconciliation compares sherwood's records with the broker's, through the
-// adapter, so the same code serves the paper broker now and the live broker
-// later. It runs at 09:00 ET on trading days and after the after-close
-// attempt that succeeds. One run:
+// adapter, so the same code serves the paper broker and the live broker. It
+// runs at 09:00 ET on trading days and after the after-close attempt that
+// succeeds. One run:
 //
-//  1. Settles every order whose answer was never recorded: each unknown order,
-//     and each submitted order (a send that never got its answer; no send is
-//     running, because a run holds the executor's lock). It makes one Lookup
-//     call per order and never sends one again. The broker's answer moves the
-//     order (actor reconciliation); a fill the broker reports is recorded at
-//     the broker's fill price, and only when the order had no fill recorded,
-//     so a price is never guessed.
-//  2. Compares the holdings (shares per stock), the cash and the open orders
+//  1. Lists the broker's open orders.
+//  2. Settles every order whose answer was never recorded (each unknown order,
+//     and each submitted order: a send that never got its answer; no send is
+//     running, because a run holds the executor's lock), and every order
+//     sherwood has open that the broker no longer lists (most often one that
+//     filled, or a resting stop the broker cancelled or expired). It makes one
+//     Lookup call per order and never sends one again. The broker's answer
+//     moves the order (actor reconciliation); a fill the broker reports is
+//     recorded at the broker's fill price, and only when the order had no
+//     fill recorded, so a price is never guessed. A recorded fill changes the
+//     holdings and cash in the same transaction, as a new snapshot with
+//     source fills (holdings.Book), so the records follow the fills.
+//  3. Compares the holdings (shares per stock), the cash and the open orders
 //     (which ones, their status and their filled shares) with the adapter's.
 //
 // Any difference throws halt.Reconciliation with every difference in the
-// evidence; the broker's figures are never copied over sherwood's. A failed
+// evidence; the broker's figures are never copied over sherwood's. A resting
+// stop the broker cancelled or expired is a difference too: the holding has
+// no stop at the broker until the next 09:35 send places a new one (at a
+// price never below the lost stop's), so trading halts and you are told. A failed
 // broker call throws a halt as every broker error does (unknown_order for a
 // lookup, broker_error for a listing) and stops the run, which then returns
 // an error wrapping ErrHalted.
@@ -59,10 +68,11 @@ func (e *Executor) Reconcile(ctx context.Context) (*Reconciled, error) {
 	e.mu.Lock()
 	defer e.mu.Unlock()
 	res := &Reconciled{}
-	if err := e.settle(ctx, res); err != nil {
+	open, err := e.settleListed(ctx, res, "reconciliation")
+	if err != nil {
 		return res, err
 	}
-	if err := e.compare(ctx, res); err != nil {
+	if err := e.compare(ctx, res, open); err != nil {
 		return res, err
 	}
 	if len(res.Differences) == 0 {
@@ -78,14 +88,43 @@ func (e *Executor) Reconcile(ctx context.Context) (*Reconciled, error) {
 	return res, nil
 }
 
-// settle looks up every order whose answer was never recorded.
-func (e *Executor) settle(ctx context.Context, res *Reconciled) error {
-	pending, err := orders.InState(ctx, e.store.Reader(), orders.Submitted, orders.Unknown)
+// settleListed lists the broker's open orders, then settles, by one Lookup
+// each, every order whose answer sherwood never recorded and every order
+// sherwood has open that the broker no longer lists. It returns the open
+// orders to compare: the listing, plus any order the listing missed but
+// whose lookup still finds open (it was placed or moved between the two
+// calls). what names the run in a failed listing's evidence.
+func (e *Executor) settleListed(ctx context.Context, res *Reconciled, what string) ([]broker.Report, error) {
+	open, err := call(ctx, e.timeout, e.adapter.OpenOrders)
 	if err != nil {
-		return fmt.Errorf("execution: %w", err)
+		return nil, e.brokerFailed(ctx, "Listing the broker's open orders for "+what+" failed: "+err.Error(), err)
 	}
-	_, err = e.settleOrders(ctx, res, pending)
-	return err
+	listed := map[string]bool{}
+	for _, r := range open {
+		listed[r.Ref] = true
+	}
+	mine, err := orders.InState(ctx, e.store.Reader(),
+		orders.Submitted, orders.Unknown, orders.Accepted, orders.PartiallyFilled)
+	if err != nil {
+		return nil, fmt.Errorf("execution: %w", err)
+	}
+	var pending []orders.Order
+	for _, o := range mine {
+		if o.State == orders.Submitted || o.State == orders.Unknown || !listed[o.Key] {
+			pending = append(pending, o)
+		}
+	}
+	answers, err := e.settleOrders(ctx, res, pending)
+	if err != nil {
+		return nil, err
+	}
+	for _, o := range pending {
+		if rep, ok := answers[o.Key]; ok && !listed[o.Key] &&
+			(rep.Status == broker.StatusAccepted || rep.Status == broker.StatusPartiallyFilled) {
+			open = append(open, rep)
+		}
+	}
+	return open, nil
 }
 
 // settleOrders looks up each of pending once and records the broker's
@@ -108,7 +147,7 @@ func (e *Executor) settleOrders(ctx context.Context, res *Reconciled, pending []
 			res.Differences = append(res.Differences, describe(o)+": the broker's lookup answered about another order.")
 			continue
 		}
-		settled, err := e.settleOne(ctx, o, rep)
+		settled, err := e.settleOne(ctx, o, rep, orders.Reconciliation, "Found filled when reconciliation looked it up")
 		var diff errDifference
 		switch {
 		case errors.As(err, &diff):
@@ -120,20 +159,49 @@ func (e *Executor) settleOrders(ctx context.Context, res *Reconciled, pending []
 			res.Settled = append(res.Settled, settled)
 			e.log.Info("order settled by lookup", "order_key", settled.Key, "symbol", settled.Symbol,
 				"from_state", string(o.State), "state", string(settled.State))
+			if lost := lostStop(o, settled); lost != "" {
+				e.log.Error("a resting stop is no longer at the broker", "order_key", settled.Key, "symbol", settled.Symbol,
+					"state", string(settled.State), "reason", "the next 09:35 send places a new one; trading halts for review")
+				res.Differences = append(res.Differences, lost)
+			}
 		}
 	}
 	return answers, errors.Join(errs...)
 }
 
-// settleOne records the broker's answer about o in one transaction. A
-// report it cannot record without guessing is an errDifference.
-func (e *Executor) settleOne(ctx context.Context, o orders.Order, rep broker.Report) (orders.Order, error) {
+// lostStop says, as a difference, that a resting stop the broker had has
+// gone without filling: the broker cancelled or expired it (a good-till-
+// cancelled order does not rest for ever), or it was cancelled in the
+// broker's own app. Sherwood never sends a second order from a check, so the
+// holding has no stop at the broker until the next 09:35 send places a new
+// one, at a price no lower than this one's. It returns "" for anything else.
+func lostStop(was, now orders.Order) string {
+	if was.Type != orders.Stop || (now.State != orders.Cancelled && now.State != orders.Expired) {
+		return ""
+	}
+	price := "no price"
+	if now.Price != nil {
+		price = "$" + now.Price.String()
+	}
+	return fmt.Sprintf("%s: the resting stop at %s is %s at the broker, so %s has no stop there until the next 09:35 send places a new one, at no less than %s.",
+		describe(now), price, now.State, now.Symbol, price)
+}
+
+// settleOne records the broker's answer about o in one transaction, with
+// actor as the actor of the move and how opening a fill's reason. A fill
+// changes the holdings and cash in the same transaction (holdings.Book). A
+// report it cannot record without guessing is an errDifference, and then
+// nothing is written.
+func (e *Executor) settleOne(ctx context.Context, o orders.Order, rep broker.Report, actor orders.Actor, how string) (orders.Order, error) {
 	now := e.clock.Now()
 	fillDate, err := e.fillDate(o, now)
 	if err != nil {
 		return orders.Order{}, err
 	}
 	reason := fmt.Sprintf("Reconciliation looked it up: the broker reports it %s.", rep.Status)
+	if actor != orders.Reconciliation {
+		reason = fmt.Sprintf("The broker reports it %s.", rep.Status)
+	}
 	var out orders.Order
 	err = orders.Update(ctx, e.store, func(tx *sql.Tx) error {
 		cur, err := orders.Get(ctx, tx, o.ID)
@@ -154,9 +222,16 @@ func (e *Executor) settleOne(ctx context.Context, o orders.Order, rep broker.Rep
 					describe(o), rep.Filled)}
 			}
 			cur, _, err = orders.RecordFill(ctx, tx, o.ID, orders.NewFill{Date: fillDate, Quantity: rep.Filled,
-				Price: *rep.FillPrice, Actor: orders.Reconciliation, At: now,
-				Reason: fmt.Sprintf("Found filled when reconciliation looked it up, at the broker's price of %s.", rep.FillPrice)})
+				Price: *rep.FillPrice, Actor: actor, At: now,
+				Reason: fmt.Sprintf("%s, at the broker's price of %s.", how, rep.FillPrice)})
+			if errors.Is(err, orders.ErrOverfill) {
+				return errDifference{fmt.Sprintf("%s: the broker reports %s shares filled, more than the order's %s.",
+					describe(o), rep.Filled, o.Quantity)}
+			}
 			if err != nil {
+				return err
+			}
+			if err := recordInBook(ctx, tx, o, rep.Filled, *rep.FillPrice, fillDate, now); err != nil {
 				return err
 			}
 		}
@@ -188,13 +263,39 @@ func (e *Executor) settleOne(ctx context.Context, o orders.Order, rep broker.Rep
 			return errDifference{fmt.Sprintf("%s: the broker reports it %s with %s shares filled, which does not fit its record (%s).",
 				describe(o), rep.Status, rep.Filled, cur.State)}
 		}
-		out, err = orders.Move(ctx, tx, o.ID, orders.Change{To: to, Actor: orders.Reconciliation, Reason: reason, At: now})
+		out, err = orders.Move(ctx, tx, o.ID, orders.Change{To: to, Actor: actor, Reason: reason, At: now})
 		return err
 	})
 	if err = e.sw.OrderError(ctx, err); err != nil {
 		return orders.Order{}, err
 	}
 	return out, nil
+}
+
+// recordInBook applies a fill of o to the holdings and cash, and writes them
+// as a new snapshot with source fills as of now, inside tx. A sell of shares
+// sherwood does not hold, or a snapshot that would land before one already
+// recorded, is an errDifference: the records and the broker disagree, and a
+// guess would hide it.
+func recordInBook(ctx context.Context, tx *sql.Tx, o orders.Order, qty money.Quantity, price money.Price,
+	date, now time.Time) error {
+	bk, err := holdings.ReadBook(ctx, tx)
+	if err != nil {
+		return err
+	}
+	if o.Side == signals.SideBuy {
+		bk.Buy(o.Symbol, qty, price, date)
+	} else if err := bk.Sell(o.Symbol, qty, price); err != nil {
+		return errDifference{fmt.Sprintf("%s: the broker reports %s shares sold at $%s, which sherwood's holdings cannot take: %v.",
+			describe(o), qty, price, err)}
+	}
+	if _, _, err := bk.Write(ctx, tx, holdings.SourceFills, now); err != nil {
+		if errors.Is(err, holdings.ErrOutOfOrder) {
+			return errDifference{fmt.Sprintf("%s: its fill could not be written to the holdings: %v.", describe(o), err)}
+		}
+		return err
+	}
+	return nil
 }
 
 // fillDate is the trading date a fill found by lookup is recorded on: a day
@@ -231,8 +332,9 @@ func filled(ctx context.Context, q orders.Querier, id int64) (money.Quantity, er
 	return total, nil
 }
 
-// compare compares holdings, cash and open orders with the adapter's.
-func (e *Executor) compare(ctx context.Context, res *Reconciled) error {
+// compare compares holdings, cash and open orders with the adapter's; open
+// is the broker's open orders, from settleListed.
+func (e *Executor) compare(ctx context.Context, res *Reconciled, open []broker.Report) error {
 	positions, err := call(ctx, e.timeout, e.adapter.Holdings)
 	if err != nil {
 		return e.brokerFailed(ctx, "Reading the broker's holdings for reconciliation failed: "+err.Error(), err)
@@ -240,10 +342,6 @@ func (e *Executor) compare(ctx context.Context, res *Reconciled) error {
 	brokerCash, err := call(ctx, e.timeout, e.cash)
 	if err != nil {
 		return e.brokerFailed(ctx, "Reading the broker's cash for reconciliation failed: "+err.Error(), err)
-	}
-	open, err := call(ctx, e.timeout, e.adapter.OpenOrders)
-	if err != nil {
-		return e.brokerFailed(ctx, "Listing the broker's open orders for reconciliation failed: "+err.Error(), err)
 	}
 
 	// Read sherwood's side in one read transaction, so it is one moment.
