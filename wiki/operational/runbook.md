@@ -1,6 +1,8 @@
 # Runbook
 
-This page is for the moments when something needs you: trading has halted, sherwood's records and the broker's disagree, the database has to come back from a backup, a new version has to be rolled back, or the research feed has gone stale. Each section says what you will see, what to check, and what to do, in order. It grows as sherwood does; the live-trading part will add to it.
+This page is for the moments when something needs you: trading has halted, sherwood's records and the broker's disagree, the broker session has lapsed, the database has to come back from a backup, a new version has to be rolled back, live trading has to go back to paper, or the research feed has gone stale. Each section says what you will see, what to check, and what to do, in order. It covers paper and live mode alike, and says where they differ.
+
+To turn live trading on for the first time, follow [Run the first live session](../how-to/run-the-first-live-session) instead. This page picks up once something goes wrong.
 
 Every path, address, name and number on this page is a placeholder. Where a command names the data folder or the backup share on the NAS, use your own paths in their place. The container is called `sherwood`, as in the example Compose file.
 
@@ -14,9 +16,9 @@ Your phone only ever gets a few fixed words, never a stock, an amount or a reaso
 | A scheduled job failed | A job's run ended in an error. You get one for each job and date, however many times it is retried, and the after-close job and its two retries count as one. | Today, under the job's last run, which says what went wrong |
 | Scheduled jobs ran late | Sherwood was not running when some jobs were due, so it is making them up now. You get one for each start that finds runs to make up, but not on the very first start of a new database. | Today, to see the made-up runs finish |
 | The nightly backup failed | Last night's backup was not made, or the copy failed its check. You get one per night. | Today, under the backup job, then [Restoring a backup](#restoring-a-backup) if you need one |
-| Broker login needed | The broker refused the saved session. | [Log in to the broker on the NAS](../how-to/log-in-to-the-broker-on-the-nas) |
+| Broker login needed | The broker session has expired or the broker refused it. You get one for each stretch of refused calls, not one per call. | [Logging in again](#logging-in-again) |
 
-Nothing calls the broker on a schedule yet, so the broker login notification starts arriving once live trading is built.
+In paper mode nothing calls the broker on a schedule, so the broker login notification arrives only in live mode. When live trading is on and the session lapses, expect three notifications close together: "Trading halted", "Broker login needed", and one "A scheduled job failed" for the day's checks.
 
 ## Halts and their reset
 
@@ -33,23 +35,25 @@ When you press **Stop all trading**, sherwood also clears the way for nothing to
 - Sells waiting for approval are left alone. Nothing is sent while the switch is on, and they expire with their trading day.
 - Resting protective stops stay in place, so your holdings stay protected.
 
-While the switch is on, Today shows a **Protective stops** card. Tick its box and press **Cancel protective stops too** only if you mean to leave every holding without a stop. This second, separate confirmation cancels each resting stop at the broker, sets aside any stop not yet sent, and adds a halt of its own (`stops_cancelled`), so the 09:35 send places no new stop until you reset the switch. When you reset, the next 09:35 send puts a stop back on every holding. In live mode, until live trading is built, sherwood has no broker connection to cancel through: it declines the waiting buys and tells you to cancel open orders in the broker's own app.
+While the switch is on, Today shows a **Protective stops** card. Tick its box and press **Cancel protective stops too** only if you mean to leave every holding without a stop. This second, separate confirmation cancels each resting stop at the broker, sets aside any stop not yet sent, and adds a halt of its own (`stops_cancelled`), so the 09:35 send places no new stop until you reset the switch. When you reset, the next 09:35 send puts a stop back on every holding.
+
+In paper mode the cancellations go to sherwood's own paper book. In live mode they go to the broker, but only once live trading is on. In live mode before then (see [Run the first live session](../how-to/run-the-first-live-session)), sherwood has no broker connection to cancel through: it declines the waiting buys and tells you to cancel any open orders in the broker's own app.
 
 Automatic halts do not decline or cancel anything. They only stop new orders being sent, and the approval check refuses a buy while the switch is on.
 
-The same failure seen again while the switch is already on is recorded only once. That matters for the broker helper, which is restarted every second while it keeps failing: you get one halt and one notification, not one a second. A different cause, or the same cause with different details, always adds a halt of its own.
+The same failure seen again while the switch is already on is recorded only once. That matters for the broker helper, which is restarted every second while it keeps failing: you get one halt and one notification, not one a second. A different cause, or the same cause with different details, always adds a halt of its own. Two causes are folded more widely, by cause alone: a failed broker call (from the helper, the 09:35 send's account read, reconciliation or a 15-minute check) and the daily loss limit. While one of those halts is on, more of the same cause add nothing, so an expired session that fails every check all day still gives one halt.
 
 ### What each cause means and what to check
 
 | Today says | Cause | What to check before you reset |
 |---|---|---|
 | You pressed Stop all trading | `operator` | Nothing more than why you pressed it. The halt names the device you pressed it from. |
-| The broker failed | `broker_error` | Read the details on Today. In live mode, run `docker logs sherwood` and look for `broker helper failed`; if it says the session expired or was refused, [log in again](../how-to/log-in-to-the-broker-on-the-nas). An order the broker rejected also halts with this cause, and the Orders view shows it as rejected with the broker's reason. |
+| The broker failed | `broker_error` | Live mode only. Read the details on Today. If they start "The broker session has expired or was refused", follow [Logging in again](#logging-in-again). Otherwise run `docker logs sherwood` and look for `broker helper failed` or the failed call: the helper crashed or would not start, the network or the broker failed, or the broker answered in a shape the helper does not know. A broker answer listing two open orders under one of sherwood's references halts here too, because that order may have been sent twice: check the broker's app for a duplicate before anything else. An order the broker refused when it was sent halts with this cause as well, and the Orders view shows it as rejected with the broker's reason. Fix the helper or wait out the outage, then reset. Sherwood never retries a broker call. |
 | The price sources disagree on a stock you hold | `price_disagreement` | The details name each stock and both sources' prices for that date. Look the close up somewhere you trust. The rules made no signal for that stock that day, and the next trading day's prices are checked again from scratch. |
 | An order was asked to make a change that is not allowed | `illegal_transition` | This is a bug in sherwood, not something at the broker. The details name the order and the change it was asked to make. Leave the switch on, keep the log, and get the bug fixed before you reset. |
-| An order's state at the broker is unknown | `unknown_order` | A call to the broker failed or timed out after the order was sent, so sherwood cannot tell whether the broker has it. Look the order up in the broker's own app. Never place a replacement by hand until you know what happened to the first one. Reconciliation (below) settles these orders by looking them up. |
-| Sherwood's records and the broker's differ | `reconciliation` | See [Reconciliation differences](#reconciliation-differences). |
-| The daily loss limit was reached | `daily_loss` | The account lost more today than `limits.daily_loss_limit` allows. Look at what moved before you decide anything; this check runs in live mode only. |
+| An order's state at the broker is unknown | `unknown_order` | Sherwood sent an order, or a cancellation, and cannot tell what the broker did with it. That happens when the call failed or timed out, when the answer was about another order, when the broker answered with a status sherwood does not expect, or when it reported a fill sherwood cannot record (no price, more shares than ordered, or "filled" for only part of the order). A failed cancel of a resting stop, and a failed lookup of an unknown order during reconciliation, land here too. The order shows as unknown on the Orders view. Look it up in the broker's own app, and never place a replacement by hand until you know what happened to the first one. The next reconciliation, or the next 15-minute check in live mode, looks it up once and settles it. Reset once Orders shows it settled. |
+| Sherwood's records and the broker's differ | `reconciliation` | See [Reconciliation differences](#reconciliation-differences), which lists the live-mode differences one by one, including lost stops and foreign orders. |
+| The daily loss limit was reached | `daily_loss` | Live mode only. The 15-minute check read the account's value from the broker, and its fall since the previous close reached the daily loss limit in force. The details give the value now, the previous close's value from sherwood's own records, the loss and the limit. Nothing more is sent until you reset, apart from protective stops, which stay at the broker. Look at what moved before you decide anything. If the previous close's value looks wrong, the records may lag the account: compare Portfolio with the broker's app. If you reset the same day and the loss still reaches the limit, the next check halts again. |
 | You cancelled the protective stops | `stops_cancelled` | You confirmed, a second time, that the resting stops are cancelled. No stop is placed while it is active. Once you reset, the next 09:35 send places a stop on every holding again; reset only when you want them back. |
 
 ### Resetting the switch
@@ -75,22 +79,94 @@ Reconciliation compares sherwood's records with the broker's: holdings, cash and
 
 Reconciliation runs at 09:00 US Eastern on every trading day, as the `reconcile` job, and again at the end of the after-close run that succeeds. Each run does two things, through the broker connection:
 
-1. It settles every order whose answer was never recorded: each `unknown` order, and each order left `submitted` by a send that never got its answer. It looks each one up at the broker, once, and records what the broker says. It never sends an order again. A fill the broker reports is recorded at the broker's own fill price; if the broker gives no price, sherwood does not guess one and reports a difference instead.
+1. It settles every order whose answer was never recorded: each `unknown` order, each order left `submitted` by a send that never got its answer, and in live mode each order sherwood has open that the broker no longer lists (most often one that filled). It looks each one up at the broker, once, and records what the broker says. It never sends an order again. A fill the broker reports is recorded at the broker's own fill price; if the broker gives no price, sherwood does not guess one and reports a difference instead.
 2. It compares the shares held in each stock, the cash and the open orders (which ones, their state and their filled shares) with the broker's.
 
-Any difference throws the switch with this cause, and the details list every difference found. A failed broker call during reconciliation halts too, as every broker error does, and the job's run fails, so you also get "A scheduled job failed". A made-up 09:00 run for a morning that has passed is skipped, because the next run compares the records as they are then.
+Any difference throws the switch with this cause, and the details list every difference found. A failed broker call during reconciliation halts too, as a broker error, and the job's run fails, so you also get "A scheduled job failed". A made-up 09:00 run for a morning that has passed is skipped, because the next run compares the records as they are then.
 
 The paper settlement in the after-close run also halts with this cause: if the day's paper fills cannot be settled (for example, a sell of more shares than are held, or holdings recorded after the close by a later import), nothing is written and trading halts.
 
-In paper mode the broker is sherwood's own paper book, so a difference points at the records themselves, such as an import that landed after the close. Live mode does not run reconciliation until live trading is built.
+In paper mode the broker is sherwood's own paper book, so a difference points at the records themselves, such as an import that landed after the close. In live mode the broker is your real account, and the [15-minute open-order check](#the-live-jobs-and-the-15-minute-checks) also compares open orders, and settles orders that have left the broker's book, all through market hours. It halts with this cause too.
 
-When you see a reconciliation halt:
+### How fills reach sherwood's records in live mode
+
+Live mode runs no paper settlement. A fill reaches sherwood in one of two ways:
+
+- **When the order is placed.** If the broker answers the 09:35 send with a fill straight away, sherwood records it then, by the broker.
+- **Later, by lookup.** An order that fills while it rests at the broker is found by the next 15-minute check or reconciliation, looked up, and recorded by reconciliation. The Orders view shows these fills "by reconciliation".
+
+Either way the fill price is the broker's average price for the order, to the cent, and the holdings and cash move with the fill in the same step, as a new snapshot with the source `fills`. Sherwood never copies the broker's holdings over its own here; it applies the fill to its own records, so a real difference still shows.
+
+### The differences you can see in live mode
+
+| The details say | What happened | What to do |
+|---|---|---|
+| `<stock>: sherwood holds X shares, the broker Y.` | The holdings differ. Most often an order filled while sherwood was down, a transfer in or out, or a corporate action such as a split. | Find the cause in the broker's app. If the broker is right, re-import (step 3 below), then reset. |
+| `Cash: sherwood has recorded X, the broker Y.` | The cash differs. A gap of a few cents after a sell is most likely the broker's regulatory fees. Dividends, interest, deposits and withdrawals move the cash too. Sherwood has no tolerance: any difference halts. | Check the broker's cash activity. Once it accounts for the gap, re-import, then reset. |
+| `The broker has an open order (reference foreign-order:<id>) that sherwood does not have open.` | A foreign order: one sherwood did not place, such as an order you placed in the broker's own app, or one placed after the backup a restored database was made from. | If it is yours and you want it, know that it halts every check until it fills or is cancelled. Otherwise cancel it in the broker's app. Re-import if it filled, then reset. |
+| `... the resting stop at $P is cancelled (or expired) at the broker, so <stock> has no stop there until the next 09:35 send places a new one, at no less than $P.` | A lost stop. The broker cancelled or expired a resting protective stop (a good-till-cancelled order does not rest for ever; the broker has said about 90 days, which is not verified), or someone cancelled it in the broker's app. | See [Lost stops](#lost-stops) below. |
+| `... the broker reports N shares filled without a fill price sherwood can record.`, or, while the order is still open, `... the broker reports N shares filled, sherwood has recorded M.` | An order that had already partly filled has filled further. The broker gives only one average price for the whole order, so sherwood will not guess the price of the extra shares. | See [A partial fill that grows](#a-partial-fill-that-grows) below. |
+| `... the broker reports N shares filled, more than the order's M.` | The broker reports more shares filled than were ordered. | Check the order in the broker's app. This should never happen; keep the log. |
+| `... shares sold at $P, which sherwood's holdings cannot take` | A sell filled for shares sherwood does not hold, or more than it holds. | Compare the holdings with the broker's app, re-import, then reset. |
+| `... it is X in sherwood's records, Y at the broker.` or `... the broker does not list it as open.` | An order's state differs, and a lookup did not settle it. | Look the order up in the broker's app before you do anything else. |
+
+### Lost stops
+
+When a resting stop is gone from the broker without filling, the holding has no stop at the broker until the next 09:35 send. That send places a new one even while trading is halted, because protective stops always go out, and never at a lower price than the stop that was lost. If the stock already trades below that price by then, the new stop triggers at once and sells.
+
+1. Look at the stock in the broker's app and decide whether you are happy for a new stop to go out at 09:35 at that price.
+2. If you cancelled the stop on purpose and want the holding left without one, use the stop switch's second confirmation (**Cancel protective stops too**), which stops the 09:35 send placing any stop until you reset.
+3. Otherwise reset the switch with a reason, and check at 09:35 that the new stop rests on the Orders view.
+
+### A partial fill that grows
+
+Sherwood records a partial fill when it sees one, at the broker's price. When the same order later fills further, the broker gives a new average price for the whole order, not a price for the extra shares, so sherwood halts rather than guess. This happens whether the first part filled when the order was placed or was found by a check.
+
+Look the order up in the broker's app. Sherwood has no command to settle an order by hand, so this order stays as it is in sherwood's records, and each later check that looks it up finds the same difference. A reset therefore lasts only until the next 15-minute check or reconciliation. Leave the switch on: your holdings keep their protective stops, which still go out at 09:35. Re-importing the holdings brings the shares and cash right, but does not settle the order. Treat it as a gap in sherwood to be fixed, and keep the log and the details.
+
+### When you see a reconciliation halt
 
 1. Read the details on Today. They name the stock, the order or the amount that differs.
-2. Compare them with the broker's own app (in live mode) or with the Orders view and the holdings sherwood shows (in paper mode). Check for an order that filled while sherwood was down, a fill the broker reported late, a transfer, a dividend paid as cash, or a corporate action such as a split.
-3. If the broker is right, record its holdings and cash with `docker exec -it sherwood sherwood import-holdings`, as in [Log in to the broker on the NAS](../how-to/log-in-to-the-broker-on-the-nas). That reads the broker, records a new snapshot of your holdings and cash, and changes no order. In paper mode there is no broker to read, so look for the cause in the details instead: most often a holdings import that landed after the close.
+2. Compare them with the broker's own app (in live mode) or with the Orders view and the holdings sherwood shows (in paper mode). Check for an order that filled while sherwood was down, a fill the broker reported late, a transfer, a dividend paid as cash, fees on a sell, or a corporate action such as a split.
+3. If the broker is right, record its holdings and cash with `docker exec -it sherwood sherwood import-holdings`, as in [Log in to the broker on the NAS](../how-to/log-in-to-the-broker-on-the-nas). That reads the broker, records a new snapshot of your holdings and cash, and changes no order. Re-import only once you understand the difference; an import hides it for good. In paper mode there is no broker to read, so look for the cause in the details instead: most often a holdings import that landed after the close.
 4. If you cannot explain the difference, leave the switch on. Trading waits; your holdings stay protected by their resting stops.
 5. Reset the switch with a reason that says what the difference was and what you did about it.
+
+## The live jobs and the 15-minute checks
+
+Once live trading is on, sherwood runs these jobs on every trading day, all in US Eastern time. Today shows each one's last run.
+
+| Job | When | What it does |
+|---|---|---|
+| `reconcile` | 09:00 | The full reconciliation above: holdings, cash and open orders. |
+| `send-orders` | 09:35 | Reads the account, sends the approved orders, and places or raises a protective stop on every holding, re-placing any lost stop. |
+| `open-orders-check` | Every 15 minutes from 09:30, the last at 15:45 (12:45 on half days) | Lists the broker's open orders, settles by lookup every order that has left the broker's book or was never answered, and compares the open orders. Holdings and cash are left to the full reconciliation. In the log: `open orders agree with the broker`. |
+| `daily-loss-check` | Same slots | Reads the account's value from the broker and compares the fall since the previous close with the daily loss limit in force. In the log: `daily loss under the limit`. |
+| The after-close reconciliation | At the end of the after-close run that succeeds | The full reconciliation again. |
+
+The two 15-minute checks never make up a missed slot: if sherwood was down, the next slot runs as usual. They share one "A scheduled job failed" notification a day, however many slots fail. A check fails when a broker call fails (which halts trading as a broker error) or when the day's loss cannot be measured, for example because a holding has no previous close or no daily loss limit is set. A loss that cannot be measured halts nothing, but the risk check refuses every order that needs the limit until it can be.
+
+### When the broker is unwell
+
+While the broker helper is down or the session has lapsed, sherwood treats the broker as unhealthy. Approvals' risk check then refuses buys and ordinary sells with "The broker is not answering, so only protective sells go through.", and the after-close proposal's preview refuses the same way. It recovers on its own once a broker call works again.
+
+## Logging in again
+
+The broker decides how long a session lasts, about a day, and sherwood never logs in on its own. When the session expires or the broker refuses it, every broker call fails the same way until you log in again. You get "Trading halted", one "Broker login needed", and one "A scheduled job failed" for the day's checks. Today's halt says "The broker session has expired or was refused: log in again with the broker helper's login command on the NAS, then reset the switch." Your resting stops stay at the broker meanwhile, but no new or raised stop goes out until the session works.
+
+1. Log in again from a shell on the NAS, as in [Log in to the broker on the NAS](../how-to/log-in-to-the-broker-on-the-nas#1-log-in):
+
+   ```sh
+   docker exec -it sherwood python3 -m brokerhelper login
+   ```
+
+   Write down when the new session ends.
+
+2. You don't need to restart sherwood. The next broker call uses the new session.
+3. Reset the switch with a reason such as "Logged in again after the session expired".
+4. Watch the next 15-minute slot on Today: both checks should succeed. If the halt came before 09:35 and the send failed, the day's approved buys expire that evening, as every unsent approval does.
+
+If the session lapses every day, plan to log in each morning before 09:00.
 
 ## Restoring a backup
 
@@ -98,7 +174,7 @@ Every night at 02:00 US Eastern, sherwood copies its database into the backup fo
 
 Restore a backup when the database file is damaged (sherwood refuses to start and the log says the database is malformed, for example), or when you are [rolling back across a migration](#rolling-back-across-a-migration).
 
-Whatever happened after the copy was made is not in it. When sherwood starts on the restored copy, it makes up the scheduled runs of the last few trading days, so prices, signals and the paper record catch up on their own, and you get one "Scheduled jobs ran late" notification. Anything you did by hand since the copy, such as approvals, resets and tightened limits, is gone and needs doing again. In live mode, orders the broker filled since the copy are still at the broker, and reconciliation will show them as differences for you to review.
+Whatever happened after the copy was made is not in it. When sherwood starts on the restored copy, it makes up the scheduled runs of the last few trading days, so prices, signals and the paper record catch up on their own, and you get one "Scheduled jobs ran late" notification. Anything you did by hand since the copy, such as approvals, resets and tightened limits, is gone and needs doing again. In live mode the broker has moved on without it: see [Restoring in live mode](#restoring-in-live-mode) before you start.
 
 To restore:
 
@@ -139,8 +215,26 @@ To restore:
 
    You should see `database ready`, then `sherwood started`. If the image is newer than the copy, `database ready` reports the migrations it applied to bring the copy up to date, which is expected.
 
-6. If you are in live mode, press **Stop all trading** as soon as the app answers, and reset it only once reconciliation shows sherwood and the broker agree.
+6. If you are in live mode, press **Stop all trading** as soon as the app answers, then follow [Restoring in live mode](#restoring-in-live-mode).
 7. On Today, check that the made-up job runs finish and the halts listed are the ones you expect. Once you are happy, you can delete the `.before-restore` files.
+
+### Restoring in live mode
+
+In live mode, the broker kept trading your account after the copy was made, and the restored database knows nothing of that. Three things can be out of step:
+
+- **Orders the copy doesn't know.** An order sherwood placed after the copy, such as a new or raised protective stop or a buy sent at 09:35, still rests at the broker. Its reference is not in the restored database, so the next reconciliation or 15-minute check names it as `foreign-order:<id>` and halts.
+- **Orders the copy thinks are still open.** An order that filled or was cancelled at the broker after the copy is still open in the restored records. The next check looks it up and settles it, recording any fill at the broker's price.
+- **Stops the copy thinks are missing.** The 09:35 send places a protective stop on every holding it believes has none, even while halted. If the stop placed after the copy still rests at the broker, the holding would end up with two stops on the same shares.
+
+So, after step 5 and with the switch on:
+
+1. Open the broker's app and list its open orders. Compare them with the Orders view.
+2. Cancel, in the broker's app and before the next 09:35, every open order the Orders view doesn't show as open. That includes protective stops: the 09:35 send puts a stop back on every holding.
+3. Let the next check settle the orders the copy thinks are open. Outside market hours that is the 09:00 reconciliation, which runs while the switch is on.
+4. Then, if the holdings or cash still differ, re-import them with `docker exec -it sherwood sherwood import-holdings`. Import only after step 3, so a fill isn't counted twice.
+5. Reset once a reconciliation finds no difference, and check at 09:35 that each holding has one resting stop.
+
+If the copy is older than your live-mode confirmation, sherwood starts with live trading off: it sends nothing and runs no reconciliation or checks, and Settings shows live mode as not confirmed. Do steps 1 and 2 in the broker's app first, then confirm on Settings, restart, and carry on from step 3.
 
 ## Rolling back across a migration
 
@@ -175,6 +269,28 @@ After a clean stop the `-wal` file is empty or gone, so the one file is the whol
 5. Check the log for `database ready` and `sherwood started`, then follow steps 6 and 7 of [Restoring a backup](#restoring-a-backup).
 
 Everything recorded since that copy is lost, as with any restore. Never edit a migration file that has already run, and never delete rows from `schema_migrations` to make an older version start: either one leaves a database that no version of sherwood describes correctly.
+
+## Going back to paper mode
+
+Go back to paper when live trading is not behaving as you expect and you want sherwood to keep running without real orders. If you only need to stop orders for now, the stop switch is enough and is quicker; switching mode is for longer.
+
+Orders resting at the broker stay there when you switch. Paper mode builds no broker connection, so sherwood can neither see nor cancel them, and a protective stop left behind could still sell real shares without sherwood knowing. Cancel them while live trading is still on:
+
+1. On Today, from an approval device, press **Stop all trading**. That declines every buy waiting for approval and cancels every open buy at the broker.
+2. On the **Protective stops** card, tick the box and press **Cancel protective stops too**. That cancels every resting stop at the broker.
+3. Check the broker's app: no order sherwood placed should still be open. Cancel any that is, and check Today for an `unknown_order` halt, which means a cancellation was not confirmed.
+4. Set `mode: paper` in the settings file on the NAS, and restart:
+
+   ```sh
+   docker compose restart sherwood
+   ```
+
+5. Check the log for `sherwood started` with `"mode":"paper"`, and Today for the Paper banner. The live jobs and checks no longer run.
+6. Reset the switch with a reason such as "Back to paper mode". In paper mode the next 09:35 send places paper stops in the paper book, not at the broker.
+
+If sherwood can't start in live mode, or live trading was never on, the stop switch can't cancel at the broker: cancel every open order in the broker's app before you switch instead.
+
+The change of mode ends the live-mode confirmation. To go live again later, set `mode: live`, restart, confirm again on Settings and restart once more, as in [Run the first live session](../how-to/run-the-first-live-session). Weeks spent in live mode don't count as paper trading.
 
 ## Stale feed or failed upload
 

@@ -128,3 +128,7 @@ A failed import prints one line that starts `sherwood: import-holdings: nothing 
 | `reading settings file: ...` or `settings file is invalid: ...` | The import reads the same `settings.yaml` as sherwood itself. | Fix the file as the [settings reference](../reference/settings-and-strategy-files) describes. |
 
 None of these is fixed by running the import again straight away, apart from a short broker outage. When in doubt, stop and read the reason.
+
+## What's next
+
+Sherwood now reads your real holdings and cash, and still trades on paper. Once the paper record is long enough, [Run the first live session](run-the-first-live-session) turns live trading on. When the session expires later, the [runbook](../operational/runbook#logging-in-again) says how to log in again and reset the stop switch.
