@@ -231,7 +231,7 @@ func (e *Executor) settleOne(ctx context.Context, o orders.Order, rep broker.Rep
 			if err != nil {
 				return err
 			}
-			if err := recordInBook(ctx, tx, o, rep.Filled, *rep.FillPrice, fillDate, now); err != nil {
+			if _, _, err := recordInBook(ctx, tx, o, rep.Filled, *rep.FillPrice, fillDate, now); err != nil {
 				return err
 			}
 		}
@@ -278,42 +278,49 @@ func (e *Executor) settleOne(ctx context.Context, o orders.Order, rep broker.Rep
 // recorded, is an errDifference: the records and the broker disagree, and a
 // guess would hide it.
 func recordInBook(ctx context.Context, tx *sql.Tx, o orders.Order, qty money.Quantity, price money.Price,
-	date, now time.Time) error {
+	date, now time.Time) (holdings.Set, holdings.Cash, error) {
 	bk, err := holdings.ReadBook(ctx, tx)
 	if err != nil {
-		return err
+		return holdings.Set{}, holdings.Cash{}, err
 	}
 	if o.Side == signals.SideBuy {
 		bk.Buy(o.Symbol, qty, price, date)
 	} else if err := bk.Sell(o.Symbol, qty, price); err != nil {
-		return errDifference{fmt.Sprintf("%s: the broker reports %s shares sold at $%s, which sherwood's holdings cannot take: %v.",
+		return holdings.Set{}, holdings.Cash{}, errDifference{fmt.Sprintf(
+			"%s: the broker reports %s shares sold at $%s, which sherwood's holdings cannot take: %v.",
 			describe(o), qty, price, err)}
 	}
-	if _, _, err := bk.Write(ctx, tx, holdings.SourceFills, now); err != nil {
+	set, cash, err := bk.Write(ctx, tx, holdings.SourceFills, now)
+	if err != nil {
 		if errors.Is(err, holdings.ErrOutOfOrder) {
-			return errDifference{fmt.Sprintf("%s: its fill could not be written to the holdings: %v.", describe(o), err)}
+			return holdings.Set{}, holdings.Cash{}, errDifference{fmt.Sprintf(
+				"%s: its fill could not be written to the holdings: %v.", describe(o), err)}
 		}
-		return err
+		return holdings.Set{}, holdings.Cash{}, err
 	}
-	return nil
+	return set, cash, nil
 }
 
 // fillDate is the trading date a fill found by lookup is recorded on: a day
 // order's own session, or for a resting stop the latest trading date up to
 // now.
 func (e *Executor) fillDate(o orders.Order, now time.Time) (time.Time, error) {
+	return fillDateOn(e.calendar, o, now)
+}
+
+func fillDateOn(cal *clock.Calendar, o orders.Order, now time.Time) (time.Time, error) {
 	if o.Type != orders.Stop {
 		return o.Date, nil
 	}
 	today := clock.DateOf(now.In(clock.Eastern))
-	open, err := e.calendar.IsTradingDay(today)
+	open, err := cal.IsTradingDay(today)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("execution: %w", err)
 	}
 	if open {
 		return today, nil
 	}
-	prev, err := e.calendar.PreviousTradingDay(today)
+	prev, err := cal.PreviousTradingDay(today)
 	if err != nil {
 		return time.Time{}, fmt.Errorf("execution: %w", err)
 	}
