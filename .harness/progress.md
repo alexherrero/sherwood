@@ -67,3 +67,5 @@ Part 5 of 6 of the sherwood rewrite is done: six tasks merged as #129, #131, #13
 2026-11-21 — the operator turned off the "Branch Rules" ruleset's up-to-date rule (strict mode), so batched Dependabot pull requests no longer sit behind main after the first one merges; the seven required checks still have to pass on each head. The duplicate "Require Checks before passing" ruleset remains, with only `Build (v1)` and strict off.
 
 2026-11-21 /work — live-trading task 3 (interval jobs, ThrowOnce, the open-order and daily-loss checks, one halt for a restarting helper) merged as #145, and task 2 (the Robinhood adapter, the brokertest conformance suite on fake, paper and robinhood, the eight-op contract test, supervisor health) merged as #146. Neither used a migration; 0009 is still free. Task 4 (live wiring and the gate) is next.
+
+2026-11-21 /work — live-trading task 4 (the live-mode gate and wiring, #148; live fills, gone orders, fills at place time and lost stops, #149) merged, with no migration. Task 5 (the runbook and the first live session) is the last task.
