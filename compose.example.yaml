@@ -37,7 +37,10 @@ services:
     volumes:
       # Host folder : container folder. /data is where sherwood looks by
       # default; settings.yaml's data_dir and database_path must point inside it.
-      - /mnt/user/appdata/sherwood:/data
+      # On Unraid, name the pool path (/mnt/cache/...), not /mnt/user/...:
+      # SQLite's WAL mode needs shared memory that the /mnt/user filesystem
+      # can't give reliably. Put your pool's name in place of "cache".
+      - /mnt/cache/appdata/sherwood:/data
       # The nightly backup folder, on a different share or disk from the data
       # folder if you can. Change the left-hand side to your backup share;
       # settings.yaml's backup.dir must be /backup. User 10001 (or the user
@@ -48,7 +51,9 @@ services:
     # Serve on the host is the one way in. Never publish it on 0.0.0.0: sherwood
     # trusts the login and device address Serve adds to each request only
     # because nothing else can reach this port, and it cannot check that from
-    # inside the container. Point Serve at http://127.0.0.1:8080.
+    # inside the container. Point Serve at http://127.0.0.1:8080. If something
+    # on the host already uses 8080, change only the left-hand port (for
+    # example "127.0.0.1:8081:8080") and point Serve at that one.
     ports:
       - "127.0.0.1:8080:8080"
 
