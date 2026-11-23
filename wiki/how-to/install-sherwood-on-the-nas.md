@@ -22,19 +22,19 @@ cd sherwood
 cp compose.example.yaml compose.yaml
 ```
 
-The example mounts `/mnt/user/appdata/sherwood` as the container's `/data`. If your application-data folder lives somewhere else, change the left-hand side of that `volumes` line. The second `volumes` line mounts your backup share as `/backup` for the nightly backup; change its left-hand side to a folder on your backup share, which must already exist and be writable by the container's user (see [`backup`](../reference/settings-and-strategy-files#backup) in the settings reference). Leave the rest of the file as it is, and in particular leave the `ports` line alone; the section on Tailscale Serve below explains why.
+The example mounts `/mnt/cache/appdata/sherwood` as the container's `/data`. If your application-data folder lives somewhere else, change the left-hand side of that `volumes` line. On Unraid, give the pool's own path, such as `/mnt/cache/appdata/sherwood` with your pool's name in place of `cache`, and not `/mnt/user/appdata/sherwood`. Both reach the same files, but the database runs in SQLite's WAL mode, which needs shared memory that the `/mnt/user` filesystem can't give reliably. Make sure the share keeps the folder on that pool: on Unraid, set appdata's primary storage to the pool and leave the mover from moving it to the array. The second `volumes` line mounts your backup share as `/backup` for the nightly backup; change its left-hand side to a folder on your backup share, which must already exist and be writable by the container's user (see [`backup`](../reference/settings-and-strategy-files#backup) in the settings reference). Leave the rest of the file as it is, apart from one case: if another container or program on the NAS already uses port 8080, change only the left-hand port of the `ports` line, keeping `127.0.0.1`. For example, `"127.0.0.1:8081:8080"`. To check, run `ss -ltn | grep ':8080 '`; any output means 8080 is taken. If you change it, use your port wherever this page says `127.0.0.1:8080`. Never remove the `127.0.0.1`; the section on Tailscale Serve below explains why.
 
 ## 2. Make the application-data folder
 
 Everything that belongs to your install lives in this one folder on the NAS, and nothing of yours is in the image. Create it:
 
 ```sh
-mkdir -p /mnt/user/appdata/sherwood
+mkdir -p /mnt/cache/appdata/sherwood
 ```
 
 The image runs as user 10001, and that user must be able to write the folder. Choose one of these:
 
-- **Give the folder to user 10001.** Run `chown -R 10001:10001 /mnt/user/appdata/sherwood`.
+- **Give the folder to user 10001.** Run `chown -R 10001:10001 /mnt/cache/appdata/sherwood`.
 - **Run the container as the folder's owner.** Uncomment the `user:` line in `compose.yaml` and set it to the folder's owner. On Unraid, appdata usually belongs to `nobody:users`, so the line is `user: "99:100"`.
 
 Either works. What matters is that the files sherwood writes, and later the broker helper's own file, belong to the same user the container runs as.
@@ -44,8 +44,8 @@ Either works. What matters is that the files sherwood writes, and later the brok
 Copy the two example files into the folder:
 
 ```sh
-cp settings.example.yaml /mnt/user/appdata/sherwood/settings.yaml
-cp strategy.example.yaml /mnt/user/appdata/sherwood/strategy.yaml
+cp settings.example.yaml /mnt/cache/appdata/sherwood/settings.yaml
+cp strategy.example.yaml /mnt/cache/appdata/sherwood/strategy.yaml
 ```
 
 Then edit `settings.yaml`:
@@ -64,8 +64,8 @@ The example strategy file holds placeholder limits and strategies so that sherwo
 The settings file holds secrets, so make it readable by its owner only, and give both files to the user the container runs as (10001, or the user you set in step 2):
 
 ```sh
-chmod 600 /mnt/user/appdata/sherwood/settings.yaml
-chown 10001:10001 /mnt/user/appdata/sherwood/settings.yaml /mnt/user/appdata/sherwood/strategy.yaml
+chmod 600 /mnt/cache/appdata/sherwood/settings.yaml
+chown 10001:10001 /mnt/cache/appdata/sherwood/settings.yaml /mnt/cache/appdata/sherwood/strategy.yaml
 ```
 
 ## 4. Build and start the container
@@ -85,7 +85,7 @@ Check that the web port is published on the NAS's loopback address and nowhere e
 docker port sherwood
 ```
 
-The only line should be `8080/tcp -> 127.0.0.1:8080`.
+The only line should be `8080/tcp -> 127.0.0.1:8080`, or your own port from step 1 after the colon.
 
 ## 5. Put sherwood behind Tailscale Serve
 
@@ -105,7 +105,7 @@ Sherwood knows who is calling only because Tailscale Serve tells it. Serve adds 
 
 Those headers can be trusted only because nothing but Serve can reach the port. Anything else that can reach `127.0.0.1:8080` could send the same headers and be taken for you. **Sherwood cannot check this from inside the container.** It sees the requests, not how Docker published the port, so keeping the port private is your job:
 
-- Keep the `ports` line as `"127.0.0.1:8080:8080"`. Never change it to `"8080:8080"` or `"0.0.0.0:8080:8080"`, and never run the container with host networking.
+- Keep the `ports` line as `"127.0.0.1:8080:8080"`, or with your own left-hand port from step 1. Never change it to `"8080:8080"` or `"0.0.0.0:8080:8080"`, and never run the container with host networking.
 - Remember that programs on the NAS itself, and other containers that use host networking, can reach the NAS's loopback address. Only run things there that you trust as much as yourself.
 - Keep sherwood on its own Compose network. Do not attach other containers to it.
 - After any change to the Compose file, run `docker port sherwood` again and expect only `127.0.0.1:8080`.

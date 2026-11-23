@@ -44,7 +44,7 @@ Write down when the session ends. After that time, anything that needs the broke
 On the NAS, outside the container:
 
 ```sh
-ls -l /mnt/user/appdata/sherwood/broker.yaml
+ls -l /mnt/cache/appdata/sherwood/broker.yaml
 ```
 
 The file should be `-rw-------` and belong to the user the container runs as. It holds the session and which account to read. It does not hold your password or any second-factor secret. Never copy it into the repo, a chat or a note.

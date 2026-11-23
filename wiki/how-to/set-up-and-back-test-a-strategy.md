@@ -97,13 +97,13 @@ If you want changes, ask for them. The skill edits the file, validates it and ba
 The skill runs `check-strategy` once more and shows the strategy hash. Note it. Then copy the file to sherwood's application-data folder on the NAS yourself, for example:
 
 ```sh
-scp ~/sherwood-setup/strategy.yaml you@nas.example:/mnt/user/appdata/sherwood/strategy.yaml
+scp ~/sherwood-setup/strategy.yaml you@nas.example:/mnt/cache/appdata/sherwood/strategy.yaml
 ```
 
 On the NAS, give the file to the user the container runs as, and restart sherwood so it reads the new file:
 
 ```sh
-chown 10001:10001 /mnt/user/appdata/sherwood/strategy.yaml
+chown 10001:10001 /mnt/cache/appdata/sherwood/strategy.yaml
 docker compose restart
 docker logs sherwood
 ```
