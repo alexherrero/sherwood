@@ -29,31 +29,42 @@ RUN CGO_ENABLED=0 go build -trimpath \
       -ldflags="-s -w -X main.version=${VERSION}" \
       -o /out/sherwood ./cmd/sherwood
 
+# ---- Python dependencies ----------------------------------------------------
+# The same Python minor version as the runtime image below (Debian 13's 3.13),
+# so the compiled wheels match it. pip and this stage stay out of the image.
+FROM python:3.13-slim-trixie@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90 AS pydeps
+
+# The broker helper's runtime dependencies, each checked against its hash,
+# into a folder of their own. No bytecode: the root filesystem is read-only,
+# so Python compiles in memory at each start, which takes well under a second.
+COPY brokerhelper/requirements.lock /tmp/requirements.lock
+RUN PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
+      pip install --require-hashes --no-deps --no-compile \
+        --target /out/deps -r /tmp/requirements.lock \
+ && find /out/deps -depth -name '__pycache__' -exec rm -rf {} + \
+ && mkdir -p /out/data \
+ && chown 10001:10001 /out/data
+
 # ---- Runtime ----------------------------------------------------------------
-FROM python:3.15-slim-trixie@sha256:65a65fc7b30b06cb6df4930fd4650697cb23f4c2698ab81fc87e4b031bc36928
+# Distroless: Python and the libraries it needs, with no shell, no package
+# manager and no pip. Nothing is ever run inside the container but sherwood
+# and its broker helper (`docker exec ... sherwood ...` and
+# `docker exec ... python3 -m brokerhelper ...` both still work).
+FROM gcr.io/distroless/python3-debian13@sha256:3f3fd24c6e8aa74559a8e84110a9b2916ae6e5ac6f482eea38d8bdac074fa03b
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
-    PIP_NO_CACHE_DIR=1 \
-    PIP_DISABLE_PIP_VERSION_CHECK=1 \
-    PYTHONPATH=/app/brokerhelper/src
+    PYTHONPATH=/app/deps:/app/brokerhelper/src
 
 WORKDIR /app
 
-# The broker helper's runtime dependencies, each checked against its hash.
-COPY brokerhelper/requirements.lock ./brokerhelper/requirements.lock
-RUN pip install --require-hashes --no-deps -r brokerhelper/requirements.lock
-
+COPY --from=pydeps /out/deps ./deps
 COPY brokerhelper/src ./brokerhelper/src
 COPY --from=build /out/sherwood /usr/local/bin/sherwood
 
-# A fixed, unprivileged user. The mounted /data folder must be writable by
-# this user id, or the Compose file's `user:` must name the folder's owner.
-RUN groupadd --system --gid 10001 sherwood \
- && useradd --system --uid 10001 --gid sherwood --no-create-home \
-      --home-dir /nonexistent --shell /usr/sbin/nologin sherwood \
- && mkdir -p /data \
- && chown sherwood:sherwood /data
+# A fixed, unprivileged user id. The mounted /data folder must be writable by
+# it, or the Compose file's `user:` must name the folder's owner.
+COPY --from=pydeps /out/data /data
 USER 10001:10001
 
 VOLUME ["/data"]
