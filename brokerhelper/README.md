@@ -215,8 +215,9 @@ pings it, kills it and checks that the error is reported. It skips when
 Dependencies are declared in `pyproject.toml` and locked with hashes:
 
 - `requirements.lock` holds the runtime dependencies: the broker library, its
-  own dependencies, and `tzdata`, so the helper has the New York time zone in
-  a slim image.
+  own dependencies, and `tzdata`, so the helper has the New York time zone
+  whatever the image holds. The container runs them on distroless Debian 13's
+  Python 3.13, so CI tests the helper on 3.13 too.
 - `requirements-dev.lock` holds the same plus the test tools.
 
 Install either with `pip install --require-hashes -r <file>`. After changing

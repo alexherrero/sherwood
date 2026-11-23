@@ -31,7 +31,9 @@ env:
   # The newest 1.26 patch release, so the standard library carries every fix
   # govulncheck knows about. go.mod's `go 1.26.0` is the floor, not the pin.
   GO_VERSION: "1.26.x"
-  PYTHON_VERSION: "3.15"
+  # The Python minor version the container runs: distroless Debian 13's. Keep
+  # it in step with the Dockerfile, so the tests run on what ships.
+  PYTHON_VERSION: "3.13"
 
 jobs:
   # The archived v1 module.
@@ -239,6 +241,13 @@ jobs:
             echo "::error::The container did not create /data/sherwood.db."
             exit 1
           fi
+
+          # The runtime image is distroless with its own Python, so check that
+          # the broker helper and its library import there, offline.
+          echo "::group::Broker helper imports"
+          "${run[@]}" --rm --entrypoint python3 sherwood:ci \
+            -c 'import robin_stocks.robinhood, brokerhelper.library, brokerhelper.__main__'
+          echo "::endgroup::"
 
           echo "::group::Refusal when a limit is removed"
           bad=$(mktemp -d)
