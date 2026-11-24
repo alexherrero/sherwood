@@ -50,7 +50,7 @@ RUN PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1 \
 # manager and no pip. Nothing is ever run inside the container but sherwood
 # and its broker helper (`docker exec ... sherwood ...` and
 # `docker exec ... python3 -m brokerhelper ...` both still work).
-FROM gcr.io/distroless/python3-debian13@sha256:3f3fd24c6e8aa74559a8e84110a9b2916ae6e5ac6f482eea38d8bdac074fa03b
+FROM gcr.io/distroless/python3-debian13@sha256:4d4b3e43e67a4d3e149d68d30a68b7d48c289e4e1dabf8201271e6252805c9dd
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
